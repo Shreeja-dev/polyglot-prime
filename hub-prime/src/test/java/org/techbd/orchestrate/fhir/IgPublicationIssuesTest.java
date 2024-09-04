@@ -52,6 +52,29 @@ public class IgPublicationIssuesTest {
         void setUp() {
                 engine = new OrchestrationEngine();
         }
+        private void logErrors(List<OrchestrationEngine.ValidationResult> results,String fileName) {
+                String outputFileName = "src/test/resources/org/techbd/ig-errors/"+fileName;
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFileName, false))) {
+                        // Process all results
+                        results.stream()
+                                        .flatMap(result -> result.getIssues().stream()) // Flatten issues from all
+                                                                                        // results
+                                        .filter(message -> IS_UNEXPECTED_IG_ISSUE.test(message))
+                                        .map(m -> "Severity: " + m.getSeverity() + " Message: " + m.getMessage())
+                                        .forEach(message -> {
+                                                try {
+                                                        writer.write(message);
+                                                        writer.newLine();
+                                                } catch (IOException e) {
+                                                        throw new RuntimeException(
+                                                                        "Failed to write log message to file", e);
+                                                }
+                                        });
+                } catch (Exception ex) {
+                        ex.printStackTrace();
+                }
+
+        }
 
         @Test
         void testBundle_AHCHRSNScreeningResponseExample() throws IOException {
@@ -65,6 +88,7 @@ public class IgPublicationIssuesTest {
                                 .count();
                 final var softly = new SoftAssertions();
                 softly.assertThat(results).hasSize(1);
+                logErrors(results,"ig-errors-Bundle_AHCHRSNScreeningResponseExample.txt");
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_PERSONAL_PRONOUNS);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_CTS_VALUE_SET);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_MIDDLE_NAME);
@@ -93,6 +117,7 @@ public class IgPublicationIssuesTest {
                                 .count();
                 final var softly = new SoftAssertions();
                 softly.assertThat(results).hasSize(1);
+                logErrors(results, "ig-errors-Bundle_AHCHRSNQuestionnaireResponseExample.txt");
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_PERSONAL_PRONOUNS);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_CTS_VALUE_SET);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_MIDDLE_NAME);
@@ -118,6 +143,7 @@ public class IgPublicationIssuesTest {
                                 .map(issue -> issue.getMessage().trim())
                                 .distinct()
                                 .count();
+                logErrors(results, "ig-errors-Bundle_ObservationAssessmentFoodInsecurityExample.txt");
                 final var softly = new SoftAssertions();
                 softly.assertThat(results).hasSize(1);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_PERSONAL_PRONOUNS);
@@ -149,6 +175,7 @@ public class IgPublicationIssuesTest {
                                 .count();
                 final var softly = new SoftAssertions();
                 softly.assertThat(results).hasSize(1);
+                logErrors(results, "ig-errors-Bundle_ServiceRequestExample.txt");
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_PERSONAL_PRONOUNS);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_CTS_VALUE_SET);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_MIDDLE_NAME);
@@ -176,6 +203,7 @@ public class IgPublicationIssuesTest {
                                 .count();
                 final var softly = new SoftAssertions();
                 softly.assertThat(results).hasSize(1);
+                logErrors(results, "ig-errors-Bundle_TaskCompletedExample.txt");
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_PERSONAL_PRONOUNS);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_CTS_VALUE_SET);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_MIDDLE_NAME);
@@ -201,6 +229,7 @@ public class IgPublicationIssuesTest {
                                 .count();
                 final var softly = new SoftAssertions();
                 softly.assertThat(results).hasSize(1);
+                logErrors(results, "ig-errors-Bundle_TaskExample.txt");
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_PERSONAL_PRONOUNS);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_CTS_VALUE_SET);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_MIDDLE_NAME);
@@ -227,6 +256,7 @@ public class IgPublicationIssuesTest {
                                 .count();
                 final var softly = new SoftAssertions();
                 softly.assertThat(results).hasSize(1);
+                logErrors(results, "ig-errors-Bundle_TaskOutputProcedureExample.txt");
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_PERSONAL_PRONOUNS);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_CTS_VALUE_SET);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_MIDDLE_NAME);
@@ -251,6 +281,7 @@ public class IgPublicationIssuesTest {
                                 .map(issue -> issue.getMessage().trim())
                                 .distinct()
                                 .count();
+                                logErrors(results, "ig-errors-Bundle_NYScreeningResponseExample.txt");
                 final var softly = new SoftAssertions();
                 softly.assertThat(results).hasSize(1);
                 assertUnexpectedIgError(softly, results, ERROR_MESSAGE_SHINNY_PERSONAL_PRONOUNS);

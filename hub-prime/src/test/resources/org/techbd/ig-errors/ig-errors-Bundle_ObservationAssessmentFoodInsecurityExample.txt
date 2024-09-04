@@ -1,0 +1,6 @@
+Severity: WARNING Message: ValueSet 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24' not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension https://hl7.org/fhir/us/core/STU7/StructureDefinition-us-core-genderIdentity.html
+Severity: WARNING Message: ValueSet 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1240.11' not found
+Severity: WARNING Message: ValueSet 'http://hl7.org/fhir/us/core/ValueSet/us-core-condition-category' not found
+Severity: WARNING Message: ValueSet 'http://hl7.org/fhir/us/core/ValueSet/us-core-condition-category' not found

@@ -1,0 +1,104 @@
+Severity: WARNING Message: ValueSet http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24 not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/middle-name
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/county
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-patient' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-consent' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-questionnaire-response' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYBundleProfile' has not been checked because it is unknown
+Severity: WARNING Message: ValueSet http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24 not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/middle-name
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/county
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-patient' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-consent' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-questionnaire-response' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYBundleProfile' has not been checked because it is unknown
+Severity: WARNING Message: ValueSet http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24 not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/middle-name
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/county
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-patient' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-consent' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYBundleProfile' has not been checked because it is unknown
+Severity: WARNING Message: ValueSet http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24 not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/middle-name
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/county
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-patient' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-consent' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'https://hl7.org/fhir/us/ecr/2021Jan/StructureDefinition-disability-status.html' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'https://hl7.org/fhir/us/ecr/2021Jan/StructureDefinition-disability-status.html' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYBundleProfile' has not been checked because it is unknown
+Severity: WARNING Message: ValueSet http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24 not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/middle-name
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/county
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-patient' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: WARNING Message: ValueSet http://hl7.org/fhir/us/core/ValueSet/us-core-condition-category not found
+Severity: WARNING Message: ValueSet http://hl7.org/fhir/us/core/ValueSet/us-core-condition-category not found
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-diagnosis' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYBundleProfile' has not been checked because it is unknown
+Severity: WARNING Message: ValueSet http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24 not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/middle-name
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/county
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-patient' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYSDOHServiceRequest' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYBundleProfile' has not been checked because it is unknown
+Severity: WARNING Message: ValueSet http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24 not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/middle-name
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/county
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-patient' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition//SHINNYSDOHTaskForReferralManagement' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYSDOHServiceRequest' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYBundleProfile' has not been checked because it is unknown
+Severity: WARNING Message: ValueSet http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24 not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/middle-name
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/county
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-patient' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition//SHINNYSDOHTaskForReferralManagement' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYSDOHServiceRequest' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYBundleProfile' has not been checked because it is unknown
+Severity: WARNING Message: ValueSet http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1021.24 not found
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/shinny-personal-pronouns
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/middle-name
+Severity: INFORMATION Message: Unknown extension http://shinny.org/StructureDefinition/county
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shinny-patient' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-encounter' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/shin-ny-organization' has not been checked because it is unknown
+Severity: ERROR Message: Profile reference 'http://shinny.org/StructureDefinition/SHINNYBundleProfile' has not been checked because it is unknown
