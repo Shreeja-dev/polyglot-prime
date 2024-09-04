@@ -26,6 +26,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingRequestWrapper;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 import org.techbd.conf.Configuration;
+import org.techbd.service.http.Interactions.RequestEncountered;
 import org.techbd.service.http.Interactions.RequestResponseEncountered;
 import org.techbd.udi.UdiPrimeJpaConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
@@ -153,18 +154,21 @@ public class InteractionsFilter extends OncePerRequestFilter {
         final var mutatableResp = new ContentCachingResponseWrapper(origResponse);
 
         chain.doFilter(mutatableReq, mutatableResp);
+        processInitialPayload(origRequest, origResponse, persistRespPayloadDB, requestEncountered, mutatableReq, 
+        mutatableResp, persistInteractionDB, requestURI);   
+        processAccept(origRequest, origResponse, persistRespPayloadDB, requestEncountered, mutatableReq, 
+        mutatableResp, persistInteractionDB, requestURI);  
 
+    
+    }
+    
+    private  void processInitialPayload(final @NonNull HttpServletRequest origRequest,
+    @NonNull final HttpServletResponse origResponse,final boolean persistRespPayloadDB, final RequestEncountered requestEncountered
+    ,final ContentCachingRequestWrapper mutatableReq,final ContentCachingResponseWrapper mutatableResp,
+    final boolean persistInteractionDB,String requestURI) throws IOException, ServletException {
+        final var createdAt = OffsetDateTime.now();
         RequestResponseEncountered rre = null;
-        if (!persistRespPayloadDB) {
-            rre = new Interactions.RequestResponseEncountered(requestEncountered,
-                    new Interactions.ResponseEncountered(mutatableResp, requestEncountered,
-                            "persistPayloads = false".getBytes(StandardCharset.UTF_8)));
-        } else {
-            rre = new Interactions.RequestResponseEncountered(requestEncountered,
-                    new Interactions.ResponseEncountered(mutatableResp, requestEncountered,
-                            mutatableResp.getContentAsByteArray()));
-        }
-
+        rre = new Interactions.RequestResponseEncountered(requestEncountered,null);
         interactions.addHistory(rre);
         setActiveInteraction(mutatableReq, rre);
 
@@ -265,6 +269,112 @@ public class InteractionsFilter extends OncePerRequestFilter {
         mutatableResp.copyBodyToResponse();
     }
 
+     
+    private  void processAccept(final @NonNull HttpServletRequest origRequest,
+    @NonNull final HttpServletResponse origResponse,final boolean persistRespPayloadDB, final RequestEncountered requestEncountered
+    ,final ContentCachingRequestWrapper mutatableReq,final ContentCachingResponseWrapper mutatableResp,
+    final boolean persistInteractionDB,String requestURI) throws IOException, ServletException {
+        final var createdAt = OffsetDateTime.now();
+        RequestResponseEncountered rre = new Interactions.RequestResponseEncountered(requestEncountered,null);
+        interactions.addHistory(rre);
+        setActiveInteraction(mutatableReq, rre);
+
+        // we want to find our persistence strategy in either properties or in header;
+        // because X-TechBD-Interaction-Persistence-Strategy is global, document it in
+        // SwaggerConfig.customGlobalHeaders
+        final var strategyJson = Optional
+                .ofNullable(mutatableReq.getHeader(Interactions.Servlet.HeaderName.Request.PERSISTENCE_STRATEGY))
+                .orElse(defaultPersistStrategy);
+        final var asb = new ArtifactStore.Builder()
+                .strategyJson(strategyJson)
+                .provenanceJson(mutatableReq.getHeader(Interactions.Servlet.HeaderName.Request.PROVENANCE))
+                .mailSender(mailSender)
+                .appContext(appContext);
+
+        final var provenance = "%s.doFilterInternal".formatted(InteractionsFilter.class.getName());
+        final var artifact = ArtifactStore.jsonArtifact(rre, rre.interactionId().toString(),
+                InteractionsFilter.class.getName() + ".interaction", asb.getProvenance());
+
+        if (persistInteractionDB) {
+            final var rihr = new RegisterInteractionHttpRequest();
+            try {
+                final var tenant = rre.tenant();
+                final var dsl = udiPrimeJpaConfig.dsl();
+                rihr.setInteractionId(rre.interactionId().toString());
+                rihr.setNature(Configuration.objectMapper.valueToTree(
+                        Map.of("nature", RequestResponseEncountered.class.getName(), "tenant_id",
+                                tenant != null ? tenant.tenantId() != null ? tenant.tenantId() : "N/A" : "N/A")));
+                rihr.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
+                rihr.setInteractionKey(requestURI);
+                rihr.setPayload(Configuration.objectMapper
+                        .readTree(artifact.getJsonString().orElse("no artifact.getJsonString() in " + provenance)));
+                rihr.setCreatedAt(createdAt); // don't let DB set this, since it might be stored out of order
+                rihr.setCreatedBy(InteractionsFilter.class.getName());
+                rihr.setProvenance(provenance);
+                rihr.setToState("ACCEPT");
+                // User details 
+                var curUserName = "API_USER";
+                var gitHubLoginId = "N/A";
+                final var sessionId = origRequest.getRequestedSessionId();
+                var userRole = "API_ROLE";
+
+                final var curUser = GitHubUserAuthorizationFilter.getAuthenticatedUser(origRequest);
+                if (curUser.isPresent()) {
+                    final var ghUser = curUser.get().ghUser();
+                    if (null != ghUser) {
+                        curUserName = Optional.ofNullable(ghUser.name()).orElse("NO_DATA");
+                        gitHubLoginId = Optional.ofNullable(ghUser.gitHubId()).orElse("NO_DATA");
+                        userRole = curUser.get().principal().getAuthorities().stream()
+                                .map(GrantedAuthority::getAuthority)
+                                .collect(Collectors.joining(","));
+                        LOG.info("userRole: " + userRole);
+                        userRole = "DEFAULT_ROLE"; //TODO: Remove this when role is implemented as part of Auth
+                    }
+                }
+                rihr.setUserName(curUserName);
+                rihr.setUserId(gitHubLoginId);
+                rihr.setUserSession(sessionId);
+                rihr.setUserRole(userRole);
+
+                rihr.execute(dsl.configuration());
+            } catch (Exception e) {
+                LOG.error("CALL " + rihr.getName() + " error", e);
+            }
+        }
+
+        final var ps = asb.build();
+        mutatableResp.setHeader(Interactions.Servlet.HeaderName.Response.PERSISTENCE_STRATEGY_ARGS, strategyJson);
+        if (ps != null) {
+            final AtomicInteger info = new AtomicInteger(0);
+            final AtomicInteger issue = new AtomicInteger(0);
+            mutatableResp.setHeader(Interactions.Servlet.HeaderName.Response.PERSISTENCE_STRATEGY_FACTORY,
+                    ps.getClass().getName());
+            ps.persist(
+                    artifact,
+                    Optional.of(new ArtifactStore.PersistenceReporter() {
+                        @Override
+                        public void info(String message) {
+                            mutatableResp
+                                    .setHeader(Interactions.Servlet.HeaderName.Response.PERSISTENCE_STRATEGY_INSTANCE
+                                            + "-Info-" + info.getAndIncrement(), message);
+                        }
+
+                        @Override
+                        public void issue(String message) {
+                            mutatableResp
+                                    .setHeader(Interactions.Servlet.HeaderName.Response.PERSISTENCE_STRATEGY_INSTANCE
+                                            + "-Issue-" + issue.getAndIncrement(), message);
+                        }
+
+                        @Override
+                        public void persisted(Artifact artifact, String... location) {
+                            // not doing anything with this yet
+                        }
+                    }));
+        }
+
+        mutatableResp.copyBodyToResponse();
+    }
     public static class InteractionPersistRules {
 
         private final RequestMatcher requestMatcher;
