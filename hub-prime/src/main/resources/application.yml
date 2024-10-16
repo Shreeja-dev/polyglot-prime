@@ -112,3 +112,15 @@ org:
           idleTimeout: 300000
           connectionTimeout: 30000
           maxLifetime: 1800000
+      secondary:
+        jdbc:
+          url: ${${SPRING_PROFILES_ACTIVE}_TECHBD_UDI_DS_SECONDARY_JDBC_URL:}
+          jdbcUrl: ${${SPRING_PROFILES_ACTIVE}_TECHBD_UDI_DS_SECONDARY_JDBC_URL:}
+          username: ${${SPRING_PROFILES_ACTIVE}_TECHBD_UDI_DS_SECONDARY_JDBC_USERNAME:}
+          password: ${${SPRING_PROFILES_ACTIVE}_TECHBD_UDI_DS_SECONDARY_JDBC_PASSWORD:}
+          driverClassName: org.postgresql.Driver
+          maximumPoolSize: 50
+          minimumIdle: 5
+          idleTimeout: 300000
+          connectionTimeout: 30000
+          maxLifetime: 1800000          

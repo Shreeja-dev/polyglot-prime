@@ -43,7 +43,7 @@ public class UdiPrimeJpaConfig {
     @Autowired
     private Environment environment;
 
-    @Bean
+    @Bean(name = "udiPrimaryDataSource")
     @Primary
     @Lazy
     @ConditionalOnProperty(name = "org.techbd.udi.prime.jdbc.url")

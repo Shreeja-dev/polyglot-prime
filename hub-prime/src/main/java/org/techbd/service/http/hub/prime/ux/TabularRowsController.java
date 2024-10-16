@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.techbd.udi.UdiPrimeJpaConfig;
+import org.techbd.udi.UdiSecondaryJpaConfig;
 import org.techbd.udi.auto.jooq.ingress.Tables;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,10 +44,10 @@ public class TabularRowsController {
 
     private static final Pattern VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN = Pattern.compile("^[a-zA-Z0-9_]+$");
 
-    private final UdiPrimeJpaConfig udiPrimeJpaConfig;
+    private final UdiSecondaryJpaConfig udiSecondaryDataSource;
 
-    public TabularRowsController(final UdiPrimeJpaConfig udiPrimeJpaConfig) {
-        this.udiPrimeJpaConfig = udiPrimeJpaConfig;
+    public TabularRowsController(final UdiSecondaryJpaConfig udiSecondaryDataSource) {
+        this.udiSecondaryDataSource = udiSecondaryDataSource;
     }
 
     @Operation(summary = "Fetch SQL rows from a master table or view with optional schema specification", description = """
@@ -72,7 +73,7 @@ public class TabularRowsController {
         return new JooqRowsSupplier.Builder()
                 .withRequest(payload)
                 .withTable(Tables.class, schemaName, masterTableNameOrViewName)
-                .withDSL(udiPrimeJpaConfig.dsl())
+                .withDSL(udiSecondaryDataSource.dslSecondary())
                 .withLogger(LOG)
                 .includeGeneratedSqlInResp(includeGeneratedSqlInResp)
                 .includeGeneratedSqlInErrorResp(includeGeneratedSqlInErrorResp)
@@ -101,7 +102,7 @@ public class TabularRowsController {
         // jOOQ-generated types were found, automatic column value mapping will occur
         final var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName,
                 masterTableNameOrViewName);
-        List<Map<String, Object>> result = udiPrimeJpaConfig.dsl().selectFrom(typableTable.table())
+        List<Map<String, Object>> result = udiSecondaryDataSource.dslSecondary().selectFrom(typableTable.table())
                 .where(DSL.field(typableTable.column(columnName)).eq(DSL.val(columnValue)))
                 .fetch()
                 .intoMaps();
@@ -149,7 +150,7 @@ public class TabularRowsController {
         final var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName,
                 masterTableNameOrViewName);
 
-        List<Map<String, Object>> result = udiPrimeJpaConfig.dsl().selectFrom(typableTable.table())
+        List<Map<String, Object>> result = udiSecondaryDataSource.dslSecondary().selectFrom(typableTable.table())
                 .where(DSL.field(typableTable.column(columnName)).eq(DSL.val(columnValue))
                         .and(DSL.field(typableTable.column(columnName2)).like(DSL.val(columnValue2LikePattern))))
                 .fetch()
@@ -209,7 +210,7 @@ public class TabularRowsController {
         // jOOQ-generated types were found, automatic column value mapping will occur
         final var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName,
                 masterTableNameOrViewName);
-        List<Map<String, Object>> result = udiPrimeJpaConfig.dsl().selectFrom(typableTable.table())
+        List<Map<String, Object>> result = udiSecondaryDataSource.dslSecondary().selectFrom(typableTable.table())
                 .where(DSL.field(typableTable.column(columnName1)).eq(DSL.val(decodedColumnValue1))
                         .and(DSL.field(typableTable.column(columnName2)).eq(DSL.val(decodedColumnValue2)))
                         .and(DSL.field(typableTable.column(columnName3)).eq(DSL.val(decodedColumnValue3))))
@@ -280,7 +281,7 @@ public class TabularRowsController {
         LocalDateTime endDateTime = LocalDateTime.parse(decodedEndDate, formatter); // Parse with time included
 
         // Build the query
-        var query = udiPrimeJpaConfig.dsl().selectFrom(typableTable.table())
+        var query = udiSecondaryDataSource.dslSecondary().selectFrom(typableTable.table())
                 .where(DSL.field(typableTable.column(dateField)).between(DSL.val(startDateTime), DSL.val(endDateTime)));
 
         // If columnName1 and columnValue1 are provided, add them to the query

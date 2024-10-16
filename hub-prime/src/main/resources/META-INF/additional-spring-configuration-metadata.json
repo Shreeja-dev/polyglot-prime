@@ -443,5 +443,55 @@
     "name": "org.techbd.service.http.hub.prime.igVersion",
     "type": "java.lang.String",
     "description": "A description for 'org.techbd.service.http.hub.prime.igVersion'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.url",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.url'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.jdbcUrl",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.jdbcUrl'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.username",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.username'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.password",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.password'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.driverClassName",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.driverClassName'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.maximumPoolSize",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.maximumPoolSize'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.minimumIdle",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.minimumIdle'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.idleTimeout",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.idleTimeout'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.connectionTimeout",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.connectionTimeout'"
+  },
+  {
+    "name": "org.techbd.udi.secondary.jdbc.maxLifetime",
+    "type": "java.lang.String",
+    "description": "A description for 'org.techbd.udi.secondary.jdbc.maxLifetime'"
   }
 ]}

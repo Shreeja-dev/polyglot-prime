@@ -14,10 +14,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,15 +50,14 @@ import org.techbd.service.http.hub.prime.AppConfig.MTlsAwsSecrets;
 import org.techbd.service.http.hub.prime.AppConfig.MTlsResources;
 import org.techbd.service.http.hub.prime.AppConfig.PostStdinPayloadToNyecDataLakeExternal;
 import org.techbd.udi.UdiPrimeJpaConfig;
+import org.techbd.udi.UdiSecondaryJpaConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nimbusds.oauth2.sdk.util.CollectionUtils;
 
-import ca.uhn.fhir.validation.ResultSeverityEnum;
 import io.netty.handler.ssl.SslContextBuilder;
 import jakarta.annotation.Nonnull;
 import jakarta.servlet.http.HttpServletRequest;
@@ -77,7 +76,7 @@ public class FHIRService {
     private static final Logger LOG = LoggerFactory.getLogger(FHIRService.class.getName());
     private final AppConfig appConfig;
     private final OrchestrationEngine engine;
-    private final UdiPrimeJpaConfig udiPrimeJpaConfig;
+    private final UdiPrimeJpaConfig udiPrimaryDataSource;
 
         @Value("${org.techbd.service.http.interactions.default-persist-strategy:#{null}}")
         private String defaultPersistStrategy;
@@ -86,9 +85,9 @@ public class FHIRService {
         private boolean saveUserDataToInteractions;
 
     public FHIRService(
-            final AppConfig appConfig, final UdiPrimeJpaConfig udiPrimeJpaConfig,OrchestrationEngine engine) {
+            final AppConfig appConfig, final UdiPrimeJpaConfig udiPrimaryDataSource,OrchestrationEngine engine) {
         this.appConfig = appConfig;
-        this.udiPrimeJpaConfig = udiPrimeJpaConfig;
+        this.udiPrimaryDataSource = udiPrimaryDataSource;
         this.engine = engine;
     }
 
@@ -117,10 +116,11 @@ public class FHIRService {
                                         .formatted(AppConfig.Servlet.HeaderName.Request.HEALTH_CHECK_HEADER));
                         return result; // Return without proceeding to scoring engine submission
                 }
-                final var dslContext = udiPrimeJpaConfig.dsl();
+                final var dslContext = udiPrimaryDataSource.dsl();
                 final var jooqCfg = dslContext.configuration();
                 Map<String, Object> payloadWithDisposition = registerBundleInteraction(jooqCfg, request,
                                 response, payload, result);
+                                                         
                 if (null == payloadWithDisposition) {
                         LOG.warn("FHIRService:: ERROR:: Disposition payload is not available.Send Bundle payload to scoring engine for interaction id {}.",
                                         getBundleInteractionId(request));
