@@ -102,6 +102,7 @@ public class Hl7PIDToPatientTest {
     }
 
     @Test
+   // @Disabled("Test is just for viewing generated json")
     public void testViewGeneratedJson() throws Exception {
         // Parse the HL7 message
         String hl7Message = "MSH|^~\\&|HIS|RIH|EKG|EKG|202310190830||ORU^R01|MSG00001|P|2.7\r" +
