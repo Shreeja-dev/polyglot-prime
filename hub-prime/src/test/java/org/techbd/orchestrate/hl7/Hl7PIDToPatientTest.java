@@ -67,7 +67,7 @@ public class Hl7PIDToPatientTest {
         // Add middle name as an extension
         patient.getNameFirstRep()
                 .addExtension(new Extension()
-                        .setUrl("http://shinny.org/ImplementationGuide/HRSN/StructureDefinition/middle-name")
+                        .setUrl("http://shinny.org/us/ny/hrsn/StructureDefinition/middle-name")
                         .setValue(new org.hl7.fhir.r4.model.StringType(middleName)));
 
         patient.setBirthDateElement(new org.hl7.fhir.r4.model.DateType(isoBirthDate));
@@ -76,7 +76,7 @@ public class Hl7PIDToPatientTest {
         Meta meta = new Meta();
         meta.setLastUpdatedElement(new InstantType(isoLastUpdated));
         meta.setProfile(List.of(
-                new CanonicalType("http://shinny.org/ImplementationGuide/HRSN/StructureDefinition/shinny-patient")));
+                new CanonicalType("http://shinny.org/us/ny/hrsn/StructureDefinition/shinny-patient")));
         patient.setMeta(meta);
         // Use FHIR context to parse the resource to a FHIR JSON (optional step for
         // debugging)
@@ -90,12 +90,12 @@ public class Hl7PIDToPatientTest {
         assertThat(patient.getNameFirstRep().getPrefix().get(0).getValue()).isEqualTo("Dr.");
         assertThat(patient.getNameFirstRep().getSuffix().get(0).getValue()).isEqualTo("Jr.");
         assertThat(patient.getNameFirstRep()
-                .getExtensionByUrl("http://shinny.org/ImplementationGuide/HRSN/StructureDefinition/middle-name")
+                .getExtensionByUrl("http://shinny.org/us/ny/hrsn/StructureDefinition/middle-name")
                 .getValue().primitiveValue()).isEqualTo("Bob");
         assertThat(patient.getBirthDateElement().asStringValue()).isEqualTo("1970-01-01");
         assertThat(patient.getGender()).isEqualTo(org.hl7.fhir.r4.model.Enumerations.AdministrativeGender.MALE);
         assertThat(patient.getMeta().getProfile().get(0).getValue())
-                .contains("http://shinny.org/ImplementationGuide/HRSN/StructureDefinition/shinny-patient");
+                .contains("http://shinny.org/us/ny/hrsn/StructureDefinition/shinny-patient");
         // assertThat(patient.getMeta().getLastUpdated())
         //         .isNotNull()
         //         .isEqualTo(new InstantType(isoLastUpdated));
@@ -153,7 +153,7 @@ public class Hl7PIDToPatientTest {
         // Add middle name as an extension
         patient.getNameFirstRep()
                 .addExtension(new Extension()
-                        .setUrl("http://shinny.org/ImplementationGuide/HRSN/StructureDefinition/middle-name")
+                        .setUrl("http://shinny.org/us/ny/hrsn/StructureDefinition/middle-name")
                         .setValue(new org.hl7.fhir.r4.model.StringType(middleName)));
 
         // Set birth date
@@ -165,7 +165,7 @@ public class Hl7PIDToPatientTest {
         Meta meta = new Meta();
         meta.setLastUpdatedElement(new InstantType(isoLastUpdated));
         meta.setProfile(List.of(
-                new CanonicalType("http://shinny.org/ImplementationGuide/HRSN/StructureDefinition/shinny-patient")));
+                new CanonicalType("http://shinny.org/us/ny/hrsn/StructureDefinition/shinny-patient")));
         patient.setMeta(meta);
 
         // Convert FHIR resource to JSON

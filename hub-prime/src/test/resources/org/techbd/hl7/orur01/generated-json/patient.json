@@ -2,7 +2,7 @@
   "resourceType": "Patient",
   "meta": {
     "lastUpdated": "2023-10-19T08:30:00Z",
-    "profile": [ "http://shinny.org/ImplementationGuide/HRSN/StructureDefinition/shinny-patient" ]
+    "profile": [ "http://shinny.org/us/ny/hrsn/StructureDefinition/shinny-patient" ]
   },
   "identifier": [ {
     "type": {
@@ -15,7 +15,7 @@
   } ],
   "name": [ {
     "extension": [ {
-      "url": "http://shinny.org/ImplementationGuide/HRSN/StructureDefinition/middle-name",
+      "url": "http://shinny.org/us/ny/hrsn/StructureDefinition/middle-name",
       "valueString": "Bob"
     } ],
     "family": "Doe",

@@ -1,0 +1,25 @@
+{
+  "resourceType": "Encounter",
+  "meta": {
+    "profile": [ "http://shinny.org/ImplementationGuide/HRSN/StructureDefinition/shinny-encounter" ]
+  },
+  "identifier": [ {
+    "system": "http://hospital.org/encounter-id",
+    "value": "V123456"
+  } ],
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v2-0004",
+    "code": "O",
+    "display": "Outpatient"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/v2-0005",
+      "code": "Virtual",
+      "display": "Virtual"
+    } ]
+  } ],
+  "period": {
+    "start": "2024-09-23"
+  }
+}
