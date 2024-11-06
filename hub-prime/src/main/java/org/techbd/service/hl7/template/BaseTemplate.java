@@ -16,8 +16,8 @@ public  abstract class BaseTemplate implements ITemplate{
     }
 
     @Override
-    public List<String> getSegments() {
-        return List.of(HL7_MESSAGE_SEGMENTS_MAP.get(getMessageType().getAlias()));
+    public String getSegments() {
+        return HL7_MESSAGE_SEGMENTS_MAP.get(getMessageType().getAlias());
     }
     public static Map<String, String> getHL7ConfigMap() {
         return YamlUtil.getYamlResourceAsMap("src/main/resources/hl7/config.yml");

@@ -4,7 +4,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public enum Hl7MessageType {
-    ORU_R01("ORU^R01", "Observation Result Unsolicited", "orur01");
+    ORU_R01("ORU^R01^ORU_R01", "Observation Result Unsolicited", "orur01");
 
     private final String code;
     private final String description;

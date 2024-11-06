@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.hl7.fhir.r4.model.Bundle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,11 +24,11 @@ import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 
+import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.hl7v2.DefaultHapiContext;
 import ca.uhn.hl7v2.HapiContext;
 import ca.uhn.hl7v2.model.Message;
 import ca.uhn.hl7v2.parser.PipeParser;
-import io.github.linuxforhealth.hl7.HL7ToFHIRConverter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -59,6 +60,7 @@ public class Hl7Service {
                 final var interactionId = getBundleInteractionId(request);
                 final var dslContext = udiPrimeJpaConfig.dsl();
                 final var jooqCfg = dslContext.configuration();
+
                 try {
                         LOG.info("HL7Service::processHl7Message BEGIN for interactionid : {} tenantId :{} ",
                                         interactionId,
@@ -69,83 +71,40 @@ public class Hl7Service {
                         }
 
                         final var message = parse(jooqCfg, hl7Payload, tenantId, interactionId);
-//TODO - cal converter and db save
+                        Bundle bundle = hl7MessageToFhirConverter.convert(message, interactionId);
+                        String fhirPayload = null;
+                        if (null != bundle) {
+                                fhirPayload = FhirContext.forR4().newJsonParser().encodeResourceToString(bundle);
+                        }
                         if (logPayloadEnabled) {
                                 LOG.info("HL7Service :: ***************** CONVERTED PAYLOAD*************\n\n : {} ",
-                                Configuration.objectMapper.writeValueAsString(message));
+                                                fhirPayload);
                         }
-                        
+
                         // if (null != hl7FHIRJson) {
-                        //         final String shinnyFhirJson = convertToShinnyFHIRJson(jooqCfg, hl7FHIRJson, tenantId,
-                        //                         interactionId);
-                        //         if (logPayloadEnabled) {
-                        //                 LOG.info("HL7Service :: *****************SHINNY FHIR PAYLOAD*************\n\n : {} ",
-                        //                                 shinnyFhirJson);
-                        //         }
-                        //         if (null != shinnyFhirJson) {
-                        //                 registerStateHl7Accept(jooqCfg, hl7Payload, hl7FHIRJson, tenantId,
-                        //                                 interactionId, request,
-                        //                                 response);
-                        //                 LOG.info(
-                        //                                 "HL7Service::processHl7Message END -start processing FHIR Json for interactionid : {} tenantId :{} ",
-                        //                                 interactionId, tenantId);
-                        //                 return fhirService.processBundle(shinnyFhirJson, tenantId, null, null, null,
-                        //                                 null, null,
-                        //                                 Boolean.toString(false), false,
-                        //                                 false,
-                        //                                 false, request, response, null, true, null);
-                        //         }
+                        // final String shinnyFhirJson = convertToShinnyFHIRJson(jooqCfg, hl7FHIRJson,
+                        // tenantId,
+                        // interactionId);
+                        // if (logPayloadEnabled) {
+                        // LOG.info("HL7Service :: *****************SHINNY FHIR PAYLOAD*************\n\n
+                        // : {} ",
+                        // shinnyFhirJson);
                         // }
-                } catch (Exception ex) {
-                        LOG.error(" ERROR:: HL7Service::processHl7Message BEGIN for interactionid : {} tenantId :{} ",
-                                        interactionId, tenantId, ex);
-                        registerStateFailed(jooqCfg, interactionId,
-                                        request.getRequestURI(), tenantId, ex.getMessage(),
-                                        "%s.processHl7Message".formatted(Hl7Service.class.getName()));
-                }
-                return null;
-        }
-
-        public Object processHl7Message(String hl7Payload, String tenantId, HttpServletRequest request,
-                        HttpServletResponse response, boolean logPayloadEnabled) throws IOException {
-                final var interactionId = getBundleInteractionId(request);
-                final var dslContext = udiPrimeJpaConfig.dsl();
-                final var jooqCfg = dslContext.configuration();
-                try {
-                        LOG.info("HL7Service::processHl7Message BEGIN for interactionid : {} tenantId :{} ",
-                                        interactionId,
-                                        tenantId);
-                        if (logPayloadEnabled) {
-                                LOG.info("HL7Service :: *****************ORIGINAL HL7 PAYLOAD*************\n\n : {} ",
-                                                hl7Payload);
-                        }
-
-                        final var hl7FHIRJson = convertHl7ToFHIRJson(jooqCfg, hl7Payload, tenantId, interactionId);
-                        if (logPayloadEnabled) {
-                                LOG.info("HL7Service :: *****************LINUX CONVERTED PAYLOAD*************\n\n : {} ",
-                                                hl7FHIRJson);
-                        }
-                        if (null != hl7FHIRJson) {
-                                final String shinnyFhirJson = convertToShinnyFHIRJson(jooqCfg, hl7FHIRJson, tenantId,
-                                                interactionId);
-                                if (logPayloadEnabled) {
-                                        LOG.info("HL7Service :: *****************SHINNY FHIR PAYLOAD*************\n\n : {} ",
-                                                        shinnyFhirJson);
-                                }
-                                if (null != shinnyFhirJson) {
-                                        registerStateHl7Accept(jooqCfg, hl7Payload, hl7FHIRJson, tenantId,
-                                                        interactionId, request,
-                                                        response);
-                                        LOG.info(
-                                                        "HL7Service::processHl7Message END -start processing FHIR Json for interactionid : {} tenantId :{} ",
-                                                        interactionId, tenantId);
-                                        return fhirService.processBundle(shinnyFhirJson, tenantId, null, null, null,
-                                                        null, null,
-                                                        Boolean.toString(false), false,
-                                                        false,
-                                                        false, request, response, null, true, null);
-                                }
-                        }
+                        // if (null != shinnyFhirJson) {
+                         registerStateHl7Accept(jooqCfg, hl7Payload, new PipeParser().encode(message), tenantId,
+                         interactionId, request,
+                         response);
+                        // LOG.info(
+                        // "HL7Service::processHl7Message END -start processing FHIR Json for
+                        // interactionid : {} tenantId :{} ",
+                        // interactionId, tenantId);
+                        return fhirService.processBundle(fhirPayload, tenantId, null, null, null,
+                                        null, null,
+                                        Boolean.toString(false), false,
+                                        false,
+                                        false, request, response, null, true, null);
+                        // }
+                        // }
                 } catch (Exception ex) {
                         LOG.error(" ERROR:: HL7Service::processHl7Message BEGIN for interactionid : {} tenantId :{} ",
                                         interactionId, tenantId, ex);
@@ -285,30 +244,6 @@ public class Hl7Service {
                 rihr.setUserId(gitHubLoginId);
                 rihr.setUserSession(sessionId);
                 rihr.setUserRole(userRole);
-        }
-
-        private String convertHl7ToFHIRJson(org.jooq.Configuration jooqCfg, String hl7Payload, String tenantId,
-                        String interactionId) {
-                LOG.info("HL7Service::convertToFHIRJson BEGIN for interactionid : {} tenantId :{} ", interactionId,
-                                tenantId);
-                try {
-                        HL7ToFHIRConverter ftv = new HL7ToFHIRConverter();
-                        final var fhirJson = ftv.convert(hl7Payload);
-                        return fhirJson;
-                } catch (Exception ex) {
-                        LOG.error(
-                                        "ERROR:: HL7Service::convertToFHIRJson Exception during the initial conversion of HL7 to JSON using Linuxforhelath HL7ToFHIRConverter  for interactionid : {} tenantId :{} ",
-                                        interactionId,
-                                        tenantId, ex);
-                        // TODO - call main proc
-                        registerStateFailed(jooqCfg, interactionId, null, tenantId,
-                                        "Exception during the initial conversion of HL7 to JSON using Linuxforhelath HL7ToFHIRConverter "
-                                                        + ex.getMessage(),
-                                        "%s.convertToFHIRJson".formatted(Hl7Service.class.getName()));
-                }
-                LOG.info("HL7Service::convertToFHIRJson END for interactionid : {} tenantId :{} ", interactionId,
-                                tenantId);
-                return null;
         }
 
         private Message parse(org.jooq.Configuration jooqCfg, String hl7Payload, String tenantId,

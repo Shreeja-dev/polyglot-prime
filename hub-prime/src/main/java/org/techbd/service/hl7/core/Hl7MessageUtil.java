@@ -1,34 +1,22 @@
 package org.techbd.service.hl7.core;
 
+import java.text.ParseException;
 import java.util.Date;
 
-import org.techbd.service.hl7.model.CustomMSH;
-import org.techbd.service.hl7.model.CustomOBR;
-import org.techbd.service.hl7.model.CustomOBX;
-import org.techbd.service.hl7.model.CustomORU_R01;
-import org.techbd.service.hl7.model.CustomPID;
-import org.techbd.service.hl7.model.CustomPV1;
-import com.ibm.icu.text.SimpleDateFormat;
-import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ibm.icu.text.SimpleDateFormat;
 
 import ca.uhn.hl7v2.HL7Exception;
 import ca.uhn.hl7v2.model.Message;
-import ca.uhn.hl7v2.model.v28.message.ORU_R01;
-import ca.uhn.hl7v2.model.v28.segment.OBX;
-import ca.uhn.hl7v2.parser.ModelClassFactory;
+import ca.uhn.hl7v2.model.v27.message.ORU_R01;
 
 public class Hl7MessageUtil {
     private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final Logger LOG = LoggerFactory.getLogger(Hl7MessageUtil.class.getName());
 
-    public static <T> T copyProperties(Object source, Class<T> targetClass) throws HL7Exception {
-        try {
-            JsonNode tree = objectMapper.valueToTree(source);
-            return objectMapper.treeToValue(tree, targetClass);
-        } catch (Exception e) {
-            throw new HL7Exception("Failed to copy properties", e);
-        }
-    }
     /**
      * Retrieves the message type from an HL7 message if it is of type ADT_A01.
      *
@@ -45,18 +33,28 @@ public class Hl7MessageUtil {
     }
 
     public static String convertHl7DateToIso(String hl7Date) throws Exception {
-        SimpleDateFormat hl7Format = new SimpleDateFormat("yyyyMMdd");
-        SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd");
-        Date date = hl7Format.parse(hl7Date);
-        return isoFormat.format(date);
+        if (hl7Date != null && !hl7Date.isEmpty()) {
+            try {
+                SimpleDateFormat hl7Format = new SimpleDateFormat("yyyyMMdd");
+                SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd");
+                Date date = hl7Format.parse(hl7Date);
+                return isoFormat.format(date);
+            } catch (ParseException e) {
+                LOG.error("Invalid HL7 date format: " + hl7Date, e);
+            }
+        }
+        return null;
     }
 
     public static String convertHl7DateTimeToIso(String hl7DateTime) {
-        return hl7DateTime.substring(0, 4) + "-" +
-                hl7DateTime.substring(4, 6) + "-" +
-                hl7DateTime.substring(6, 8) + "T" +
-                hl7DateTime.substring(8, 10) + ":" +
-                hl7DateTime.substring(10, 12) + ":00Z";
+        if (hl7DateTime != null && hl7DateTime.isEmpty() && hl7DateTime.length() < 14) {
+            return hl7DateTime.substring(0, 4) + "-" +
+                    hl7DateTime.substring(4, 6) + "-" +
+                    hl7DateTime.substring(6, 8) + "T" +
+                    hl7DateTime.substring(8, 10) + ":" +
+                    hl7DateTime.substring(10, 12) + ":00Z";
+        }
+        return null;
     }
 
 }

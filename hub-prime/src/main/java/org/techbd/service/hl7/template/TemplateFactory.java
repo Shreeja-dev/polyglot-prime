@@ -1,10 +1,9 @@
-package org.techbd.service.hl7.core;
+package org.techbd.service.hl7.template;
 
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Component;
-import org.techbd.service.hl7.template.ITemplate;
 
 @Component
 public class TemplateFactory {
