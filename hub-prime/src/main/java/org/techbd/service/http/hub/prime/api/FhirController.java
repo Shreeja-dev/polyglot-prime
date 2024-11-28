@@ -39,6 +39,8 @@ import org.techbd.service.http.hub.prime.AppConfig;
 import org.techbd.udi.UdiPrimeJpaConfig;
 import static org.techbd.udi.auto.jooq.ingress.Tables.INTERACTION_HTTP_REQUEST;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -59,18 +61,20 @@ public class FhirController {
     private final AppConfig appConfig;
     private final UdiPrimeJpaConfig udiPrimeJpaConfig;
     private final FHIRService fhirService;
-
+    private final Tracer tracer;
     public FhirController(@SuppressWarnings("PMD.UnusedFormalParameter") final Environment environment,
             final AppConfig appConfig,
             final UdiPrimeJpaConfig udiPrimeJpaConfig,
             final FHIRService fhirService,
             final OrchestrationEngine orchestrationEngine,
             @SuppressWarnings("PMD.UnusedFormalParameter") final SftpManager sftpManager,
-            @SuppressWarnings("PMD.UnusedFormalParameter") final SandboxHelpers sboxHelpers) {
+            @SuppressWarnings("PMD.UnusedFormalParameter") final SandboxHelpers sboxHelpers,
+            final Tracer tracer) {
         this.appConfig = appConfig;
         this.udiPrimeJpaConfig = udiPrimeJpaConfig;
         this.fhirService = fhirService;
         this.engine = orchestrationEngine;
+        this.tracer = tracer;
     }
 
     @GetMapping(value = "/metadata", produces = {MediaType.APPLICATION_XML_VALUE})
@@ -178,19 +182,24 @@ public class FhirController {
                     </ul>
                     """, required = false) @RequestParam(value = "mtls-strategy", required = false) String mtlsStrategy,
             HttpServletRequest request, HttpServletResponse response) throws SQLException, IOException {
-
-        if (tenantId == null || tenantId.trim().isEmpty()) {
-            LOG.error("FHIRController:Bundle Validate:: Tenant ID is missing or empty");
-            throw new IllegalArgumentException("Tenant ID must be provided");
+Span span = tracer.spanBuilder("tracer-from-techbd-fhircontroller-hello-world").startSpan();
+        try {
+            if (tenantId == null || tenantId.trim().isEmpty()) {
+                LOG.error("FHIRController:Bundle Validate:: Tenant ID is missing or empty");
+                throw new IllegalArgumentException("Tenant ID must be provided");
+            }
+            final var provenance = "%s.validateBundleAndForward(%s)".formatted(FhirController.class.getName(),
+                    isSync ? "sync" : "async");
+            request = new CustomRequestWrapper(request, payload);
+            return fhirService.processBundle(payload, tenantId, fhirProfileUrlParam, fhirProfileUrlHeader,
+                    uaValidationStrategyJson,
+                    customDataLakeApi, dataLakeApiContentType, healthCheck, isSync, includeRequestInOutcome,
+                    includeIncomingPayloadInDB,
+                    request, response, provenance, includeOperationOutcome, mtlsStrategy);
+        } finally {
+            span.end();
         }
-        final var provenance = "%s.validateBundleAndForward(%s)".formatted(FhirController.class.getName(),
-                isSync ? "sync" : "async");
-        request = new CustomRequestWrapper(request, payload);
-        return fhirService.processBundle(payload, tenantId, fhirProfileUrlParam, fhirProfileUrlHeader,
-                uaValidationStrategyJson,
-                customDataLakeApi, dataLakeApiContentType, healthCheck, isSync, includeRequestInOutcome,
-                includeIncomingPayloadInDB,
-                request, response, provenance, includeOperationOutcome, mtlsStrategy);
+       
     }
 
     @PostMapping(value = {"/Bundle/$validate", "/Bundle/$validate/"}, consumes = {

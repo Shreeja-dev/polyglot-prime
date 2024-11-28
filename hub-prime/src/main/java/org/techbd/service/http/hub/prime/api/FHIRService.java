@@ -58,6 +58,10 @@ import org.techbd.service.http.hub.prime.AppConfig.DefaultDataLakeApiAuthn;
 import org.techbd.service.http.hub.prime.AppConfig.MTlsAwsSecrets;
 import org.techbd.service.http.hub.prime.AppConfig.MTlsResources;
 import org.techbd.service.http.hub.prime.AppConfig.PostStdinPayloadToNyecDataLakeExternal;
+import org.techbd.service.http.hub.prime.api.FHIRService.MTlsStrategy;
+import org.techbd.service.http.hub.prime.api.FHIRService.TechByDesignDisposition;
+import org.techbd.service.http.hub.prime.api.FHIRService.MTlsStrategy;
+import org.techbd.service.http.hub.prime.api.FHIRService.TechByDesignDisposition;
 import org.techbd.udi.UdiPrimeJpaConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 
@@ -68,6 +72,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.micrometer.common.util.StringUtils;
 import io.netty.handler.ssl.SslContextBuilder;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.annotation.Nonnull;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -86,8 +93,7 @@ public class FHIRService {
         private static final Logger LOG = LoggerFactory.getLogger(FHIRService.class.getName());
         private final AppConfig appConfig;
         private final OrchestrationEngine engine;
-        private final UdiPrimeJpaConfig udiPrimeJpaConfig;
-
+        private final UdiPrimeJpaConfig udiPrimeJpaConfig;private final Tracer tracer;
         @Value("${org.techbd.service.http.interactions.default-persist-strategy:#{null}}")
         private String defaultPersistStrategy;
 
@@ -96,12 +102,14 @@ public class FHIRService {
 
         public FHIRService(
                         final AppConfig appConfig, final UdiPrimeJpaConfig udiPrimeJpaConfig,
-                        OrchestrationEngine engine) {
+                        OrchestrationEngine engine,final Tracer tracer) {
                 this.appConfig = appConfig;
                 this.udiPrimeJpaConfig = udiPrimeJpaConfig;
                 this.engine = engine;
+                this.tracer = tracer;
         }
 
+        @WithSpan("Bundle processing begin")
         public Object processBundle(final @RequestBody @Nonnull String payload,
                         String tenantId,
                         String fhirProfileUrlParam, String fhirProfileUrlHeader, String uaValidationStrategyJson,
@@ -114,6 +122,8 @@ public class FHIRService {
                         HttpServletRequest request, HttpServletResponse response, String provenance,
                         boolean includeOperationOutcome, String mtlsStrategy)
                         throws IOException {
+           Span span = tracer.spanBuilder("bundle processing start").startSpan();
+           try{
                 final var start = Instant.now();
                 LOG.info("Bundle processing start at {} for interaction id {}.",
                                 start, getBundleInteractionId(request));
@@ -177,6 +187,9 @@ public class FHIRService {
                 LOG.info("Bundle processing end for interaction id: {} Time Taken : {}  milliseconds",
                                 interactionId, timeElapsed.toMillis());
                 return payloadWithDisposition;
+        } finally {
+                span.end();
+            }
         }
 
         @SuppressWarnings("unchecked")
@@ -190,7 +203,7 @@ public class FHIRService {
                                                 .findFirst())
                                 .isPresent();
         }
-
+        @WithSpan("FhirService: validate Json Check if payload is a valid json")
         public void validateJson(String jsonString, String interactionId) {
                 try {
                         Configuration.objectMapper.readTree(jsonString);
@@ -248,11 +261,13 @@ public class FHIRService {
                                         ex);
                 }
         }
-
+        @WithSpan("FhirService: registerBundleInteraction Invoke postgres stored function for persisting bundle and tech by disposition")
         private Map<String, Object> registerBundleInteraction(org.jooq.Configuration jooqCfg,
                         HttpServletRequest request, HttpServletResponse response,
                         String payload, Map<String, Map<String, Object>> validationResult)
                         throws IOException {
+                                Span span = tracer.spanBuilder("FhirService: registerBundleInteraction Invoke postgres stored function for persisting bundle and tech by disposition").startSpan();
+        try {
                 final Interactions interactions = new Interactions();
                 final var mutatableReq = new ContentCachingRequestWrapper(request);
                 RequestEncountered requestEncountered = null;
@@ -292,6 +307,9 @@ public class FHIRService {
                                         + rihr.getName() + " error", rre.interactionId().toString(), rre.tenant(), e);
                 }
                 return null;
+        } finally {
+                span.end();
+            }
         }
 
         private void prepareRequest(RegisterInteractionHttpRequest rihr, RequestResponseEncountered rre,
@@ -359,9 +377,11 @@ public class FHIRService {
                 request.setAttribute("activeHttpInteraction", rre);
         }
 
+        @WithSpan("FhirService: validate  Create orchestration session and invoke fhir validator")
         private Map<String, Object> validate(HttpServletRequest request, String payload, String fhirProfileUrl,
                         String uaValidationStrategyJson,
                         boolean includeRequestInOutcome) {
+                                Span span = tracer.spanBuilder("FHIR validation").startSpan();                                try{
                 final var start = Instant.now();
                 String interactionId = getBundleInteractionId(request);
                 LOG.info("FHIRService  - Validate -BEGIN for interactionId: {} ", interactionId);
@@ -421,6 +441,9 @@ public class FHIRService {
                         LOG.info("FHIRService  - Validate -END for interaction id: {} Time Taken : {}  milliseconds",
                                         interactionId, timeElapsed.toMillis());
                 }
+                } finally {
+            span.end();
+        }
         }
 
         private void sendToScoringEngine(org.jooq.Configuration jooqCfg, HttpServletRequest request,
@@ -482,6 +505,7 @@ public class FHIRService {
                 }
         }
 
+        @WithSpan ("FhirService:handleMTlsStrategy Based on mtlsStrategy send payload to scoring engine ")
         public void handleMTlsStrategy(DefaultDataLakeApiAuthn defaultDatalakeApiAuthn, String interactionId,
                         String tenantId, String dataLakeApiBaseURL,
                         org.jooq.Configuration jooqCfg, HttpServletRequest request,
@@ -895,6 +919,7 @@ public class FHIRService {
                 return new PostToNyecExternalResponse(completed, processOutput, errorOutput);
         }
 
+        
         private WebClient createWebClient(String scoringEngineApiURL,
                         org.jooq.Configuration jooqCfg,
                         HttpServletRequest request,
@@ -984,6 +1009,7 @@ public class FHIRService {
                                 interactionId);
         }
 
+        @WithSpan("FhirService:sendPostRequest - Webclient call to scoring engine")
         private void sendPostRequest(WebClient webClient,
                         String tenantId,
                         Map<String, Object> bundlePayloadWithDisposition,
@@ -993,7 +1019,8 @@ public class FHIRService {
                         org.jooq.Configuration jooqCfg,
                         String provenance,
                         String requestURI, String scoringEngineApiURL) {
-
+Span span = tracer.spanBuilder("Webclient call to scoring engine").startSpan();
+        try {
                 LOG.debug("FHIRService:: sendToScoringEngine Post to scoring engine - BEGIN interaction id: {} tenantID :{}",
                                 interactionId, tenantId);
 
@@ -1016,8 +1043,12 @@ public class FHIRService {
 
                 LOG.info("FHIRService:: sendToScoringEngine Post to scoring engine - END interaction id: {} tenantid: {}",
                                 interactionId, tenantId);
+                                } finally {
+            span.end();
+        }
         }
 
+        @WithSpan("FhirService:handleResponse Handle success response from scoring engine")
         private void handleResponse(String response,
                         org.jooq.Configuration jooqCfg,
                         String interactionId,
@@ -1061,9 +1092,11 @@ public class FHIRService {
                 LOG.error("ERROR:: FHIRService:: sendToScoringEngine Exception while sending to scoring engine payload with interaction id: {}",
                                 getBundleInteractionId(request), e);
         }
-
+        @WithSpan("FhirService: preparePayload Append validation outcome and tech by disposition to initial payload")
         private Map<String, Object> preparePayload(HttpServletRequest request, String bundlePayload,
                         Map<String, Object> payloadWithDisposition) {
+                                Span span = tracer.spanBuilder("FhirService: preparePayload Append validation outcome and tech by disposition to initial payload").startSpan();
+        try {
                 final var interactionId = getBundleInteractionId(request);
                 LOG.debug("FHIRService:: addValidationResultToPayload BEGIN for interaction id : {}", interactionId);
 
@@ -1110,6 +1143,9 @@ public class FHIRService {
                 LOG.info("FHIRService:: addValidationResultToPayload END - Validation results not added - returning original payload for interaction id : {}",
                                 interactionId);
                 return payloadWithDisposition;
+        } finally {
+                span.end();
+            }
         }
 
         @SuppressWarnings("unchecked")
@@ -1188,12 +1224,14 @@ public class FHIRService {
                 LOG.debug("FHIRService:: appendToBundlePayload END for interaction id : {}", interactionId);
                 return finalPayload;
         }
-
+        @WithSpan("FhirService:registerStateForward ")
         private void registerStateForward(org.jooq.Configuration jooqCfg, String provenance,
                         String bundleAsyncInteractionId, String requestURI,
                         String tenantId,
                         Map<String, Object> payloadWithDisposition,
                         String outboundHttpMessage, boolean includeIncomingPayloadInDB, String payload) {
+                                Span span = tracer.spanBuilder("DIPOSITION TO FORWARD TRANSITION").startSpan();
+                                try {                                
                 LOG.info("REGISTER State Forward : BEGIN for inteaction id  : {} tenant id : {}",
                                 bundleAsyncInteractionId, tenantId);
                 final var forwardedAt = OffsetDateTime.now();
@@ -1233,11 +1271,16 @@ public class FHIRService {
                                         + initRIHR.getName() + " initRIHR error", bundleAsyncInteractionId, tenantId,
                                         e);
                 }
+        } finally {
+                span.end();
+            }
         }
-
+        @WithSpan("FhirService:registerStateComplete ")
         private void registerStateComplete(org.jooq.Configuration jooqCfg, String bundleAsyncInteractionId,
                         String requestURI, String tenantId,
                         String response, String provenance) {
+                                Span span = tracer.spanBuilder("FORWARD TO COMPLETE").startSpan();
+        try {
                 LOG.info("REGISTER State Complete : BEGIN for interaction id :  {} tenant id : {}",
                                 bundleAsyncInteractionId, tenantId);
                 final var forwardRIHR = new RegisterInteractionHttpRequest();
@@ -1274,11 +1317,16 @@ public class FHIRService {
                                         + forwardRIHR.getName()
                                         + " forwardRIHR error", bundleAsyncInteractionId, tenantId, e);
                 }
+        } finally {
+                span.end();
+            }
         }
-
+        @WithSpan("FhirService:registerStateFailure Handle failed")
         private void registerStateFailed(org.jooq.Configuration jooqCfg, String bundleAsyncInteractionId,
                         String requestURI, String tenantId,
                         String response, String provenance) {
+                                Span span = tracer.spanBuilder("FORWARD TO FAIL").startSpan();
+        try {
                 LOG.info("REGISTER State Fail : BEGIN for interaction id :  {} tenant id : {}",
                                 bundleAsyncInteractionId, tenantId);
                 final var forwardRIHR = new RegisterInteractionHttpRequest();
@@ -1317,12 +1365,19 @@ public class FHIRService {
                                         + forwardRIHR.getName()
                                         + " forwardRIHR error", bundleAsyncInteractionId, tenantId, e);
                 }
+                request, response, provenance, includeOperationOutcome, mtlsStrategy);
+        } finally {
+            span.end();
+        }
         }
 
+        @WithSpan("FhirService:registerStateFailure Handle failure")
         private void registerStateFailure(org.jooq.Configuration jooqCfg, String dataLakeApiBaseURL,
                         String bundleAsyncInteractionId, Throwable error,
                         String requestURI, String tenantId,
                         String provenance) {
+                                Span span = tracer.spanBuilder("FORWARD TO FAIL").startSpan();
+        try {
                 LOG.error("Register State Failure - Exception while sending FHIR payload to datalake URL {} for interaction id {}",
                                 dataLakeApiBaseURL, bundleAsyncInteractionId, error);
                 final var errorRIHR = new RegisterInteractionHttpRequest();
@@ -1404,6 +1459,9 @@ public class FHIRService {
                                         + errorRIHR.getName() + " errorRIHR error", bundleAsyncInteractionId, tenantId,
                                         e);
                 }
+        } finally {
+                span.end();
+            }
         }
 
         private String getBundleInteractionId(HttpServletRequest request) {
