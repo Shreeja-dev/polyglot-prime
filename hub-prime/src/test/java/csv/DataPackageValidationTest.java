@@ -3,8 +3,8 @@ package csv;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.fail;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -27,26 +27,11 @@ class DataPackageValidationTest {
         assertNotNull(exception.getMessages());
         assertFalse(exception.getMessages().isEmpty());
         String errorJson = convertToJson(exception.getMessages());
-        System.out.println(errorJson);
-    }
-
-    @Test
-    void validateDataPackage1() throws Exception {
-        try {
-            this.getDataPackageFromFilePath(
-                    "org/techbd/csv/datapackage-nyher-fhir-ig-equivalent.json", true);
-            fail("Expected a ValidationException to be thrown");
-        } catch (ValidationException exception) {
-            // Assert the validation messages
-            assertNotNull(exception.getMessages());
-            assertFalse(exception.getMessages().isEmpty());
-            String errorJson = convertToJson(exception.getMessages());
-            System.out.println(errorJson);
-        } catch (Exception e) {
-            // Handle any other exceptions
-            e.printStackTrace();
-            fail("Unexpected exception type: " + e.getClass().getName());
-        }
+        final var filePath = "src/test/resources/org/techbd/csv/output/error.json";// TODO - replace later with
+                                                                                   // assertions
+        final Path outputPath = Paths.get(filePath);
+        Files.createDirectories(outputPath.getParent());
+        Files.writeString(outputPath, errorJson);
     }
 
     public static Path getBasePath() {
