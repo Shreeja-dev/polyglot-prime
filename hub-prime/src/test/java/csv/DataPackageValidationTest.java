@@ -59,10 +59,6 @@ class DataPackageValidationTest {
         }
     }
 
-    private Package getDataPackageFromFilePath(boolean strict) throws Exception {
-        return this.getDataPackageFromFilePath("org/techbd/csv/datapackage-nyher-fhir-ig-equivalent.json", strict);
-    }
-
     private static String getFileContents(String fileName) {
         try {
             return new String(TestUtil.getResourceContent(fileName));
