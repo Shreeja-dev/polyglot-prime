@@ -86,7 +86,74 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
 
         Map<String, List<Reference>> referencesMap = new HashMap<>();
         Map<String, String> questionAndAnswerCode = new HashMap<>();
-        questionAndAnswerCode.clear();
+        //questionAndAnswerCode.clear();
+        for (ScreeningObservationData data : screeningObservationDataList) {
+                Observation observation = new Observation();
+                String observationId = CsvConversionUtil
+                        .sha256(data.getQuestionCodeDisplay().replace(" ", "") + data.getQuestionCode());
+                observation.setId(observationId);
+                String fullUrl = "http://shinny.org/us/ny/hrsn/Observation/" + observationId;
+                setMeta(observation);
+                Meta meta = observation.getMeta();
+                meta.setLastUpdated(DateUtil.parseDate(demographicData.getPatientLastUpdated())); // max date available in
+                                                                                                  // all
+                                                                                                  // screening records
+                observation.setLanguage("en");
+                observation
+                        .setStatus(Observation.ObservationStatus.fromCode(screeningProfileData.getScreeningStatusCode()));
+                if (!data.getObservationCategorySdohCode().isEmpty()) {
+                    observation.addCategory(createCategory("http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                        data.getObservationCategorySdohCode(), data.getObservationCategorySdohDisplay()));
+                } else {
+                    observation.addCategory(createCategory("http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                        "sdoh-category-unspecified", "SDOH Category Unspecified"));
+                
+                    if (!data.getObservationCategorySnomedCode().isEmpty()) {
+                        observation.addCategory(createCategory("http://snomed.info/sct",
+                            data.getObservationCategorySnomedCode(), data.getObservationCategorySnomedDisplay()));
+                    }
+                }
+                if(!data.getDataAbsentReasonCode().isEmpty()) {
+                    CodeableConcept dataAbsentReason = new CodeableConcept();
+    
+                    dataAbsentReason.addCoding(
+                        new Coding()
+                            .setSystem("http://terminology.hl7.org/CodeSystem/data-absent-reason")
+                            .setCode(data.getDataAbsentReasonCode())
+                            .setDisplay(data.getDataAbsentReasonDisplay())
+                    );
+                    dataAbsentReason.setText(data.getDataAbsentReasonText());
+    
+                    observation.setDataAbsentReason(dataAbsentReason);
+                }
+                observation.addCategory(createCategory("http://terminology.hl7.org/CodeSystem/observation-category",
+                        "social-history", null));
+                observation.addCategory(createCategory("http://terminology.hl7.org/CodeSystem/observation-category",
+                        "survey", null));
+                CodeableConcept code = new CodeableConcept();
+                code.addCoding(new Coding("http://loinc.org", data.getQuestionCode(), data.getQuestionCodeDisplay()));
+                code.setText(data.getQuestionCodeText());
+                observation.setCode(code);
+                observation.setSubject(new Reference("Patient/" + idsGenerated.get(CsvConstants.PATIENT_ID)));
+                if (data.getRecordedTime() != null) {
+                    observation.setEffective(new DateTimeType(DateUtil.parseDate(data.getRecordedTime())));
+                }
+                observation.setIssued(DateUtil.parseDate(data.getRecordedTime()));
+                CodeableConcept value = new CodeableConcept();
+                value.addCoding(new Coding("http://loinc.org", data.getAnswerCode(), data.getAnswerCodeDescription()));
+                observation.setValue(value);
+                questionAndAnswerCode.put(data.getQuestionCode(), data.getAnswerCode());
+                FhirContext ctx = FhirContext.forR4();
+                String jsonString = ctx.newJsonParser().setPrettyPrint(true).encodeResourceToString(observation);
+                LOG.info("Observation JSON: {}", jsonString);
+                BundleEntryComponent entry = new BundleEntryComponent();
+                entry.setFullUrl(fullUrl);
+                entry.setRequest(new Bundle.BundleEntryRequestComponent().setMethod(HTTPVerb.POST)
+                        .setUrl("http://shinny.org/us/ny/hrsn/Observation/" + observationId));
+                entry.setResource(observation);
+                bundleEntryComponents.add(entry);
+            }
+
         try {
             // Group observations by screening code first
             screeningCodeGroups = screeningObservationDataList.stream()
@@ -187,7 +254,7 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
         groupObservation.addCategory(createCategory(CATEGORY_URL, "social-history", null));
         groupObservation.addCategory(createCategory(CATEGORY_URL, "survey", null));
 
-        // Add SDOH categories from group members (deduplicated)
+        // Add SDOH categories from group members
         groupData.stream()
                 .map(ScreeningObservationData::getObservationCategorySdohCode)
                 .filter(code -> code != null && !code.isEmpty())
@@ -216,7 +283,7 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
         CodeableConcept interpretation = new CodeableConcept();
         interpretation.addCoding(new Coding("http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
                 "POS", "Positive"));
-                groupObservation.addInterpretation(interpretation);
+        groupObservation.addInterpretation(interpretation);
         // Add member references
         List<Reference> hasMemberReferences = groupData.stream()
                 .map(data -> new Reference("Observation/" + individualObservationIds.get(data.getQuestionCode())))
@@ -321,4 +388,3 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
         return category;
     }
 }
-
