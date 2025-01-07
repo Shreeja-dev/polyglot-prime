@@ -178,7 +178,9 @@ public class FHIRService {
                                                         .formatted(AppConfig.Servlet.HeaderName.Request.HEALTH_CHECK_HEADER));
                                         return result; // Return without proceeding to scoring engine submission
                                 }
-                                addObservabilityHeadersToResponse(request, response);
+                                if (!SourceType.CSV.name().equals(sourceType)){
+                                        addObservabilityHeadersToResponse(request, response,sourceType);
+                                }
                                 payloadWithDisposition = registerBundleInteraction(jooqCfg, request,
                                                 response, payload, result, interactionId, groupInteractionId,
                                                 masterInteractionId, sourceType);
@@ -263,7 +265,7 @@ public class FHIRService {
 
         }
 
-        private void addObservabilityHeadersToResponse(HttpServletRequest request, HttpServletResponse response) {
+        private void addObservabilityHeadersToResponse(HttpServletRequest request, HttpServletResponse response,String sourceType) {
                 final var startTime = (Instant) request.getAttribute(START_TIME_ATTRIBUTE);
                 final var finishTime = Instant.now();
                 final Duration duration = Duration.between(startTime, finishTime);
@@ -272,30 +274,11 @@ public class FHIRService {
                 final String finishTimeText = finishTime.toString();
                 final String durationMsText = String.valueOf(duration.toMillis());
                 final String durationNsText = String.valueOf(duration.toNanos());
-
-                // set response headers for those clients that can access HTTP headers
+    
                 response.addHeader("X-Observability-Metric-Interaction-Start-Time", startTimeText);
                 response.addHeader("X-Observability-Metric-Interaction-Finish-Time", finishTimeText);
                 response.addHeader("X-Observability-Metric-Interaction-Duration-Nanosecs", durationMsText);
                 response.addHeader("X-Observability-Metric-Interaction-Duration-Millisecs", durationNsText);
-
-                // set a cookie which is accessible to a JavaScript user agent that cannot
-                // access HTTP headers (usually HTML pages in web browser cannot access HTTP
-                // response headers)
-                try {
-                        final var metricCookie = new Cookie("Observability-Metric-Interaction-Active",
-                                        URLEncoder.encode("{ \"startTime\": \"" + startTimeText
-                                                        + "\", \"finishTime\": \"" + finishTimeText
-                                                        + "\", \"durationMillisecs\": \"" + durationMsText
-                                                        + "\", \"durationNanosecs\": \""
-                                                        + durationNsText + "\" }", StandardCharsets.UTF_8.toString()));
-                        metricCookie.setPath("/"); // Set path as required
-                        metricCookie.setHttpOnly(false); // Ensure the cookie is accessible via JavaScript
-                        response.addCookie(metricCookie);
-                } catch (UnsupportedEncodingException ex) {
-                        LOG.error("Exception during setting  Observability-Metric-Interaction-Active cookie to response header",
-                                        ex);
-                }
         }
 
         private Map<String, Object> registerBundleInteraction(org.jooq.Configuration jooqCfg,
