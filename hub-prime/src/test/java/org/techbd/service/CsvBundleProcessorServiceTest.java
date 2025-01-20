@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mockStatic;
@@ -28,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
 import org.techbd.model.csv.DemographicData;
+import org.techbd.model.csv.FhirBundleAndProvenance;
 import org.techbd.model.csv.FileDetail;
 import org.techbd.model.csv.FileType;
 import org.techbd.model.csv.PayloadAndValidationOutcome;
@@ -109,10 +111,11 @@ class CsvBundleProcessorServiceTest {
                             "patient2_encounter1",
                             List.of(new ScreeningObservationData())));
         }
-        String mockBundle = getMockBundleJson();
-        when(csvToFhirConverter.convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString()))
-                .thenReturn(mockBundle);
+        FhirBundleAndProvenance bundle = new FhirBundleAndProvenance(getMockBundleJson(), null);
+        String mockBundle = bundle.bundle();
+             when(csvToFhirConverter.convert(any(DemographicData.class), any(QeAdminData.class),
+                any(ScreeningProfileData.class), anyList(), anyString(),anyMap(),anyMap()))
+                .thenReturn(bundle);
 
         OperationOutcome mockOutcome = new OperationOutcome();
         when(fhirService.processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(), any(),
@@ -121,13 +124,13 @@ class CsvBundleProcessorServiceTest {
                 .thenReturn(mockOutcome);
         List<Object> result = csvBundleProcessorService.processPayload(masterInteractionId,
                 payloadAndValidationOutcomes,new ArrayList<>(),
-                request, response, "tenantId","test.zip");
+                request, response, "tenantId","test.zip",null);
         assertNotNull(result);
         assertFalse(result.isEmpty());
         assertEquals(2, result.size());
         assertEquals(mockOutcome, result.get(0));
         verify(csvToFhirConverter, times(2)).convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString());
+                any(ScreeningProfileData.class), anyList(), anyString(),anyMap(),anyMap());
         verify(fhirService, times(2)).processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(),
                 any(),
                 anyString(), eq(false), eq(false), eq(false), eq(request), eq(response), any(),
@@ -177,11 +180,12 @@ class CsvBundleProcessorServiceTest {
                             "patient1_encounter2",
                             List.of(new ScreeningObservationData())));
         }
-
-        String mockBundle = getMockBundleJson();
+        FhirBundleAndProvenance bundle = new FhirBundleAndProvenance(getMockBundleJson(), null);
+        String mockBundle = bundle.bundle();
+     
         when(csvToFhirConverter.convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString()))
-                .thenReturn(mockBundle);
+                any(ScreeningProfileData.class), anyList(), anyString(),anyMap(),anyMap()))
+                .thenReturn(bundle);
 
         OperationOutcome mockOutcome = new OperationOutcome();
         when(fhirService.processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(), any(),
@@ -191,12 +195,12 @@ class CsvBundleProcessorServiceTest {
 
         List<Object> result = csvBundleProcessorService.processPayload(masterInteractionId,
                 payloadAndValidationOutcomes,new ArrayList<>(),
-                request, response, "tenantId","test.zip");
+                request, response, "tenantId","test.zip",null);
         assertNotNull(result);
         assertFalse(result.isEmpty());
         assertEquals(2, result.size());
         verify(csvToFhirConverter, times(2)).convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString());
+                any(ScreeningProfileData.class), anyList(), anyString(),anyMap(),anyMap());
         verify(fhirService, times(2)).processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(),
                 any(),
                 anyString(), eq(false), eq(false), eq(false), eq(request), eq(response), any(),
@@ -238,11 +242,11 @@ class CsvBundleProcessorServiceTest {
                     .thenReturn(Map.of("encounter1", List.of(new ScreeningObservationData())));
         }
         // when(UUID.randomUUID()).thenReturn(UUID.fromString("123e4567-e89b-12d3-a456-426614174000"));
-
-        String mockBundle = getMockBundleJson();
+        FhirBundleAndProvenance bundle = new FhirBundleAndProvenance(getMockBundleJson(), null);
+        String mockBundle = bundle.bundle();
         when(csvToFhirConverter.convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString()))
-                .thenReturn(mockBundle);
+                any(ScreeningProfileData.class), anyList(), anyString(),anyMap(),anyMap()))
+                .thenReturn(bundle);
         OperationOutcome successfulOutcome = new OperationOutcome();
         when(fhirService.processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(), any(),
                 anyString(),
@@ -251,13 +255,13 @@ class CsvBundleProcessorServiceTest {
                 .thenThrow(new RuntimeException("Mock failure"));
         List<Object> result = csvBundleProcessorService.processPayload(masterInteractionId,
                 payloadAndValidationOutcomes,new ArrayList<>(),
-                request, response, "tenantId","test.zip");
+                request, response, "tenantId","test.zip",null);
 
         assertNotNull(result);
         assertFalse(result.isEmpty());
         assertEquals(2, result.size());
         verify(csvToFhirConverter, times(2)).convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString());
+                any(ScreeningProfileData.class), anyList(), anyString(),anyMap(),anyMap());
         verify(fhirService, times(2)).processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(),
                 any(),
                 anyString(), eq(false), eq(false), eq(false), eq(request), eq(response), any(),

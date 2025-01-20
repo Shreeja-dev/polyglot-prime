@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.MimeTypeUtils;
 import org.techbd.conf.Configuration;
 import org.techbd.model.csv.DemographicData;
+import org.techbd.model.csv.FhirBundleAndProvenance;
 import org.techbd.model.csv.FileDetail;
 import org.techbd.model.csv.FileType;
 import org.techbd.model.csv.PayloadAndValidationOutcome;
@@ -38,13 +39,18 @@ import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 import org.techbd.udi.auto.jooq.ingress.routines.SatInteractionCsvRequestUpserted;
 import org.techbd.util.CsvConversionUtil;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.micrometer.common.util.StringUtils;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
+import org.hl7.fhir.r4.model.Bundle;
+import org.hl7.fhir.r4.model.Provenance;
+import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
+import org.hl7.fhir.r4.model.Resource;
 @Service
 public class CsvBundleProcessorService {
     private static final Logger LOG = LoggerFactory.getLogger(CsvBundleProcessorService.class.getName());
@@ -65,7 +71,7 @@ public class CsvBundleProcessorService {
             final List<String> filesNotProcessed,
             final HttpServletRequest request,
             final HttpServletResponse response,
-            final String tenantId, final String originalFileName) {
+                    final String tenantId, final String originalFileName, String provenanceFromRequest) throws Exception{
         final List<Object> resultBundles = new ArrayList<>();
         final List<Object> miscErrors = new ArrayList<>();
         boolean isAllCsvConvertedToFhir = true;
@@ -73,7 +79,7 @@ public class CsvBundleProcessorService {
             final String groupKey = entry.getKey();
             final PayloadAndValidationOutcome outcome = entry.getValue();
             final String groupInteractionId = outcome.groupInteractionId();
-            final Map<String, Object> provenance = outcome.provenance();
+            final Map<String, Object> provenance = appendProvenance(outcome.provenance(), provenanceFromRequest);
             try {
 
                 if (outcome.isValid()) {
@@ -103,11 +109,11 @@ public class CsvBundleProcessorService {
                         resultBundles.addAll(processScreening(groupKey, demographicData, screeningProfileData,
                                 qeAdminData, screeningObservationData, request, response, groupInteractionId,
                                 masterInteractionId,
-                                tenantId, outcome.isValid(), outcome, isAllCsvConvertedToFhir));
+                                tenantId, outcome.isValid(), outcome, isAllCsvConvertedToFhir,provenance));
                     }
                 } else {
                     isAllCsvConvertedToFhir = false;
-                    resultBundles.add(outcome.validationResults());
+                    resultBundles.add(combineValidationResultsAndProvenance(outcome.validationResults(),provenance));
                 }
             } catch (final Exception e) {
                 LOG.error("Error processing payload: " + e.getMessage(), e);
@@ -129,6 +135,30 @@ public class CsvBundleProcessorService {
         saveMiscErrorAndStatus(miscErrors, isAllCsvConvertedToFhir, masterInteractionId, request);
         addObservabilityHeadersToResponse(request, response);
         return resultBundles;
+    }
+    public static Map<String, Object> combineValidationResultsAndProvenance(
+            Map<String, Object> validationResults,
+            Map<String, Object> provenance) {
+        if (provenance != null && !provenance.isEmpty()) {
+            validationResults.putAll(provenance);
+        }
+        return validationResults;
+    }
+    public static Map<String, Object> appendProvenance(
+                    Map<String, Object> existingProvenance,
+                    String provenanceFromRequest) throws Exception {
+            ObjectMapper objectMapper = new ObjectMapper();
+            Map<String, Object> combinedProvenance = new HashMap<>();
+            if (existingProvenance != null && !existingProvenance.isEmpty()) {
+                    combinedProvenance.putAll(existingProvenance);
+            }
+            if (provenanceFromRequest != null && !provenanceFromRequest.isBlank()) {
+                    Map<String, Object> newProvenance = objectMapper.readValue(
+                                    provenanceFromRequest, new TypeReference<Map<String, Object>>() {
+                                    });
+                    combinedProvenance.putAll(newProvenance);
+            }
+            return combinedProvenance;
     }
 
     private void saveMiscErrorAndStatus(final List<Object> miscError, final boolean allCSvConvertedToFHIR,
@@ -164,7 +194,7 @@ public class CsvBundleProcessorService {
         }
     }
 
-    public String addBundleProvenance(final Map<String, Object> existingProvenance, final List<String> bundleGeneratedFrom,
+    public Map<String,Object> populateBundleProvenance(final List<String> bundleGeneratedFrom,
             final String patientMrnId, final String encounterId, final Instant initiatedAt, final Instant completedAt) throws Exception {
         final Map<String, Object> newProvenance = new HashMap<>();
         newProvenance.put("resourceType", "Provenance");
@@ -172,7 +202,7 @@ public class CsvBundleProcessorService {
                 "Bundle created from provided files for the given patientMrnId and encounterId");
         newProvenance.put("validatedFiles", bundleGeneratedFrom);
         newProvenance.put("initiatedAt", initiatedAt.toString());
-        newProvenance.put("completedAt", completedAt.toString());
+        //newProvenance.put("completedAt", completedAt.toString());//updated in CSvToFhirConverter
         newProvenance.put("patientMrnId", patientMrnId);
         newProvenance.put("encounterId", encounterId);
         final Map<String, Object> agent = new HashMap<>();
@@ -181,10 +211,7 @@ public class CsvBundleProcessorService {
         whoCoding.put("display", "TechByDesign");
         agent.put("who", Collections.singletonMap("coding", List.of(whoCoding)));
         newProvenance.put("agent", List.of(agent));
-        final List<Map<String, Object>> provenanceList = new ArrayList<>();
-        provenanceList.add(existingProvenance);
-        provenanceList.add(newProvenance);
-        return Configuration.objectMapper.writeValueAsString(provenanceList);
+        return newProvenance;
     }
 
     public void addHapiFhirValidation(final Map<String, Object> provenance, final String validationDescription) {
@@ -295,7 +322,7 @@ public class CsvBundleProcessorService {
             final String groupInteractionId,
             final String masterInteractionId,
             final String tenantId, final boolean isValid, final PayloadAndValidationOutcome payloadAndValidationOutcome,
-            boolean isAllCsvConvertedToFhir)
+            boolean isAllCsvConvertedToFhir,Map<String,Object> provenance)
             throws IOException {
 
         final List<Object> results = new ArrayList<>();
@@ -321,17 +348,19 @@ public class CsvBundleProcessorService {
                         throw new IllegalArgumentException(errorMessage);
                     }
                     final Instant initiatedAt = Instant.now();
-                    bundle = csvToFhirConverter.convert(
+                    final Map<String,Object> bundleProvenance = populateBundleProvenance(
+                    getFileNames(payloadAndValidationOutcome.fileDetails()),
+                    profile.getPatientMrIdValue(), profile.getEncounterId(), initiatedAt, null);
+                    FhirBundleAndProvenance fhirBundleAndProvenance = csvToFhirConverter.convert(
                             demographicList.get(0),
                             qeAdminList.get(0),
                             profile,
                             screeningObservationList,
-                            interactionId);
-                    final Instant completedAt = Instant.now();
+                            interactionId,provenance,bundleProvenance);
+                    bundle = fhirBundleAndProvenance.bundle();
+                    
                     if (bundle != null) {
-                        final String updatedProvenance = addBundleProvenance(payloadAndValidationOutcome.provenance(),
-                                getFileNames(payloadAndValidationOutcome.fileDetails()),
-                                profile.getPatientMrIdValue(), profile.getEncounterId(), initiatedAt, completedAt);
+                        final String updatedProvenance = fhirBundleAndProvenance.provenance();
                         saveFhirConversionStatus(isValid, masterInteractionId, groupKey, groupInteractionId,
                                 interactionId, request,
                                 bundle, null, tenantId);
@@ -374,6 +403,31 @@ public class CsvBundleProcessorService {
             isAllCsvConvertedToFhir = false;
         }
         return results;
+    }
+    public static String addProvenanceToGeneratedBundle(String bundleJson, String provenanceJson) throws Exception {
+        if (bundleJson == null || bundleJson.trim().isEmpty()) {
+            throw new IllegalArgumentException("The bundle JSON cannot be null or empty.");
+        }
+        if (provenanceJson == null || provenanceJson.trim().isEmpty()) {
+            throw new IllegalArgumentException("The provenance JSON cannot be null or empty.");
+        }
+        Bundle bundle = Configuration.objectMapper.readValue(bundleJson, Bundle.class);
+        if (bundle == null) {
+            throw new IllegalArgumentException("Failed to parse the bundle JSON.");
+        }
+        List<Provenance> provenanceList = Configuration.objectMapper.readValue(provenanceJson, Configuration.objectMapper.getTypeFactory().constructCollectionType(List.class, Provenance.class));
+        if (provenanceList == null || provenanceList.isEmpty()) {
+            throw new IllegalArgumentException("The provenance JSON must contain one or more Provenance entries.");
+        }
+        for (Provenance provenance : provenanceList) {
+            if (provenance == null) {
+                throw new IllegalArgumentException("One of the Provenance entries is null.");
+            }
+            BundleEntryComponent entry = new BundleEntryComponent();
+            entry.setResource(provenance);
+            bundle.addEntry(entry);
+        }
+        return Configuration.objectMapper.writeValueAsString(bundle);
     }
 
     public static List<String> getFileNames(final List<FileDetail> fileDetails) {

@@ -40,6 +40,7 @@ public class CsvController {
   public Object handleCsvUpload(
       @Parameter(description = "ZIP file containing CSV data. Must not be null.", required = true) @RequestPart("file") @Nonnull MultipartFile file,
       @Parameter(description = "Tenant ID, a mandatory parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID) String tenantId,
+      @Parameter(description = "Optional header to provide provenance metadata for the request", required = false) @RequestHeader(value = "X-Provenance", required = false) String provenance,
       @Parameter(description = "Parameter to specify origin of the request.", required = false) @RequestParam(value = "origin", required = false,defaultValue = "HTTP") String origin,
       @Parameter(description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
       HttpServletRequest request,
@@ -50,17 +51,13 @@ public class CsvController {
     if (file == null || file.isEmpty() || file.getOriginalFilename() == null
         || file.getOriginalFilename().trim().isEmpty()) {
       log.error("CsvController: handleCsvUpload:: Uploaded file is missing or empty");
-      return new ResponseEntity<>(
-          "{\"status\":\"Error\",\"message\":\"Validation Error: Uploaded file is missing or empty.\"}",
-          HttpStatus.BAD_REQUEST);
+      throw new IllegalArgumentException("Uploaded file is missing or empty.");
     }
     // Validate file extension
     String originalFilename = file.getOriginalFilename();
     if (!originalFilename.toLowerCase().endsWith(".zip")) {
       log.error("CsvController: handleCsvUpload:: Uploaded file is not a .zip file. Filename: " + originalFilename);
-      return new ResponseEntity<>(
-          "{\"status\":\"Error\",\"message\":\"Validation Error: Uploaded file must have a .zip extension.\"}",
-          HttpStatus.BAD_REQUEST);
+      throw new IllegalArgumentException("Uploaded file must have a .zip extension.");
     }
     if (tenantId == null || tenantId.trim().isEmpty()) {
       log.error("CsvController: handleCsvUpload:: Tenant ID is missing or empty");
@@ -76,14 +73,26 @@ public class CsvController {
   public List<Object> handleCsvUploadAndConversion(
       @Parameter(description = "ZIP file containing CSV data. Must not be null.", required = true) @RequestPart("file") @Nonnull MultipartFile file,
       @Parameter(description = "Parameter to specify the Tenant ID. This is a <b>mandatory</b> parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID, required = true) String tenantId,
+      @Parameter(description = "Optional header to provide provenance metadata for the request", required = false) @RequestHeader(value = "X-Provenance", required = false) String provenance,
       @Parameter(description = "Parameter to specify origin of the request.", required = false) @RequestParam(value = "origin", required = false,defaultValue = "HTTP") String origin,
       @Parameter(description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
       HttpServletRequest request,
       HttpServletResponse response) throws Exception {
 
+    if (file == null || file.isEmpty() || file.getOriginalFilename() == null
+        || file.getOriginalFilename().trim().isEmpty()) {
+      log.error("CsvController: handleCsvUpload:: Uploaded file is missing or empty");
+      throw new IllegalArgumentException("Uploaded file is missing or empty.");
+    }
+    // Validate file extension
+    String originalFilename = file.getOriginalFilename();
+    if (!originalFilename.toLowerCase().endsWith(".zip")) {
+      log.error("CsvController: handleCsvUpload:: Uploaded file is not a .zip file. Filename: " + originalFilename);
+      throw new IllegalArgumentException("Uploaded file must have a .zip extension.");
+    }        
     if (tenantId == null || tenantId.trim().isEmpty()) {
       throw new IllegalArgumentException("Tenant ID must be provided");
     }
-    return csvService.processZipFile(file, request, response, tenantId,origin,sftpSessionId);
+    return csvService.processZipFile(file, request, response, tenantId,origin,sftpSessionId,provenance);
   }
 }
