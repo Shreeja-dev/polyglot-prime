@@ -1,0 +1,25 @@
+{
+    "resourceType": "Provenance",
+    "description": "Bundle created from provided files for the given patientMrnId and encounterId",
+    "validatedFiles": [
+      "file1.json",
+      "file2.json",
+      "file3.json"
+    ],
+    "initiatedAt": "2025-01-21T12:00:00Z",
+    "patientMrnId": "123456",
+    "encounterId": "enc-7890",
+    "agent": [
+      {
+        "who": {
+          "coding": [
+            {
+              "system": "generator",
+              "display": "TechByDesign"
+            }
+          ]
+        }
+      }
+    ]
+  }
+  
