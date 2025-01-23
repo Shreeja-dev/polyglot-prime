@@ -21,9 +21,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-import org.hl7.fhir.r4.model.OperationOutcome;
-import org.hl7.fhir.r4.model.OperationOutcome.OperationOutcomeIssueComponent;
-import org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity;
+
 import org.apache.commons.text.StringEscapeUtils;
 import org.hl7.fhir.common.hapi.validation.support.CachingValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.CommonCodeSystemsTerminologyService;
@@ -33,10 +31,12 @@ import org.hl7.fhir.common.hapi.validation.support.SnapshotGeneratingValidationS
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
 import org.hl7.fhir.common.hapi.validation.validator.FhirInstanceValidator;
 import org.hl7.fhir.r4.model.Bundle;
+import org.hl7.fhir.r4.model.OperationOutcome;
+import org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity;
+import org.hl7.fhir.r4.model.OperationOutcome.OperationOutcomeIssueComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.techbd.orchestrate.fhir.OrchestrationEngine.OrchestrationSession;
 import org.techbd.util.JsonText.JsonTextSerializer;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -47,6 +47,7 @@ import com.nimbusds.oauth2.sdk.util.CollectionUtils;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
 import ca.uhn.fhir.validation.FhirValidator;
+import io.opentelemetry.api.trace.Tracer;
 import jakarta.validation.constraints.NotNull;
 
 /**
@@ -126,10 +127,16 @@ public class OrchestrationEngine {
     private final List<OrchestrationSession> sessions;
     private final Map<ValidationEngineKey, ValidationEngine> validationEngineCache;
     private static final Logger LOG = LoggerFactory.getLogger(OrchestrationEngine.class);
+    private final Tracer tracer;
+    private final PrePopulateSupport prePopulateSupport;
+    private final PostPopulateSupport postPopulateSupport;
 
-    public OrchestrationEngine() {
+    public OrchestrationEngine(final Tracer tracer) {
         this.sessions = new ArrayList<>();
         this.validationEngineCache = new HashMap<>();
+        this.tracer = tracer;
+        this.prePopulateSupport =prePopulateSupport;
+        this.postPopulateSupport=postPopulateSupport;
     }
 
     public List<OrchestrationSession> getSessions() {
@@ -162,7 +169,7 @@ public class OrchestrationEngine {
 
     public synchronized ValidationEngine getValidationEngine(@NotNull final ValidationEngineIdentifier type,
             @NotNull final String fhirProfileUrl, final Map<String, Map<String, String>> igPackages,
-            final String igVersion) {
+            final String igVersion,Tracer tracer) {
         final ValidationEngineKey key = new ValidationEngineKey(type, fhirProfileUrl);
         return validationEngineCache.computeIfAbsent(key, k -> {
             switch (type) {
@@ -170,6 +177,7 @@ public class OrchestrationEngine {
                     return new HapiValidationEngine.Builder().withFhirProfileUrl(fhirProfileUrl)
                             .withIgPackages(igPackages)
                             .withIgVersion(igVersion)
+                            .withTracer(tracer)
                             .build();
                 case HL7_EMBEDDED:
                     return new Hl7ValidationEngineEmbedded.Builder().withFhirProfileUrl(fhirProfileUrl).build();
@@ -256,6 +264,9 @@ public class OrchestrationEngine {
         private final Map<String, Map<String, String>> igPackages;
         private final String igVersion;
         private final FhirValidator fhirValidator;
+        private final Tracer tracer;
+        private final PrePopulateSupport prePopulateSupport;
+        private final PostPopulateSupport postPopulateSupport;
 
         private HapiValidationEngine(final Builder builder) {
             this.fhirProfileUrl = builder.fhirProfileUrl;
@@ -270,6 +281,7 @@ public class OrchestrationEngine {
             this.igPackages = builder.igPackages;
             this.igVersion = builder.igVersion;
             this.fhirValidator = initializeFhirValidator();
+            this.tracer = builder.tracer;
         }
 
         public FhirValidator initializeFhirValidator() {
@@ -305,14 +317,14 @@ public class OrchestrationEngine {
             supportChain.addValidationSupport(new SnapshotGeneratingValidationSupport(fhirContext));
             supportChain.addValidationSupport(new InMemoryTerminologyServerValidationSupport(fhirContext));
 
-            final var prePopulateSupport = new PrePopulateSupport();
+            final var prePopulateSupport = new PrePopulateSupport(tracer);
             var prePopulatedValidationSupport = prePopulateSupport.build(fhirContext);
             prePopulateSupport.addCodeSystems(supportChain, prePopulatedValidationSupport);
 
             supportChain.addValidationSupport(prePopulatedValidationSupport);
             prePopulatedValidationSupport = null;
 
-            final var postPopulateSupport = new PostPopulateSupport();
+            final var postPopulateSupport = new PostPopulateSupport(tracer);
             postPopulateSupport.update(supportChain);
 
             final var cache = new CachingValidationSupport(supportChain);
@@ -424,6 +436,7 @@ public class OrchestrationEngine {
             private Map<String, Map<String, String>> igPackages;
             private String igVersion;
             private String interactionId;
+            private Tracer tracer;
 
             public Builder withInteractionId(@NotNull final String interactionId) {
                 this.interactionId = interactionId;
@@ -442,6 +455,10 @@ public class OrchestrationEngine {
 
             public Builder withIgVersion(@NotNull final String igVersion) {
                 this.igVersion = igVersion;
+                return this;
+            }
+            public Builder withTracer(@NotNull final Tracer tracer) {
+                this.tracer = tracer;
                 return this;
             }
 
@@ -697,6 +714,7 @@ public class OrchestrationEngine {
         private final String fhirProfileUrl;
         private String igVersion;
         private String interactionId;
+        private Tracer tracer;
 
         private OrchestrationSession(final Builder builder) {
             this.sessionId = builder.sessionId;
@@ -706,6 +724,7 @@ public class OrchestrationEngine {
             this.fhirProfileUrl = builder.fhirProfileUrl;
             this.device = builder.device;
             this.interactionId = builder.interactionId;
+            this.tracer = builder.tracer;
         }
 
         public List<String> getPayloads() {
@@ -720,6 +739,10 @@ public class OrchestrationEngine {
             return Collections.unmodifiableList(validationResults);
         }
 
+        public Tracer getTracer() {
+            return tracer;
+        }
+        
         public Device getDevice() {
             return device;
         }
@@ -760,6 +783,7 @@ public class OrchestrationEngine {
             private String igVersion;
             private String sessionId;
             private String interactionId;
+            private Tracer tracer;
 
             public Builder(@NotNull final OrchestrationEngine engine) {
                 this.engine = engine;
@@ -801,6 +825,10 @@ public class OrchestrationEngine {
 
             public Builder withIgVersion(@NotNull final String igVersion) {
                 this.igVersion = igVersion;
+                return this;
+            }
+            public Builder withTracer(@NotNull final Tracer tracer) {
+                this.tracer = tracer;
                 return this;
             }
 
@@ -861,21 +889,21 @@ public class OrchestrationEngine {
                 this.validationEngines
                         .add(engine.getValidationEngine(ValidationEngineIdentifier.HAPI, this.fhirProfileUrl,
                                 this.igPackages,
-                                this.igVersion));
+                                this.igVersion,this.tracer));
                 return this;
             }
 
             public synchronized Builder addHl7ValidationEmbeddedEngine() {
                 this.validationEngines
                         .add(engine.getValidationEngine(ValidationEngineIdentifier.HL7_EMBEDDED, this.fhirProfileUrl,
-                                null, null));
+                                null, null,null));
                 return this;
             }
 
             public synchronized Builder addHl7ValidationApiEngine() {
                 this.validationEngines
                         .add(engine.getValidationEngine(ValidationEngineIdentifier.HL7_API, this.fhirProfileUrl, null,
-                                null));
+                                null,null));
                 return this;
             }
 
