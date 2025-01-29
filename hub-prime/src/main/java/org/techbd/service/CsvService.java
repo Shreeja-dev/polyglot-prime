@@ -16,6 +16,7 @@ import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.techbd.conf.Configuration;
 import org.techbd.orchestrate.csv.CsvOrchestrationEngine;
+import org.techbd.service.constants.CsvProcessingStatus;
 import org.techbd.service.constants.Origin;
 import org.techbd.service.http.Interactions;
 import org.techbd.service.http.InteractionsFilter;
@@ -102,6 +103,7 @@ public class CsvService {
             initRIHR.setCreatedBy(CsvService.class.getName());
             final var provenance = "%s.saveArchiveInteraction".formatted(CsvService.class.getName());
             initRIHR.setProvenance(provenance);
+            initRIHR.setCsvStatus(CsvProcessingStatus.PROCESSING_STARTED.name());
             initRIHR.setCsvGroupId(interactionId);
             if (saveUserDataToInteractions) {
                 Interactions.setUserDetails(initRIHR, request);

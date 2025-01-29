@@ -17,7 +17,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.apache.commons.collections.CollectionUtils;
-import org.hl7.fhir.r4.model.OperationOutcome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -30,6 +29,7 @@ import org.techbd.model.csv.PayloadAndValidationOutcome;
 import org.techbd.model.csv.QeAdminData;
 import org.techbd.model.csv.ScreeningObservationData;
 import org.techbd.model.csv.ScreeningProfileData;
+import org.techbd.service.constants.CsvProcessingStatus;
 import org.techbd.service.constants.SourceType;
 import org.techbd.service.converters.csv.CsvToFhirConverter;
 import org.techbd.service.http.hub.prime.api.FHIRService;
@@ -135,7 +135,7 @@ public class CsvBundleProcessorService {
             final String masterInteractionId, final HttpServletRequest request) {
         LOG.info("SaveMiscErrorAndStatus: BEGIN for inteaction id  : {} ",
                 masterInteractionId);
-        final var status = allCSvConvertedToFHIR ? "PROCESSED_SUCESSFULLY" : "PARTIALLY_PROCESSED";
+        final var status = allCSvConvertedToFHIR ? CsvProcessingStatus.PROCESSED_SUCESSFULLY.name() : CsvProcessingStatus.PARTIALLY_PROCESSED.name();
         final var dslContext = udiPrimeJpaConfig.dsl();
         final var jooqCfg = dslContext.configuration();
         final var createdAt = OffsetDateTime.now();
@@ -185,21 +185,6 @@ public class CsvBundleProcessorService {
         provenanceList.add(existingProvenance);
         provenanceList.add(newProvenance);
         return Configuration.objectMapper.writeValueAsString(provenanceList);
-    }
-
-    public void addHapiFhirValidation(final Map<String, Object> provenance, final String validationDescription) {
-        @SuppressWarnings("unchecked")
-        final
-        Map<String, Object> agent = new HashMap<>();
-        final Map<String, String> whoCoding = new HashMap<>();
-
-        whoCoding.put("system", "Validator");
-        whoCoding.put("display", "HAPI FHIR Validation");
-
-        agent.put("who", Collections.singletonMap("coding", List.of(whoCoding)));
-        provenance.put("hapiFhirValidation", Map.of(
-                "agent", List.of(agent),
-                "description", validationDescription));
     }
 
     private void saveFhirConversionStatus(final boolean isValid, final String masterInteractionId, final String groupKey,
