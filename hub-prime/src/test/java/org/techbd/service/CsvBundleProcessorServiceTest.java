@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.hl7.fhir.r4.model.OperationOutcome;
+import org.hl7.fhir.r4.model.Parameters;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -87,7 +88,7 @@ class CsvBundleProcessorServiceTest {
         List<FileDetail> fileDetails = List.of(demographicFile, screeningProfileFile, qeAdminFile,
                 screeningObservationFile);
         PayloadAndValidationOutcome outcome = new PayloadAndValidationOutcome(fileDetails, true,
-                "group-int-id",new HashMap<>(),new HashMap<>());
+                "group-int-id",new Parameters(),new HashMap<>());
         payloadAndValidationOutcomes.put("key1", outcome);
         try (MockedStatic<CsvConversionUtil> mockedStatic = mockStatic(CsvConversionUtil.class)) {
             mockedStatic.when(() -> CsvConversionUtil.convertCsvStringToDemographicData(anyString()))
@@ -111,7 +112,7 @@ class CsvBundleProcessorServiceTest {
         }
         String mockBundle = getMockBundleJson();
         when(csvToFhirConverter.convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString()))
+                any(ScreeningProfileData.class), anyList(), anyString(),any(Parameters.class)))
                 .thenReturn(mockBundle);
 
         OperationOutcome mockOutcome = new OperationOutcome();
@@ -127,7 +128,7 @@ class CsvBundleProcessorServiceTest {
         assertEquals(2, result.size());
         assertEquals(mockOutcome, result.get(0));
         verify(csvToFhirConverter, times(2)).convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString());
+                any(ScreeningProfileData.class), anyList(), anyString(),any(Parameters.class));
         verify(fhirService, times(2)).processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(),
                 any(),
                 anyString(), eq(false), eq(false), eq(false), eq(request), eq(response), any(),
@@ -156,7 +157,7 @@ class CsvBundleProcessorServiceTest {
         List<FileDetail> fileDetails = List.of(demographicFile, screeningProfileFile, qeAdminFile,
                 screeningObservationFile);
         PayloadAndValidationOutcome outcome = new PayloadAndValidationOutcome(fileDetails, true,
-                "group-int-id",new HashMap<>(),new HashMap<>());
+                "group-int-id",new Parameters(),new HashMap<>());
         payloadAndValidationOutcomes.put("key1", outcome);
 
         try (MockedStatic<CsvConversionUtil> mockedStatic = mockStatic(CsvConversionUtil.class)) {
@@ -180,7 +181,7 @@ class CsvBundleProcessorServiceTest {
 
         String mockBundle = getMockBundleJson();
         when(csvToFhirConverter.convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString()))
+                any(ScreeningProfileData.class), anyList(), anyString(),any(Parameters.class)))
                 .thenReturn(mockBundle);
 
         OperationOutcome mockOutcome = new OperationOutcome();
@@ -196,7 +197,7 @@ class CsvBundleProcessorServiceTest {
         assertFalse(result.isEmpty());
         assertEquals(2, result.size());
         verify(csvToFhirConverter, times(2)).convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString());
+                any(ScreeningProfileData.class), anyList(), anyString(),any(Parameters.class));
         verify(fhirService, times(2)).processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(),
                 any(),
                 anyString(), eq(false), eq(false), eq(false), eq(request), eq(response), any(),
@@ -223,7 +224,7 @@ class CsvBundleProcessorServiceTest {
         List<FileDetail> fileDetails = List.of(demographicFile, screeningProfileFile, qeAdminFile,
                 screeningObservationFile);
         PayloadAndValidationOutcome outcome = new PayloadAndValidationOutcome(fileDetails, true,
-                "group-int-id",new HashMap<>(),new HashMap<>());
+                "group-int-id",new Parameters(),new HashMap<>());
         payloadAndValidationOutcomes.put("key1", outcome);
 
         try (MockedStatic<CsvConversionUtil> mockedStatic = mockStatic(CsvConversionUtil.class)) {
@@ -241,7 +242,7 @@ class CsvBundleProcessorServiceTest {
 
         String mockBundle = getMockBundleJson();
         when(csvToFhirConverter.convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString()))
+                any(ScreeningProfileData.class), anyList(), anyString(),any(Parameters.class)))
                 .thenReturn(mockBundle);
         OperationOutcome successfulOutcome = new OperationOutcome();
         when(fhirService.processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(), any(),
@@ -257,7 +258,7 @@ class CsvBundleProcessorServiceTest {
         assertFalse(result.isEmpty());
         assertEquals(2, result.size());
         verify(csvToFhirConverter, times(2)).convert(any(DemographicData.class), any(QeAdminData.class),
-                any(ScreeningProfileData.class), anyList(), anyString());
+                any(ScreeningProfileData.class), anyList(), anyString(),any(Parameters.class));
         verify(fhirService, times(2)).processBundle(eq(mockBundle), anyString(), any(), any(), any(), any(),
                 any(),
                 anyString(), eq(false), eq(false), eq(false), eq(request), eq(response), any(),

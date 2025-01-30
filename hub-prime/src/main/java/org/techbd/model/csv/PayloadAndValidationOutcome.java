@@ -3,5 +3,7 @@ package org.techbd.model.csv;
 import java.util.List;
 import java.util.Map;
 
-public record PayloadAndValidationOutcome(List<FileDetail> fileDetails, boolean isValid,String groupInteractionId,Map<String,Object> provenance,Map<String,Object> validationResults) {
+import org.hl7.fhir.r4.model.Parameters;
+
+public record PayloadAndValidationOutcome(List<FileDetail> fileDetails, boolean isValid,String groupInteractionId,Parameters provenance,Map<String,Object> validationResults) {
 }

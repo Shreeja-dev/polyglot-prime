@@ -4,9 +4,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.hl7.fhir.r4.model.Bundle;
+import org.hl7.fhir.r4.model.Parameters;
 import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
+import org.hl7.fhir.r4.model.Bundle.HTTPVerb;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -36,7 +39,7 @@ public class CsvToFhirConverter {
 
     public String convert(DemographicData demographicData,
             QeAdminData qeAdminData, ScreeningProfileData screeningProfileData,
-            List<ScreeningObservationData> screeningDataList, String interactionId) {
+            List<ScreeningObservationData> screeningDataList, String interactionId,Parameters provenance) {
         Bundle bundle = null;
         try {
             LOG.info("CsvToFhirConvereter::convert - BEGIN for interactionId :{}", interactionId);
@@ -44,6 +47,7 @@ public class CsvToFhirConverter {
             LOG.debug("CsvToFhirConvereter::convert - Bundle entry created :{}", interactionId);
             LOG.debug("Conversion of resources - BEGIN for interactionId :{}", interactionId);
             addEntries(bundle, demographicData, screeningDataList, qeAdminData, screeningProfileData, interactionId);
+            bundle.getEntry().add(createBundleEntryFromParameters(provenance));
             LOG.debug("Conversion of resources - END for interactionId :{}", interactionId);
             LOG.info("CsvToFhirConvereter::convert - END for interactionId :{}", interactionId);
         } catch (Exception ex) {
@@ -51,6 +55,24 @@ public class CsvToFhirConverter {
         }
         return FhirContext.forR4().newJsonParser().encodeResourceToString(bundle);
     }
+
+     /* Converts the given Parameters resource into a BundleEntryComponent with a generated UUID as the ID.
+     *
+     * @param parameters The Parameters resource to be added to the Bundle.
+     * @return A BundleEntryComponent with the specified Parameters resource and generated UUID as the ID.
+     */
+    public static Bundle.BundleEntryComponent createBundleEntryFromParameters(Parameters parameters) {
+        String generatedID = UUID.randomUUID().toString();
+        parameters.setId(generatedID);
+        Bundle.BundleEntryComponent bundleEntryComponent = new Bundle.BundleEntryComponent();
+        bundleEntryComponent.setFullUrl("http://shinny.org/us/ny/hrsn/Parameters/" + generatedID);
+        bundleEntryComponent.setRequest(new Bundle.BundleEntryRequestComponent()
+                .setMethod(HTTPVerb.POST)
+                .setUrl("http://shinny.org/us/ny/hrsn/Parameters/" + generatedID));
+        bundleEntryComponent.setResource(parameters);
+        return bundleEntryComponent;
+    }
+
 
     private void addEntries(Bundle bundle, DemographicData demographicData,
             List<ScreeningObservationData> screeningObservationData,

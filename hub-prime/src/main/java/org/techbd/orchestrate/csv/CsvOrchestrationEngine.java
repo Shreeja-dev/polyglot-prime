@@ -28,9 +28,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
+import org.hl7.fhir.r4.model.Parameters;
+import org.hl7.fhir.r4.model.StringType;
+import org.hl7.fhir.exceptions.FHIRException;
+import org.hl7.fhir.r4.model.DateTimeType;
 import org.apache.commons.vfs2.FileObject;
-import org.hl7.fhir.r4.model.OperationOutcome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -49,13 +51,19 @@ import org.techbd.udi.UdiPrimeJpaConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 import org.techbd.udi.auto.jooq.ingress.routines.SatInteractionCsvRequestUpserted;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.gson.Gson;
 import com.nimbusds.oauth2.sdk.util.CollectionUtils;
 
+import ca.uhn.fhir.context.FhirContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotNull;
 import lib.aide.vfs.VfsIngressConsumer;
+import net.sourceforge.plantuml.utils.Log;
 
 /**
  * The {@code OrchestrationEngine} class is responsible for managing and
@@ -451,26 +459,35 @@ public class CsvOrchestrationEngine {
             }
         }
 
-        /**
-         * Extracts the "provenance" object from the provided map.
-         *
-         * @param operationOutcomeForThisGroup A map containing operation outcome
-         *                                     details.
-         * @return A map representing the "provenance" object, or an empty map if
-         *         "provenance" is not found.
-         */
-        public static Map<String, Object> extractProvenance(Map<String, Object> operationOutcomeForThisGroup) {
-            return Optional.ofNullable(operationOutcomeForThisGroup)
-                    .map(map -> (Map<String, Object>) map.get("provenance"))
-                    .orElse(Map.of());
-        }
+      /**
+     * Extracts the "provenance" object from the provided map and converts it to a FHIR R4 Parameters resource.
+     *
+     * @param operationOutcomeForThisGroup A map containing operation outcome details.
+     * @return A FHIR Parameters resource representing the "provenance" object, or an empty Parameters object if not found.
+     */
+    public static Parameters extractProvenanceAsParameters(Map<String, Object> operationOutcomeForThisGroup) {
+        return Optional.ofNullable(operationOutcomeForThisGroup)
+                .map(map -> map.get("provenance"))
+                .map(provenance -> {
+                    try {
+                        String json = new Gson().toJson(provenance);
+                        return FhirContext.forR4().newJsonParser().parseResource(Parameters.class, json);
+                    } catch (FHIRException e) {
+                        Log.error("Exception while converting to Parameters resource");
+                        return new Parameters();
+                    }
+                })
+                .orElse(new Parameters());
+    }
+
 
         private static Map<String, Object> createOperationOutcome(final String masterInteractionId,
                 final String groupInteractionId,
                 final String validationResults,
                 final List<FileDetail> fileDetails, final HttpServletRequest request, final long zipFileSize,
                 final Instant initiatedAt, final Instant completedAt, final String originalFileName) throws Exception {
-            final Map<String, Object> provenance = populateProvenance(groupInteractionId, fileDetails, initiatedAt,
+            final Map<String, Object> provenance = getValidationParametersAsMap(groupInteractionId, fileDetails,
+                    initiatedAt,
                     completedAt, originalFileName);
             return Map.of(
                     "resourceType", "OperationOutcome",
@@ -507,24 +524,40 @@ public class CsvOrchestrationEngine {
             return result;
         }
 
-        private static Map<String, Object> populateProvenance(final String interactionId,
-                final List<FileDetail> fileDetails,
-                final Instant initiatedAt, final Instant completedAt, final String originalFileName) {
+        private static Map<String, Object> getValidationParametersAsMap(String interactionId,
+                List<FileDetail> fileDetails, Instant initiatedAt,
+                Instant completedAt, String originalFileName) throws JsonMappingException, JsonProcessingException {
             final List<String> fileNames = fileDetails.stream()
                     .map(FileDetail::filename)
                     .collect(Collectors.toList());
-            return Map.of(
-                    "resourceType", "Provenance",
-                    "interactionId", interactionId,
-                    "agent", List.of(Map.of(
-                            "who", Map.of(
-                                    "coding", List.of(Map.of(
-                                            "system", "Validator",
-                                            "display", "frictionless version 5.18.0"))))),
-                    "initiatedAt", initiatedAt,
-                    "completedAt", completedAt,
-                    "description", "Validation of  files in " + originalFileName,
-                    "validatedFiles", fileNames);
+            Parameters parameters = createValidationParameters(interactionId, initiatedAt, completedAt,
+                    originalFileName, fileNames);
+            FhirContext ctx = FhirContext.forR4();
+            String jsonString = ctx.newJsonParser().encodeResourceToString(parameters);
+            return Configuration.objectMapper.readValue(jsonString, HashMap.class);
+        }
+
+        private static Parameters createValidationParameters(String interactionId, Instant initiatedAt,
+                Instant completedAt,
+                String originalFileName, List<String> fileNames) {
+            Parameters parameters = new Parameters();
+            Parameters.ParametersParameterComponent csvValidationProvenance = new Parameters.ParametersParameterComponent();
+            csvValidationProvenance.setName("csvValidationProvenance");
+            csvValidationProvenance.addPart().setName("interactionId").setValue(new StringType(interactionId));
+            csvValidationProvenance.addPart().setName("action")
+                    .setValue(new StringType("Csv Validated by frictionless version 5.18.0"));
+            csvValidationProvenance.addPart().setName("initiatedAt").setValue(new DateTimeType(initiatedAt.toString()));
+            csvValidationProvenance.addPart().setName("completedAt").setValue(new DateTimeType(completedAt.toString()));
+            csvValidationProvenance.addPart().setName("description")
+                    .setValue(new StringType("Validation of files in " + originalFileName));
+            Parameters.ParametersParameterComponent validatedFilesParam = new Parameters.ParametersParameterComponent();
+            validatedFilesParam.setName("validatedFiles");
+            for (String fileName : fileNames) {
+                validatedFilesParam.addPart().setName("file").setValue(new StringType(fileName));
+            }
+            csvValidationProvenance.addPart(validatedFilesParam);
+            parameters.addParameter(csvValidationProvenance);
+            return parameters;
         }
 
         public Map<String, Object> processScreenings(final String masterInteractionId, final Instant initiatedAt,
@@ -592,7 +625,7 @@ public class CsvOrchestrationEngine {
                                 new PayloadAndValidationOutcome(fileDetails,
                                         isGroupComplete(fileDetails) ? extractValidValue(operationOutcomeForThisGroup)
                                                 : false,
-                                        groupInteractionId, extractProvenance(operationOutcomeForThisGroup),
+                                        groupInteractionId, extractProvenanceAsParameters(operationOutcomeForThisGroup),
                                         operationOutcomeForThisGroup));
                     }
                 }

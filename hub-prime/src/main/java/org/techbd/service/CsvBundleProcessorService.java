@@ -17,7 +17,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.apache.commons.collections.CollectionUtils;
-import org.hl7.fhir.r4.model.OperationOutcome;
+import org.hl7.fhir.r4.model.DateTimeType;
+import org.hl7.fhir.r4.model.Parameters;
+import org.hl7.fhir.r4.model.Parameters.ParametersParameterComponent;
+import org.hl7.fhir.r4.model.StringType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -40,6 +43,7 @@ import org.techbd.util.CsvConversionUtil;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import ca.uhn.fhir.context.FhirContext;
 import io.micrometer.common.util.StringUtils;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,410 +51,475 @@ import jakarta.servlet.http.HttpServletResponse;
 
 @Service
 public class CsvBundleProcessorService {
-    private static final Logger LOG = LoggerFactory.getLogger(CsvBundleProcessorService.class.getName());
-    private final CsvToFhirConverter csvToFhirConverter;
-    private final FHIRService fhirService;
-    private final UdiPrimeJpaConfig udiPrimeJpaConfig;
-    private static final String START_TIME_ATTRIBUTE = "startTime";
+        private static final Logger LOG = LoggerFactory.getLogger(CsvBundleProcessorService.class.getName());
+        private final CsvToFhirConverter csvToFhirConverter;
+        private final FHIRService fhirService;
+        private final UdiPrimeJpaConfig udiPrimeJpaConfig;
+        private static final String START_TIME_ATTRIBUTE = "startTime";
 
-    public CsvBundleProcessorService(final CsvToFhirConverter csvToFhirConverter, final FHIRService fhirService,
-            final UdiPrimeJpaConfig udiPrimeJpaConfig) {
-        this.csvToFhirConverter = csvToFhirConverter;
-        this.fhirService = fhirService;
-        this.udiPrimeJpaConfig = udiPrimeJpaConfig;
-    }
+        public CsvBundleProcessorService(final CsvToFhirConverter csvToFhirConverter, final FHIRService fhirService,
+                        final UdiPrimeJpaConfig udiPrimeJpaConfig) {
+                this.csvToFhirConverter = csvToFhirConverter;
+                this.fhirService = fhirService;
+                this.udiPrimeJpaConfig = udiPrimeJpaConfig;
+        }
 
-    public List<Object> processPayload(final String masterInteractionId,
-            final Map<String, PayloadAndValidationOutcome> payloadAndValidationOutcomes,
-            final List<String> filesNotProcessed,
-            final HttpServletRequest request,
-            final HttpServletResponse response,
-            final String tenantId, final String originalFileName) {
-        final List<Object> resultBundles = new ArrayList<>();
-        final List<Object> miscErrors = new ArrayList<>();
-        boolean isAllCsvConvertedToFhir = true;
-        for (final var entry : payloadAndValidationOutcomes.entrySet()) {
-            final String groupKey = entry.getKey();
-            final PayloadAndValidationOutcome outcome = entry.getValue();
-            final String groupInteractionId = outcome.groupInteractionId();
-            final Map<String, Object> provenance = outcome.provenance();
-            try {
+        public List<Object> processPayload(final String masterInteractionId,
+                        final Map<String, PayloadAndValidationOutcome> payloadAndValidationOutcomes,
+                        final List<String> filesNotProcessed,
+                        final HttpServletRequest request,
+                        final HttpServletResponse response,
+                        final String tenantId, final String originalFileName) {
+                final List<Object> resultBundles = new ArrayList<>();
+                final List<Object> miscErrors = new ArrayList<>();
+                boolean isAllCsvConvertedToFhir = true;
+                for (final var entry : payloadAndValidationOutcomes.entrySet()) {
+                        final String groupKey = entry.getKey();
+                        final PayloadAndValidationOutcome outcome = entry.getValue();
+                        final String groupInteractionId = outcome.groupInteractionId();
+                        final Parameters provenance = outcome.provenance();
+                        try {
 
-                if (outcome.isValid()) {
-                    Map<String, List<DemographicData>> demographicData = null;
-                    Map<String, List<ScreeningProfileData>> screeningProfileData = null;
-                    Map<String, List<QeAdminData>> qeAdminData = null;
-                    Map<String, List<ScreeningObservationData>> screeningObservationData = null;
+                                if (outcome.isValid()) {
+                                        Map<String, List<DemographicData>> demographicData = null;
+                                        Map<String, List<ScreeningProfileData>> screeningProfileData = null;
+                                        Map<String, List<QeAdminData>> qeAdminData = null;
+                                        Map<String, List<ScreeningObservationData>> screeningObservationData = null;
 
-                    for (final FileDetail fileDetail : outcome.fileDetails()) {
-                        final String content = fileDetail.content();
-                        final FileType fileType = fileDetail.fileType();
-                        switch (fileType) {
-                            case DEMOGRAPHIC_DATA ->
-                                demographicData = CsvConversionUtil.convertCsvStringToDemographicData(content);
-                            case SCREENING_PROFILE_DATA -> screeningProfileData = CsvConversionUtil
-                                    .convertCsvStringToScreeningProfileData(content);
-                            case QE_ADMIN_DATA ->
-                                qeAdminData = CsvConversionUtil.convertCsvStringToQeAdminData(content);
-                            case SCREENING_OBSERVATION_DATA -> screeningObservationData = CsvConversionUtil
-                                    .convertCsvStringToScreeningObservationData(content);
-                            default -> throw new IllegalStateException("Unexpected value: " + fileType);
+                                        for (final FileDetail fileDetail : outcome.fileDetails()) {
+                                                final String content = fileDetail.content();
+                                                final FileType fileType = fileDetail.fileType();
+                                                switch (fileType) {
+                                                        case DEMOGRAPHIC_DATA ->
+                                                                demographicData = CsvConversionUtil
+                                                                                .convertCsvStringToDemographicData(
+                                                                                                content);
+                                                        case SCREENING_PROFILE_DATA ->
+                                                                screeningProfileData = CsvConversionUtil
+                                                                                .convertCsvStringToScreeningProfileData(
+                                                                                                content);
+                                                        case QE_ADMIN_DATA ->
+                                                                qeAdminData = CsvConversionUtil
+                                                                                .convertCsvStringToQeAdminData(content);
+                                                        case SCREENING_OBSERVATION_DATA ->
+                                                                screeningObservationData = CsvConversionUtil
+                                                                                .convertCsvStringToScreeningObservationData(
+                                                                                                content);
+                                                        default -> throw new IllegalStateException(
+                                                                        "Unexpected value: " + fileType);
+                                                }
+                                        }
+                                        validateAndThrowIfDataMissing(demographicData, screeningProfileData,
+                                                        qeAdminData,
+                                                        screeningObservationData);
+                                        if (screeningProfileData != null) {
+                                                resultBundles.addAll(processScreening(groupKey, demographicData,
+                                                                screeningProfileData,
+                                                                qeAdminData, screeningObservationData, request,
+                                                                response, groupInteractionId,
+                                                                masterInteractionId,
+                                                                tenantId, outcome.isValid(), outcome,
+                                                                isAllCsvConvertedToFhir));
+                                        }
+                                } else {
+                                        isAllCsvConvertedToFhir = false;
+                                        resultBundles.add(outcome.validationResults());
+                                }
+                        } catch (final Exception e) {
+                                LOG.error("Error processing payload: " + e.getMessage(), e);
+                                final Map<String, Object> errors = createOperationOutcomeForError(masterInteractionId,
+                                                groupInteractionId, "",
+                                                "", e, provenance);
+                                resultBundles.add(errors);
+                                miscErrors.add(errors);
+                                isAllCsvConvertedToFhir = false;
                         }
-                    }
-                    validateAndThrowIfDataMissing(demographicData, screeningProfileData, qeAdminData,
-                            screeningObservationData);
-                    if (screeningProfileData != null) {
-                        resultBundles.addAll(processScreening(groupKey, demographicData, screeningProfileData,
-                                qeAdminData, screeningObservationData, request, response, groupInteractionId,
-                                masterInteractionId,
-                                tenantId, outcome.isValid(), outcome, isAllCsvConvertedToFhir));
-                    }
-                } else {
-                    isAllCsvConvertedToFhir = false;
-                    resultBundles.add(outcome.validationResults());
                 }
-            } catch (final Exception e) {
-                LOG.error("Error processing payload: " + e.getMessage(), e);
-                final Map<String, Object> errors = createOperationOutcomeForError(masterInteractionId, groupInteractionId, "",
-                        "", e, provenance);
-                resultBundles.add(errors);
-                miscErrors.add(errors);
-                isAllCsvConvertedToFhir = false;
-            }
-        }
-        if (CollectionUtils.isNotEmpty(filesNotProcessed)) {
-            final Map<String, Object> fileNotProcessedError = createOperationOutcomeForFileNotProcessed(masterInteractionId,
-                    filesNotProcessed,
-                    originalFileName);
-            resultBundles.add(fileNotProcessedError);
-            miscErrors.add(fileNotProcessedError);
-            isAllCsvConvertedToFhir = false;
-        }
-        saveMiscErrorAndStatus(miscErrors, isAllCsvConvertedToFhir, masterInteractionId, request);
-        addObservabilityHeadersToResponse(request, response);
-        return resultBundles;
-    }
-
-    private void saveMiscErrorAndStatus(final List<Object> miscError, final boolean allCSvConvertedToFHIR,
-            final String masterInteractionId, final HttpServletRequest request) {
-        LOG.info("SaveMiscErrorAndStatus: BEGIN for inteaction id  : {} ",
-                masterInteractionId);
-        final var status = allCSvConvertedToFHIR ? "PROCESSED_SUCESSFULLY" : "PARTIALLY_PROCESSED";
-        final var dslContext = udiPrimeJpaConfig.dsl();
-        final var jooqCfg = dslContext.configuration();
-        final var createdAt = OffsetDateTime.now();
-        final var initRIHR = new SatInteractionCsvRequestUpserted();
-        try {
-            initRIHR.setStatus(status);    
-            initRIHR.setInteractionId(masterInteractionId);
-            initRIHR.setUri(request.getRequestURI());
-            initRIHR.setNature("Update Zip File Processing Details");
-            initRIHR.setCreatedAt(createdAt);
-            initRIHR.setCreatedBy(CsvService.class.getName());
-            initRIHR.setZipFileProcessingErrors(CollectionUtils.isNotEmpty(miscError) ?
-                    (JsonNode) Configuration.objectMapper.valueToTree(miscError):null);
-            final var start = Instant.now();
-            final var execResult = initRIHR.execute(jooqCfg);
-            final var end = Instant.now();
-            LOG.info(
-                    "SaveMiscErrorAndStatus : END for interaction id : {} .Time taken : {} milliseconds"
-                            + execResult,
-                    masterInteractionId,
-                    Duration.between(start, end).toMillis());
-        } catch (final Exception e) {
-            LOG.error("ERROR:: SaveMiscErrorAndStatus CALL for interaction id : {} "
-                    + initRIHR.getName() + " initRIHR error", masterInteractionId,
-                    e);
-        }
-    }
-
-    public String addBundleProvenance(final Map<String, Object> existingProvenance, final List<String> bundleGeneratedFrom,
-            final String patientMrnId, final String encounterId, final Instant initiatedAt, final Instant completedAt) throws Exception {
-        final Map<String, Object> newProvenance = new HashMap<>();
-        newProvenance.put("resourceType", "Provenance");
-        newProvenance.put("description",
-                "Bundle created from provided files for the given patientMrnId and encounterId");
-        newProvenance.put("validatedFiles", bundleGeneratedFrom);
-        newProvenance.put("initiatedAt", initiatedAt.toString());
-        newProvenance.put("completedAt", completedAt.toString());
-        newProvenance.put("patientMrnId", patientMrnId);
-        newProvenance.put("encounterId", encounterId);
-        final Map<String, Object> agent = new HashMap<>();
-        final Map<String, String> whoCoding = new HashMap<>();
-        whoCoding.put("system", "generator");
-        whoCoding.put("display", "TechByDesign");
-        agent.put("who", Collections.singletonMap("coding", List.of(whoCoding)));
-        newProvenance.put("agent", List.of(agent));
-        final List<Map<String, Object>> provenanceList = new ArrayList<>();
-        provenanceList.add(existingProvenance);
-        provenanceList.add(newProvenance);
-        return Configuration.objectMapper.writeValueAsString(provenanceList);
-    }
-
-    public void addHapiFhirValidation(final Map<String, Object> provenance, final String validationDescription) {
-        @SuppressWarnings("unchecked")
-        final
-        Map<String, Object> agent = new HashMap<>();
-        final Map<String, String> whoCoding = new HashMap<>();
-
-        whoCoding.put("system", "Validator");
-        whoCoding.put("display", "HAPI FHIR Validation");
-
-        agent.put("who", Collections.singletonMap("coding", List.of(whoCoding)));
-        provenance.put("hapiFhirValidation", Map.of(
-                "agent", List.of(agent),
-                "description", validationDescription));
-    }
-
-    private void saveFhirConversionStatus(final boolean isValid, final String masterInteractionId, final String groupKey,
-            final String groupInteractionId, final String interactionId, final HttpServletRequest request,
-            final String payload, final Map<String, Object> operationOutcome,
-            final String tenantId) {
-        LOG.info(
-                "REGISTER State CONVERTED_TO_FHIR : BEGIN for master InteractionId :{} group interaction id  : {} tenant id : {}",
-                masterInteractionId, groupInteractionId, tenantId);
-        final var forwardedAt = OffsetDateTime.now();
-        final var initRIHR = new RegisterInteractionHttpRequest();
-        try {
-            final var dslContext = udiPrimeJpaConfig.dsl();
-            final var jooqCfg = dslContext.configuration();
-            initRIHR.setOrigin("http");
-            initRIHR.setInteractionId(interactionId);
-            initRIHR.setGroupHubInteractionId(groupInteractionId);
-            initRIHR.setSourceHubInteractionId(masterInteractionId);
-            initRIHR.setInteractionKey(request.getRequestURI());
-            initRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
-                    Map.of("nature", "Converted to FHIR", "tenant_id",
-                            tenantId)));
-            initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
-            initRIHR.setPayload(null != operationOutcome && operationOutcome.size() > 0
-                    ? Configuration.objectMapper.valueToTree(operationOutcome)
-                    : Configuration.objectMapper.readTree(payload));
-            initRIHR.setCreatedAt(forwardedAt);
-            initRIHR.setCreatedBy(CsvService.class.getName());
-            initRIHR.setFromState(isValid ? "VALIDATION SUCCESS" : "VALIDATION FAILED");
-            initRIHR.setToState(StringUtils.isNotEmpty(payload) ? "CONVERTED_TO_FHIR" : "FHIR_CONVERSION_FAILED");
-            final var provenance = "%s.saveConvertedFHIR".formatted(CsvBundleProcessorService.class.getName());
-            initRIHR.setProvenance(provenance);
-            initRIHR.setCsvGroupId(groupInteractionId);
-            final var start = Instant.now();
-            final var execResult = initRIHR.execute(jooqCfg);
-            final var end = Instant.now();
-            LOG.info(
-                    "REGISTER State CONVERTED_TO_FHIR : END for master interaction id : {}  group interaction id :{} tenant id : {} .Time taken : {} milliseconds"
-                            + execResult,
-                    masterInteractionId, groupInteractionId, tenantId,
-                    Duration.between(start, end).toMillis());
-        } catch (final Exception e) {
-            LOG.error(
-                    "ERROR:: REGISTER State CONVERTED_TO_FHIR CALL for master interaction id : {}  group InteractionId :{} tenant id : {}"
-                            + initRIHR.getName() + " initRIHR error",
-                    masterInteractionId, groupInteractionId,
-                    tenantId,
-                    e);
-        }
-    }
-
-    private void validateAndThrowIfDataMissing(
-            final Map<String, List<DemographicData>> demographicData,
-            final Map<String, List<ScreeningProfileData>> screeningProfileData,
-            final Map<String, List<QeAdminData>> qeAdminData,
-            final Map<String, List<ScreeningObservationData>> screeningObservationData) {
-
-        final StringBuilder missingDataMessage = new StringBuilder("The following required data maps are missing or empty: ");
-
-        boolean isAnyMissing = false;
-
-        if (demographicData == null || demographicData.isEmpty()) {
-            missingDataMessage.append("DEMOGRAPHIC_DATA, ");
-            isAnyMissing = true;
-        }
-        if (screeningProfileData == null || screeningProfileData.isEmpty()) {
-            missingDataMessage.append("SCREENING_PROFILE_DATA, ");
-            isAnyMissing = true;
-        }
-        if (qeAdminData == null || qeAdminData.isEmpty()) {
-            missingDataMessage.append("QE_ADMIN_DATA, ");
-            isAnyMissing = true;
-        }
-        if (screeningObservationData == null || screeningObservationData.isEmpty()) {
-            missingDataMessage.append("SCREENING_OBSERVATION_DATA, ");
-            isAnyMissing = true;
+                if (CollectionUtils.isNotEmpty(filesNotProcessed)) {
+                        final Map<String, Object> fileNotProcessedError = createOperationOutcomeForFileNotProcessed(
+                                        masterInteractionId,
+                                        filesNotProcessed,
+                                        originalFileName);
+                        resultBundles.add(fileNotProcessedError);
+                        miscErrors.add(fileNotProcessedError);
+                        isAllCsvConvertedToFhir = false;
+                }
+                saveMiscErrorAndStatus(miscErrors, isAllCsvConvertedToFhir, masterInteractionId, request);
+                addObservabilityHeadersToResponse(request, response);
+                return resultBundles;
         }
 
-        if (isAnyMissing) {
-            missingDataMessage.setLength(missingDataMessage.length() - 2);
-            LOG.error(missingDataMessage.toString());
-            throw new IllegalArgumentException(missingDataMessage.toString());
-        }
-    }
-
-    private List<Object> processScreening(final String groupKey,
-            final Map<String, List<DemographicData>> demographicData,
-            final Map<String, List<ScreeningProfileData>> screeningProfileData,
-            final Map<String, List<QeAdminData>> qeAdminData,
-            final Map<String, List<ScreeningObservationData>> screeningObservationData,
-            final HttpServletRequest request,
-            final HttpServletResponse response,
-            final String groupInteractionId,
-            final String masterInteractionId,
-            final String tenantId, final boolean isValid, final PayloadAndValidationOutcome payloadAndValidationOutcome,
-            boolean isAllCsvConvertedToFhir)
-            throws IOException {
-
-        final List<Object> results = new ArrayList<>();
-        final AtomicInteger errorCount = new AtomicInteger();
-        screeningProfileData.forEach((encounterId, profileList) -> {
-            for (final ScreeningProfileData profile : profileList) {
-                final String interactionId = UUID.randomUUID().toString();
-                String bundle = null;
+        private void saveMiscErrorAndStatus(final List<Object> miscError, final boolean allCSvConvertedToFHIR,
+                        final String masterInteractionId, final HttpServletRequest request) {
+                LOG.info("SaveMiscErrorAndStatus: BEGIN for inteaction id  : {} ",
+                                masterInteractionId);
+                final var status = allCSvConvertedToFHIR ? "PROCESSED_SUCESSFULLY" : "PARTIALLY_PROCESSED";
+                final var dslContext = udiPrimeJpaConfig.dsl();
+                final var jooqCfg = dslContext.configuration();
+                final var createdAt = OffsetDateTime.now();
+                final var initRIHR = new SatInteractionCsvRequestUpserted();
                 try {
-                    final List<DemographicData> demographicList = demographicData.getOrDefault(
-                            profile.getPatientMrIdValue(),
-                            List.of());
-                    final List<QeAdminData> qeAdminList = qeAdminData.getOrDefault(profile.getPatientMrIdValue(),
-                            List.of());
-                    final List<ScreeningObservationData> screeningObservationList = screeningObservationData
-                            .getOrDefault(profile.getEncounterId(), List.of());
-
-                    if (demographicList.isEmpty() || qeAdminList.isEmpty() || screeningObservationList.isEmpty()) {
-                        final String errorMessage = String.format(
-                                "Data missing in one or more files for patientMrIdValue: %s",
-                                profile.getPatientMrIdValue());
-                        LOG.error(errorMessage);
-                        throw new IllegalArgumentException(errorMessage);
-                    }
-                    final Instant initiatedAt = Instant.now();
-                    bundle = csvToFhirConverter.convert(
-                            demographicList.get(0),
-                            qeAdminList.get(0),
-                            profile,
-                            screeningObservationList,
-                            interactionId);
-                    final Instant completedAt = Instant.now();
-                    if (bundle != null) {
-                        final String updatedProvenance = addBundleProvenance(payloadAndValidationOutcome.provenance(),
-                                getFileNames(payloadAndValidationOutcome.fileDetails()),
-                                profile.getPatientMrIdValue(), profile.getEncounterId(), initiatedAt, completedAt);
-                        saveFhirConversionStatus(isValid, masterInteractionId, groupKey, groupInteractionId,
-                                interactionId, request,
-                                bundle, null, tenantId);
-                        results.add(fhirService.processBundle(
-                                bundle, tenantId, null, null, null, null, null,
-                                Boolean.toString(false), false,
-                                false, false,
-                                request, response,
-                                updatedProvenance,
-                                true, null, interactionId, groupInteractionId,
-                                masterInteractionId, SourceType.CSV.name(), null,null));
-                    } else {
-                        LOG.error("Bundle not generated for  patient  MrId: {}, interactionId: {}, masterInteractionId: {}, groupInteractionId :{}",
-                                profile.getPatientMrIdValue(), interactionId, masterInteractionId,groupInteractionId);
-                        errorCount.incrementAndGet();
-                        final Map<String, Object> result = createOperationOutcomeForError(masterInteractionId, interactionId,
-                                profile.getPatientMrIdValue(), profile.getEncounterId(),
-                                new Exception("Bundle not created"),
-                                payloadAndValidationOutcome.provenance());
-                        results.add(result);
-                        saveFhirConversionStatus(isValid, masterInteractionId, groupKey, groupInteractionId,
-                                interactionId, request,
-                                bundle, result, tenantId);
-                    }
+                        initRIHR.setStatus(status);
+                        initRIHR.setInteractionId(masterInteractionId);
+                        initRIHR.setUri(request.getRequestURI());
+                        initRIHR.setNature("Update Zip File Processing Details");
+                        initRIHR.setCreatedAt(createdAt);
+                        initRIHR.setCreatedBy(CsvService.class.getName());
+                        initRIHR.setZipFileProcessingErrors(CollectionUtils.isNotEmpty(miscError)
+                                        ? (JsonNode) Configuration.objectMapper.valueToTree(miscError)
+                                        : null);
+                        final var start = Instant.now();
+                        final var execResult = initRIHR.execute(jooqCfg);
+                        final var end = Instant.now();
+                        LOG.info(
+                                        "SaveMiscErrorAndStatus : END for interaction id : {} .Time taken : {} milliseconds"
+                                                        + execResult,
+                                        masterInteractionId,
+                                        Duration.between(start, end).toMillis());
                 } catch (final Exception e) {
-                    errorCount.incrementAndGet();
-                    final Map<String, Object> result = createOperationOutcomeForError(masterInteractionId, interactionId,
-                            profile.getPatientMrIdValue(), profile.getEncounterId(), e,
-                            payloadAndValidationOutcome.provenance());
-                    LOG.error("Error processing patient data for MrId:{}, interactionId: {}, masterInteractionId:{} , groupInteractionId:{}, Error:{}",
-                            profile.getPatientMrIdValue(), interactionId,masterInteractionId,groupInteractionId, e.getMessage(), e);
-                    results.add(result);
-                    saveFhirConversionStatus(isValid, masterInteractionId, groupKey, groupInteractionId, interactionId,
-                            request,
-                            bundle, result, tenantId);
+                        LOG.error("ERROR:: SaveMiscErrorAndStatus CALL for interaction id : {} "
+                                        + initRIHR.getName() + " initRIHR error", masterInteractionId,
+                                        e);
                 }
-            }
-        });
-        if (errorCount.get() > 0) {
-            isAllCsvConvertedToFhir = false;
-        }
-        return results;
-    }
-
-    public static List<String> getFileNames(final List<FileDetail> fileDetails) {
-        if (fileDetails != null) {
-            return fileDetails.stream()
-                    .map(FileDetail::filename)
-                    .collect(Collectors.toList());
-        }
-        return List.of(); // return an empty list if the input is null
-    }
-
-    private Map<String, Object> createOperationOutcomeForError(
-            final String masterInteractionId,
-            final String groupInteractionId,
-            final String patientMrIdValue,
-            final String encounterId,
-            final Exception e,
-            final Map<String, Object> provenance) {
-        if (e == null) {
-            return Collections.emptyMap();
         }
 
-        final String diagnosticsMessage = "Error processing data for Master Interaction ID: " + masterInteractionId +
-                ", Interaction ID: " + groupInteractionId +
-                ", Patient MRN: " + patientMrIdValue +
-                ", EncounterID : " + encounterId +
-                ", Error: " + e.getMessage();
-
-        final String remediationMessage = "Error processing data.";
-
-        final Map<String, Object> errorDetails = Map.of(
-                "type", "processing-error",
-                "description", remediationMessage,
-                "message", diagnosticsMessage);
-
-        return Map.of(
-                "masterInteractionId", masterInteractionId,
-                "groupInteractionId", groupInteractionId,
-                "patientMrId", patientMrIdValue,
-                "encounterId", encounterId,
-                "provenance", provenance,
-                "validationResults", Map.of(
-                        "errors", List.of(errorDetails),
-                        "resourceType", "OperationOutcome"));
-    }
-
-    private Map<String, Object> createOperationOutcomeForFileNotProcessed(
-            final String masterInteractionId,
-            final List<String> filesNotProcessed, final String originalFileName) {
-        if (filesNotProcessed == null || filesNotProcessed.isEmpty()) {
-            return Collections.emptyMap();
+        /**
+         * Adds bundle provenance details to the provided Parameters object and returns
+         * it.
+         *
+         * @param existingProvenance  An existing Parameters resource to which new
+         *                            provenance will be added.
+         * @param bundleGeneratedFrom List of files used to generate the bundle.
+         * @param patientMrnId        The patient MRN ID.
+         * @param encounterId         The encounter ID.
+         * @param initiatedAt         The initiation timestamp.
+         * @param completedAt         The completion timestamp.
+         * @return A Parameters resource containing the provenance details.
+         * @throws Exception If there's an error during the conversion process.
+         */
+        public Parameters addBundleProvenance(Parameters existingProvenance, final List<String> bundleGeneratedFrom,
+                        final String patientMrnId, final String encounterId, final Instant initiatedAt,
+                        final Instant completedAt) throws Exception {
+                Parameters parameters = existingProvenance != null ? existingProvenance : new Parameters();
+                ParametersParameterComponent provenanceParam = new ParametersParameterComponent();
+                provenanceParam.setName("bundleProvenance");
+                provenanceParam.addPart().setName("description")
+                                .setValue(new StringType(
+                                                "Bundle created from provided files for the given patientMrnId and encounterId"));
+                provenanceParam.addPart().setName("action")
+                                .setValue(new StringType("Bundle Generated By Tech By Design"));
+                provenanceParam.addPart().setName("patientMrnId")
+                                .setValue(new StringType(patientMrnId));
+                provenanceParam.addPart().setName("encounterId")
+                                .setValue(new StringType(encounterId));
+                if (null != initiatedAt) {
+                        provenanceParam.addPart().setName("initiatedAt")
+                                        .setValue(new DateTimeType(initiatedAt.toString()));
+                }
+                if (null != completedAt) {
+                        provenanceParam.addPart().setName("completedAt")
+                                        .setValue(new DateTimeType(completedAt.toString()));
+                }
+                ParametersParameterComponent validatedFilesParam = new ParametersParameterComponent();
+                validatedFilesParam.setName("validatedFiles");
+                for (String file : bundleGeneratedFrom) {
+                        validatedFilesParam.addPart().setName("file").setValue(new StringType(file));
+                }
+                provenanceParam.addPart(validatedFilesParam);
+                parameters.addParameter(provenanceParam);
+                return parameters;
         }
 
-        final StringBuilder diagnosticsMessage = new StringBuilder("Files not processed: in input zip file : ");
-        diagnosticsMessage.append(String.join(", ", filesNotProcessed));
+        public void addHapiFhirValidation(final Map<String, Object> provenance, final String validationDescription) {
+                @SuppressWarnings("unchecked")
+                final Map<String, Object> agent = new HashMap<>();
+                final Map<String, String> whoCoding = new HashMap<>();
 
-        final StringBuilder remediation = new StringBuilder("Filenames must start with one of the following prefixes: ");
-        for (final FileType type : FileType.values()) {
-            remediation.append(type.name()).append(", ");
+                whoCoding.put("system", "Validator");
+                whoCoding.put("display", "HAPI FHIR Validation");
+
+                agent.put("who", Collections.singletonMap("coding", List.of(whoCoding)));
+                provenance.put("hapiFhirValidation", Map.of(
+                                "agent", List.of(agent),
+                                "description", validationDescription));
         }
-        if (remediation.length() > 0) {
-            remediation.setLength(remediation.length() - 2); // Remove trailing comma and space
+
+        private void saveFhirConversionStatus(final boolean isValid, final String masterInteractionId,
+                        final String groupKey,
+                        final String groupInteractionId, final String interactionId, final HttpServletRequest request,
+                        final String payload, final Map<String, Object> operationOutcome,
+                        final String tenantId) {
+                LOG.info(
+                                "REGISTER State CONVERTED_TO_FHIR : BEGIN for master InteractionId :{} group interaction id  : {} tenant id : {}",
+                                masterInteractionId, groupInteractionId, tenantId);
+                final var forwardedAt = OffsetDateTime.now();
+                final var initRIHR = new RegisterInteractionHttpRequest();
+                try {
+                        final var dslContext = udiPrimeJpaConfig.dsl();
+                        final var jooqCfg = dslContext.configuration();
+                        initRIHR.setOrigin("http");
+                        initRIHR.setInteractionId(interactionId);
+                        initRIHR.setGroupHubInteractionId(groupInteractionId);
+                        initRIHR.setSourceHubInteractionId(masterInteractionId);
+                        initRIHR.setInteractionKey(request.getRequestURI());
+                        initRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
+                                        Map.of("nature", "Converted to FHIR", "tenant_id",
+                                                        tenantId)));
+                        initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
+                        initRIHR.setPayload(null != operationOutcome && operationOutcome.size() > 0
+                                        ? Configuration.objectMapper.valueToTree(operationOutcome)
+                                        : Configuration.objectMapper.readTree(payload));
+                        initRIHR.setCreatedAt(forwardedAt);
+                        initRIHR.setCreatedBy(CsvService.class.getName());
+                        initRIHR.setFromState(isValid ? "VALIDATION SUCCESS" : "VALIDATION FAILED");
+                        initRIHR.setToState(StringUtils.isNotEmpty(payload) ? "CONVERTED_TO_FHIR"
+                                        : "FHIR_CONVERSION_FAILED");
+                        final var provenance = "%s.saveConvertedFHIR"
+                                        .formatted(CsvBundleProcessorService.class.getName());
+                        initRIHR.setProvenance(provenance);
+                        initRIHR.setCsvGroupId(groupInteractionId);
+                        final var start = Instant.now();
+                        final var execResult = initRIHR.execute(jooqCfg);
+                        final var end = Instant.now();
+                        LOG.info(
+                                        "REGISTER State CONVERTED_TO_FHIR : END for master interaction id : {}  group interaction id :{} tenant id : {} .Time taken : {} milliseconds"
+                                                        + execResult,
+                                        masterInteractionId, groupInteractionId, tenantId,
+                                        Duration.between(start, end).toMillis());
+                } catch (final Exception e) {
+                        LOG.error(
+                                        "ERROR:: REGISTER State CONVERTED_TO_FHIR CALL for master interaction id : {}  group InteractionId :{} tenant id : {}"
+                                                        + initRIHR.getName() + " initRIHR error",
+                                        masterInteractionId, groupInteractionId,
+                                        tenantId,
+                                        e);
+                }
         }
 
-        final Map<String, Object> errorDetails = Map.of(
-                "type", "files-not-processed",
-                "description", remediation.toString(),
-                "message", diagnosticsMessage.toString());
+        private void validateAndThrowIfDataMissing(
+                        final Map<String, List<DemographicData>> demographicData,
+                        final Map<String, List<ScreeningProfileData>> screeningProfileData,
+                        final Map<String, List<QeAdminData>> qeAdminData,
+                        final Map<String, List<ScreeningObservationData>> screeningObservationData) {
 
-        return Map.of(
-                "masterInteractionId", masterInteractionId,
-                "originalFileName", originalFileName,
-                "validationResults", Map.of(
-                        "errors", List.of(errorDetails),
-                        "resourceType", "OperationOutcome"));
-    }
-   private void addObservabilityHeadersToResponse(final HttpServletRequest request, final HttpServletResponse response) {
+                final StringBuilder missingDataMessage = new StringBuilder(
+                                "The following required data maps are missing or empty: ");
+
+                boolean isAnyMissing = false;
+
+                if (demographicData == null || demographicData.isEmpty()) {
+                        missingDataMessage.append("DEMOGRAPHIC_DATA, ");
+                        isAnyMissing = true;
+                }
+                if (screeningProfileData == null || screeningProfileData.isEmpty()) {
+                        missingDataMessage.append("SCREENING_PROFILE_DATA, ");
+                        isAnyMissing = true;
+                }
+                if (qeAdminData == null || qeAdminData.isEmpty()) {
+                        missingDataMessage.append("QE_ADMIN_DATA, ");
+                        isAnyMissing = true;
+                }
+                if (screeningObservationData == null || screeningObservationData.isEmpty()) {
+                        missingDataMessage.append("SCREENING_OBSERVATION_DATA, ");
+                        isAnyMissing = true;
+                }
+
+                if (isAnyMissing) {
+                        missingDataMessage.setLength(missingDataMessage.length() - 2);
+                        LOG.error(missingDataMessage.toString());
+                        throw new IllegalArgumentException(missingDataMessage.toString());
+                }
+        }
+
+        private List<Object> processScreening(final String groupKey,
+                        final Map<String, List<DemographicData>> demographicData,
+                        final Map<String, List<ScreeningProfileData>> screeningProfileData,
+                        final Map<String, List<QeAdminData>> qeAdminData,
+                        final Map<String, List<ScreeningObservationData>> screeningObservationData,
+                        final HttpServletRequest request,
+                        final HttpServletResponse response,
+                        final String groupInteractionId,
+                        final String masterInteractionId,
+                        final String tenantId, final boolean isValid,
+                        final PayloadAndValidationOutcome payloadAndValidationOutcome,
+                        boolean isAllCsvConvertedToFhir)
+                        throws IOException {
+
+                final List<Object> results = new ArrayList<>();
+                final AtomicInteger errorCount = new AtomicInteger();
+                screeningProfileData.forEach((encounterId, profileList) -> {
+                        for (final ScreeningProfileData profile : profileList) {
+                                final String interactionId = UUID.randomUUID().toString();
+                                String bundle = null;
+                                try {
+                                        final List<DemographicData> demographicList = demographicData.getOrDefault(
+                                                        profile.getPatientMrIdValue(),
+                                                        List.of());
+                                        final List<QeAdminData> qeAdminList = qeAdminData.getOrDefault(
+                                                        profile.getPatientMrIdValue(),
+                                                        List.of());
+                                        final List<ScreeningObservationData> screeningObservationList = screeningObservationData
+                                                        .getOrDefault(profile.getEncounterId(), List.of());
+
+                                        if (demographicList.isEmpty() || qeAdminList.isEmpty()
+                                                        || screeningObservationList.isEmpty()) {
+                                                final String errorMessage = String.format(
+                                                                "Data missing in one or more files for patientMrIdValue: %s",
+                                                                profile.getPatientMrIdValue());
+                                                LOG.error(errorMessage);
+                                                throw new IllegalArgumentException(errorMessage);
+                                        }
+                                        final Instant initiatedAt = Instant.now();
+                                        final Parameters provenance = addBundleProvenance(
+                                                        payloadAndValidationOutcome.provenance(),
+                                                        getFileNames(payloadAndValidationOutcome.fileDetails()),
+                                                        profile.getPatientMrIdValue(), profile.getEncounterId(),null,null);
+                                        bundle = csvToFhirConverter.convert(
+                                                        demographicList.get(0),
+                                                        qeAdminList.get(0),
+                                                        profile,
+                                                        screeningObservationList,
+                                                        interactionId,provenance);
+                                        final Instant completedAt = Instant.now();
+                                        if (bundle != null) {
+                                                final Parameters updatedProvenance = addBundleProvenance(
+                                                                payloadAndValidationOutcome.provenance(),
+                                                                getFileNames(payloadAndValidationOutcome.fileDetails()),
+                                                                profile.getPatientMrIdValue(), profile.getEncounterId(),
+                                                                initiatedAt, completedAt);
+                                                saveFhirConversionStatus(isValid, masterInteractionId, groupKey,
+                                                                groupInteractionId,
+                                                                interactionId, request,
+                                                                bundle, null, tenantId);
+                                                results.add(fhirService.processBundle(
+                                                                bundle, tenantId, null, null, null, null, null,
+                                                                Boolean.toString(false), false,
+                                                                false, false,
+                                                                request, response,
+                                                                FhirContext.forR4().newJsonParser()
+                                                                                .encodeResourceToString(
+                                                                                                updatedProvenance),
+                                                                true, null, interactionId, groupInteractionId,
+                                                                masterInteractionId, SourceType.CSV.name(), null,
+                                                                null));
+                                        } else {
+                                                LOG.error("Bundle not generated for  patient  MrId: {}, interactionId: {}, masterInteractionId: {}, groupInteractionId :{}",
+                                                                profile.getPatientMrIdValue(), interactionId,
+                                                                masterInteractionId, groupInteractionId);
+                                                errorCount.incrementAndGet();
+                                                final Map<String, Object> result = createOperationOutcomeForError(
+                                                                masterInteractionId, interactionId,
+                                                                profile.getPatientMrIdValue(), profile.getEncounterId(),
+                                                                new Exception("Bundle not created"),
+                                                                payloadAndValidationOutcome.provenance());
+                                                results.add(result);
+                                                saveFhirConversionStatus(isValid, masterInteractionId, groupKey,
+                                                                groupInteractionId,
+                                                                interactionId, request,
+                                                                bundle, result, tenantId);
+                                        }
+                                } catch (final Exception e) {
+                                        errorCount.incrementAndGet();
+                                        final Map<String, Object> result = createOperationOutcomeForError(
+                                                        masterInteractionId, interactionId,
+                                                        profile.getPatientMrIdValue(), profile.getEncounterId(), e,
+                                                        payloadAndValidationOutcome.provenance());
+                                        LOG.error("Error processing patient data for MrId:{}, interactionId: {}, masterInteractionId:{} , groupInteractionId:{}, Error:{}",
+                                                        profile.getPatientMrIdValue(), interactionId,
+                                                        masterInteractionId, groupInteractionId, e.getMessage(), e);
+                                        results.add(result);
+                                        saveFhirConversionStatus(isValid, masterInteractionId, groupKey,
+                                                        groupInteractionId, interactionId,
+                                                        request,
+                                                        bundle, result, tenantId);
+                                }
+                        }
+                });
+                if (errorCount.get() > 0) {
+                        isAllCsvConvertedToFhir = false;
+                }
+                return results;
+        }
+
+        public static List<String> getFileNames(final List<FileDetail> fileDetails) {
+                if (fileDetails != null) {
+                        return fileDetails.stream()
+                                        .map(FileDetail::filename)
+                                        .collect(Collectors.toList());
+                }
+                return List.of(); // return an empty list if the input is null
+        }
+
+        private Map<String, Object> createOperationOutcomeForError(
+                        final String masterInteractionId,
+                        final String groupInteractionId,
+                        final String patientMrIdValue,
+                        final String encounterId,
+                        final Exception e,
+                        final Parameters provenance) {
+                if (e == null) {
+                        return Collections.emptyMap();
+                }
+
+                final String diagnosticsMessage = "Error processing data for Master Interaction ID: "
+                                + masterInteractionId +
+                                ", Interaction ID: " + groupInteractionId +
+                                ", Patient MRN: " + patientMrIdValue +
+                                ", EncounterID : " + encounterId +
+                                ", Error: " + e.getMessage();
+
+                final String remediationMessage = "Error processing data.";
+
+                final Map<String, Object> errorDetails = Map.of(
+                                "type", "processing-error",
+                                "description", remediationMessage,
+                                "message", diagnosticsMessage);
+
+                return Map.of(
+                                "masterInteractionId", masterInteractionId,
+                                "groupInteractionId", groupInteractionId,
+                                "patientMrId", patientMrIdValue,
+                                "encounterId", encounterId,
+                                "provenance", provenance,
+                                "validationResults", Map.of(
+                                                "errors", List.of(errorDetails),
+                                                "resourceType", "OperationOutcome"));
+        }
+
+        private Map<String, Object> createOperationOutcomeForFileNotProcessed(
+                        final String masterInteractionId,
+                        final List<String> filesNotProcessed, final String originalFileName) {
+                if (filesNotProcessed == null || filesNotProcessed.isEmpty()) {
+                        return Collections.emptyMap();
+                }
+
+                final StringBuilder diagnosticsMessage = new StringBuilder("Files not processed: in input zip file : ");
+                diagnosticsMessage.append(String.join(", ", filesNotProcessed));
+
+                final StringBuilder remediation = new StringBuilder(
+                                "Filenames must start with one of the following prefixes: ");
+                for (final FileType type : FileType.values()) {
+                        remediation.append(type.name()).append(", ");
+                }
+                if (remediation.length() > 0) {
+                        remediation.setLength(remediation.length() - 2); // Remove trailing comma and space
+                }
+
+                final Map<String, Object> errorDetails = Map.of(
+                                "type", "files-not-processed",
+                                "description", remediation.toString(),
+                                "message", diagnosticsMessage.toString());
+
+                return Map.of(
+                                "masterInteractionId", masterInteractionId,
+                                "originalFileName", originalFileName,
+                                "validationResults", Map.of(
+                                                "errors", List.of(errorDetails),
+                                                "resourceType", "OperationOutcome"));
+        }
+
+        private void addObservabilityHeadersToResponse(final HttpServletRequest request,
+                        final HttpServletResponse response) {
                 final var startTime = (Instant) request.getAttribute(START_TIME_ATTRIBUTE);
                 final var finishTime = Instant.now();
                 final Duration duration = Duration.between(startTime, finishTime);
