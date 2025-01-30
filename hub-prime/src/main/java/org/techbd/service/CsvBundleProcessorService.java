@@ -212,7 +212,7 @@ public class CsvBundleProcessorService {
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
             initRIHR.setOrigin("http");
-            initRIHR.setInteractionId(interactionId);
+            initRIHR.setInteractionId(groupInteractionId);
             initRIHR.setGroupHubInteractionId(groupInteractionId);
             initRIHR.setSourceHubInteractionId(masterInteractionId);
             initRIHR.setInteractionKey(request.getRequestURI());
@@ -227,10 +227,10 @@ public class CsvBundleProcessorService {
             initRIHR.setCreatedBy(CsvService.class.getName());
             initRIHR.setFromState(isValid ? "VALIDATION SUCCESS" : "VALIDATION FAILED");
             initRIHR.setToState(StringUtils.isNotEmpty(payload) ? "CONVERTED_TO_FHIR" : "FHIR_CONVERSION_FAILED");
-        //     initRIHR.setCsvDemographicDataFileName(demographicFileName);
-        //     initRIHR.setCsvQeAdminDataFileName(qeAdminFileName);
-        //     initRIHR.setCsvScreeningObservationDataFileName(screeningObservationFileName);
-        //     initRIHR.setCsvScreeningProfileDataFileName(screeningProfileFileName);
+            initRIHR.setCsvDemographicDataFileName(demographicFileName);
+            initRIHR.setCsvQeAdminDataFileName(qeAdminFileName);
+            initRIHR.setCsvScreeningObservationDataFileName(screeningObservationFileName);
+            initRIHR.setCsvScreeningProfileDataFileName(screeningProfileFileName);
             final var provenance = "%s.saveConvertedFHIR".formatted(CsvBundleProcessorService.class.getName());
             initRIHR.setProvenance(provenance);
             initRIHR.setCsvGroupId(groupInteractionId);
