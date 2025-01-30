@@ -158,5 +158,10 @@ public class CsvService {
             }
         }
     }
+
+    public Object getInteraction(String interactionType, String interactionId) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getInteraction'");
+    }
     
 }

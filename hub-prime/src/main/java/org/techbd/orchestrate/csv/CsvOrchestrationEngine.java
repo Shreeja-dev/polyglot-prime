@@ -372,7 +372,7 @@ public class CsvOrchestrationEngine {
         private void saveValidationResults(final Map<String, Object> validationResults,
                 final String masterInteractionId,
                 final String groupInteractionId,
-                final String tenantId) {
+                final String tenantId,List<FileDetail> fileDetails) {
             final var interactionId = getBundleInteractionId(request);
             log.info("REGISTER State VALIDATION : BEGIN for inteaction id  : {} tenant id : {}",
                     interactionId, tenantId);
@@ -403,6 +403,22 @@ public class CsvOrchestrationEngine {
                         .formatted(CsvService.class.getName());
                 initRIHR.setProvenance(provenance);
                 initRIHR.setCsvGroupId(interactionId);
+                for (final FileDetail fileDetail : fileDetails) {
+                    switch (fileDetail.fileType()) {
+                        case FileType.DEMOGRAPHIC_DATA -> {
+                            initRIHR.setCsvDemographicDataFileName(fileDetail.filename());
+                        }
+                        case FileType.QE_ADMIN_DATA -> {
+                            initRIHR.setCsvQeAdminDataFileName(fileDetail.filename());
+                        }
+                        case FileType.SCREENING_PROFILE_DATA -> {
+                            initRIHR.setCsvScreeningProfileDataFileName(fileDetail.filename());
+                        }
+                        case FileType.SCREENING_OBSERVATION_DATA -> {
+                            initRIHR.setCsvScreeningObservationDataFileName(fileDetail.filename());
+                        }
+                    }
+                }
                 final var start = Instant.now();
                 final var execResult = initRIHR.execute(jooqCfg);
                 final var end = Instant.now();
@@ -731,7 +747,7 @@ public class CsvOrchestrationEngine {
                     operationOutcome,
                     masterInteractionId,
                     groupInteractionId,
-                    tenantId);
+                    tenantId,fileDetails);
 
             return operationOutcome;
         }
@@ -755,7 +771,7 @@ public class CsvOrchestrationEngine {
                     request,
                     file.getSize(), initiatedAtForThisGroup, completedAtForThisGroup, originalFileName);
 
-            saveValidationResults(operationOutomeForThisGroup, masterInteractionId, groupInteractionId, tenantId);
+            saveValidationResults(operationOutomeForThisGroup, masterInteractionId, groupInteractionId, tenantId,fileDetails);
             return operationOutomeForThisGroup;
         }
 

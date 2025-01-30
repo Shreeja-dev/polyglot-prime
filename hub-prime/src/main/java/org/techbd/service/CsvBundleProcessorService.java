@@ -81,29 +81,41 @@ public class CsvBundleProcessorService {
                     Map<String, List<ScreeningProfileData>> screeningProfileData = null;
                     Map<String, List<QeAdminData>> qeAdminData = null;
                     Map<String, List<ScreeningObservationData>> screeningObservationData = null;
-
+                    var qeAdminFileName ="";
+                    var demographicFileName="";
+                    var screeningProfileFileName="" ;
+                    var screeningObservationFileName="";
                     for (final FileDetail fileDetail : outcome.fileDetails()) {
                         final String content = fileDetail.content();
                         final FileType fileType = fileDetail.fileType();
                         switch (fileType) {
-                            case DEMOGRAPHIC_DATA ->
+                            case DEMOGRAPHIC_DATA -> {
                                 demographicData = CsvConversionUtil.convertCsvStringToDemographicData(content);
-                            case SCREENING_PROFILE_DATA -> screeningProfileData = CsvConversionUtil
-                                    .convertCsvStringToScreeningProfileData(content);
-                            case QE_ADMIN_DATA ->
+                                demographicFileName = fileDetail.filename();
+                            }
+                            case SCREENING_PROFILE_DATA -> {
+                                screeningProfileData = CsvConversionUtil.convertCsvStringToScreeningProfileData(content);
+                                screeningProfileFileName = fileDetail.filename();
+                            }
+                            case QE_ADMIN_DATA -> {
                                 qeAdminData = CsvConversionUtil.convertCsvStringToQeAdminData(content);
-                            case SCREENING_OBSERVATION_DATA -> screeningObservationData = CsvConversionUtil
-                                    .convertCsvStringToScreeningObservationData(content);
+                                qeAdminFileName = fileDetail.filename();
+                            }
+                            case SCREENING_OBSERVATION_DATA -> {
+                                screeningObservationData = CsvConversionUtil.convertCsvStringToScreeningObservationData(content);
+                                screeningObservationFileName = fileDetail.filename();
+                            }
                             default -> throw new IllegalStateException("Unexpected value: " + fileType);
                         }
                     }
+                    
                     validateAndThrowIfDataMissing(demographicData, screeningProfileData, qeAdminData,
                             screeningObservationData);
                     if (screeningProfileData != null) {
                         resultBundles.addAll(processScreening(groupKey, demographicData, screeningProfileData,
                                 qeAdminData, screeningObservationData, request, response, groupInteractionId,
                                 masterInteractionId,
-                                tenantId, outcome.isValid(), outcome, isAllCsvConvertedToFhir));
+                                tenantId, outcome.isValid(), outcome, isAllCsvConvertedToFhir,qeAdminFileName,demographicFileName,screeningProfileFileName,screeningObservationFileName));
                     }
                 } else {
                     isAllCsvConvertedToFhir = false;
@@ -190,7 +202,7 @@ public class CsvBundleProcessorService {
     private void saveFhirConversionStatus(final boolean isValid, final String masterInteractionId, final String groupKey,
             final String groupInteractionId, final String interactionId, final HttpServletRequest request,
             final String payload, final Map<String, Object> operationOutcome,
-            final String tenantId) {
+            final String tenantId,String qeAdminFileName,String demographicFileName,String screeningProfileFileName,String screeningObservationFileName) {
         LOG.info(
                 "REGISTER State CONVERTED_TO_FHIR : BEGIN for master InteractionId :{} group interaction id  : {} tenant id : {}",
                 masterInteractionId, groupInteractionId, tenantId);
@@ -215,6 +227,10 @@ public class CsvBundleProcessorService {
             initRIHR.setCreatedBy(CsvService.class.getName());
             initRIHR.setFromState(isValid ? "VALIDATION SUCCESS" : "VALIDATION FAILED");
             initRIHR.setToState(StringUtils.isNotEmpty(payload) ? "CONVERTED_TO_FHIR" : "FHIR_CONVERSION_FAILED");
+        //     initRIHR.setCsvDemographicDataFileName(demographicFileName);
+        //     initRIHR.setCsvQeAdminDataFileName(qeAdminFileName);
+        //     initRIHR.setCsvScreeningObservationDataFileName(screeningObservationFileName);
+        //     initRIHR.setCsvScreeningProfileDataFileName(screeningProfileFileName);
             final var provenance = "%s.saveConvertedFHIR".formatted(CsvBundleProcessorService.class.getName());
             initRIHR.setProvenance(provenance);
             initRIHR.setCsvGroupId(groupInteractionId);
@@ -280,7 +296,8 @@ public class CsvBundleProcessorService {
             final String groupInteractionId,
             final String masterInteractionId,
             final String tenantId, final boolean isValid, final PayloadAndValidationOutcome payloadAndValidationOutcome,
-            boolean isAllCsvConvertedToFhir)
+            boolean isAllCsvConvertedToFhir,
+            final String qeAdminFileName,String demographicFileName,String screeningProfileFileName,String screeningObservationFileName)
             throws IOException {
 
         final List<Object> results = new ArrayList<>();
@@ -319,7 +336,7 @@ public class CsvBundleProcessorService {
                                 profile.getPatientMrIdValue(), profile.getEncounterId(), initiatedAt, completedAt);
                         saveFhirConversionStatus(isValid, masterInteractionId, groupKey, groupInteractionId,
                                 interactionId, request,
-                                bundle, null, tenantId);
+                                bundle, null, tenantId,qeAdminFileName,demographicFileName,screeningProfileFileName,screeningObservationFileName);
                         results.add(fhirService.processBundle(
                                 bundle, tenantId, null, null, null, null, null,
                                 Boolean.toString(false), false,
@@ -339,7 +356,7 @@ public class CsvBundleProcessorService {
                         results.add(result);
                         saveFhirConversionStatus(isValid, masterInteractionId, groupKey, groupInteractionId,
                                 interactionId, request,
-                                bundle, result, tenantId);
+                                bundle, result, tenantId,qeAdminFileName,demographicFileName,screeningProfileFileName,screeningObservationFileName);
                     }
                 } catch (final Exception e) {
                     errorCount.incrementAndGet();
@@ -351,7 +368,7 @@ public class CsvBundleProcessorService {
                     results.add(result);
                     saveFhirConversionStatus(isValid, masterInteractionId, groupKey, groupInteractionId, interactionId,
                             request,
-                            bundle, result, tenantId);
+                            bundle, result, tenantId,qeAdminFileName,demographicFileName,screeningProfileFileName,screeningObservationFileName);
                 }
             }
         });
