@@ -91,7 +91,7 @@ public class CsvController {
       return  Map.of(
         "status", CsvProcessingStatus.RECEIVED.name(),
         "message", "The file has been received and is being processed asynchronously. Use the provided endpoint to check the status.",
-        "interactionId", interactionId,
+        "zipFileInteractionId", interactionId,
         "statusEndpoint", statusEndpoint
     );
     }

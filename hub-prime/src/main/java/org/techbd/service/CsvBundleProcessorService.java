@@ -233,7 +233,7 @@ public class CsvBundleProcessorService {
             initRIHR.setCsvScreeningProfileDataFileName(screeningProfileFileName);
             final var provenance = "%s.saveConvertedFHIR".formatted(CsvBundleProcessorService.class.getName());
             initRIHR.setProvenance(provenance);
-            initRIHR.setCsvGroupId(groupInteractionId);
+            initRIHR.setCsvGroupId(masterInteractionId);
             final var start = Instant.now();
             final var execResult = initRIHR.execute(jooqCfg);
             final var end = Instant.now();
@@ -360,7 +360,7 @@ public class CsvBundleProcessorService {
                     }
                 } catch (final Exception e) {
                     errorCount.incrementAndGet();
-                    final Map<String, Object> result = createOperationOutcomeForError(masterInteractionId, interactionId,
+                    final Map<String, Object> result = createOperationOutcomeForError(masterInteractionId, groupInteractionId,
                             profile.getPatientMrIdValue(), profile.getEncounterId(), e,
                             payloadAndValidationOutcome.provenance());
                     LOG.error("Error processing patient data for MrId:{}, interactionId: {}, masterInteractionId:{} , groupInteractionId:{}, Error:{}",
@@ -412,8 +412,8 @@ public class CsvBundleProcessorService {
                 "message", diagnosticsMessage);
 
         return Map.of(
-                "masterInteractionId", masterInteractionId,
-                "groupInteractionId", groupInteractionId,
+                "zipFileInteractionId", masterInteractionId,
+                "csvInteractionId", groupInteractionId,
                 "patientMrId", patientMrIdValue,
                 "encounterId", encounterId,
                 "provenance", provenance,
@@ -446,7 +446,7 @@ public class CsvBundleProcessorService {
                 "message", diagnosticsMessage.toString());
 
         return Map.of(
-                "masterInteractionId", masterInteractionId,
+                "zipFileInteractionId", masterInteractionId,
                 "originalFileName", originalFileName,
                 "validationResults", Map.of(
                         "errors", List.of(errorDetails),

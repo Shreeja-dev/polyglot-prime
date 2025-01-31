@@ -1,5 +1,4 @@
 package org.techbd.service.http.hub.prime.api;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -483,7 +482,7 @@ public class FHIRService {
                                 LOG.error("FHIRService - Validate - FAILED for interactionId: {}", interactionId, e);
                                 return Map.of(
                                                 "resourceType", "OperationOutcome",
-                                                "interactionId", interactionId,
+                                                "fhirInteractionId", interactionId,
                                                 "error", "Validation failed: " + e.getMessage());
                         } finally {
                                 // Ensure the session is cleared to avoid memory leaks

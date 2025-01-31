@@ -490,7 +490,7 @@ public class CsvOrchestrationEngine {
                     completedAt, originalFileName);
             return Map.of(
                     "resourceType", "OperationOutcome",
-                    "interactionId", groupInteractionId,
+                    "zipFileInteractionId",masterInteractionId,
                     "validationResults", Configuration.objectMapper.readTree(validationResults),
                     "provenance", provenance);
         }
@@ -531,7 +531,7 @@ public class CsvOrchestrationEngine {
                     .collect(Collectors.toList());
             return Map.of(
                     "resourceType", "Provenance",
-                    "interactionId", interactionId,
+                    "csvInteractionId", interactionId,
                     "agent", List.of(Map.of(
                             "who", Map.of(
                                     "coding", List.of(Map.of(
@@ -645,7 +645,7 @@ public class CsvOrchestrationEngine {
                     "message", diagnosticsMessage.toString());
 
             return Map.of(
-                    "masterInteractionId", masterInteractionId,
+                    "zipFileInteractionId", masterInteractionId,
                     "originalFileName", originalFileName,
                     "validationResults", Map.of(
                             "errors", List.of(errorDetails),
@@ -693,8 +693,8 @@ public class CsvOrchestrationEngine {
 
             Map<String, Object> operationOutcome = new HashMap<>();
             operationOutcome.put("resourceType", "OperationOutcome");
-            operationOutcome.put("interactionId", masterInteractionId);
-
+            operationOutcome.put("zipFileInteractionId", masterInteractionId);
+            operationOutcome.put("csvInteractionId", groupInteractionId);
             // Validation Results with Detailed Errors
             Map<String, Object> validationResults = new HashMap<>();
             List<Map<String, Object>> errors = new ArrayList<>();
@@ -714,7 +714,7 @@ public class CsvOrchestrationEngine {
             // Provenance Details
             Map<String, Object> provenance = new HashMap<>();
             provenance.put("resourceType", "Provenance");
-            provenance.put("interactionId", groupInteractionId);
+            provenance.put("csvInteractionId", groupInteractionId);
 
             // Agent Details
             List<Map<String, Object>> agents = new ArrayList<>();
