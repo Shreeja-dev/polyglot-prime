@@ -86,6 +86,8 @@ public class CsvController {
     validateFile(file);
     validateTenantId(tenantId);
     final HttpServletRequest requestUpdated = new CustomMultiPartFileRequestWrapper(request, file);
+    final var requestUri =  request.getRequestURI();
+    final var userAgent = request.getHeader("User-Agent");  //TODO - pass to orchestration engine 
     String interactionId = UUID.randomUUID().toString();
     if (isSync) {
       return csvService.processZipFile(file, requestUpdated, response, tenantId, origin, sftpSessionId, interactionId);

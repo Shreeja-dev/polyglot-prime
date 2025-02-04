@@ -53,7 +53,7 @@ public class CsvService {
         try {
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
-            saveArchiveInteraction(jooqCfg, request, file, tenantId,origin,sftpSessionId);
+            saveArchiveInteraction(jooqCfg, request, file, tenantId,origin,sftpSessionId,getBundleInteractionId(request));
             session = engine.session()
                     .withMasterInteractionId(getBundleInteractionId(request))
                     .withSessionId(UUID.randomUUID().toString())
@@ -77,15 +77,14 @@ public class CsvService {
 
     private void saveArchiveInteraction(final org.jooq.Configuration jooqCfg, final HttpServletRequest request,
             final MultipartFile file,
-            final String tenantId,String origin,String sftpSessionId) {
-        final var interactionId = getBundleInteractionId(request);
-        LOG.info("REGISTER State NONE : BEGIN for inteaction id  : {} tenant id : {}",
-                interactionId, tenantId);
+            final String tenantId,String origin,String sftpSessionId,String masterInteractionId) {
+        LOG.info("REGISTER State NONE : BEGIN for zipFileInteaction id  : {} tenant id : {}",
+        masterInteractionId, tenantId);
         final var forwardedAt = OffsetDateTime.now();
         final var initRIHR = new RegisterInteractionHttpRequest();
         try {
             initRIHR.setOrigin(StringUtils.isEmpty(origin) ? Origin.HTTP.name():origin);
-            initRIHR.setInteractionId(interactionId);
+            initRIHR.setInteractionId(masterInteractionId);
             initRIHR.setInteractionKey(request.getRequestURI());
             if(StringUtils.isNotEmpty(sftpSessionId)) {
                 initRIHR.setSftpSessionId(sftpSessionId);
@@ -105,7 +104,7 @@ public class CsvService {
             final var provenance = "%s.saveArchiveInteraction".formatted(CsvService.class.getName());
             initRIHR.setProvenance(provenance);
             initRIHR.setCsvStatus(CsvProcessingStatus.PROCESSING_STARTED.name());
-            initRIHR.setCsvGroupId(interactionId);
+            initRIHR.setCsvGroupId(masterInteractionId);
             if (saveUserDataToInteractions) {
                 Interactions.setUserDetails(initRIHR, request);
             }
@@ -113,13 +112,13 @@ public class CsvService {
             final var execResult = initRIHR.execute(jooqCfg);
             final var end = Instant.now();
             LOG.info(
-                    "REGISTER State NONE : END for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
+                    "REGISTER State NONE : END for zipFileInteraction id : {} tenant id : {} .Time taken : {} milliseconds"
                             + execResult,
-                    interactionId, tenantId,
+                            masterInteractionId, tenantId,
                     Duration.between(start, end).toMillis());
         } catch (final Exception e) {
-            LOG.error("ERROR:: REGISTER State NONE CALL for interaction id : {} tenant id : {}"
-                    + initRIHR.getName() + " initRIHR error", interactionId,
+            LOG.error("ERROR:: REGISTER State NONE CALL for zipFileInteraction id : {} tenant id : {}"
+                    + initRIHR.getName() + " initRIHR error", masterInteractionId,
                     tenantId,
                     e);
         }
@@ -140,7 +139,7 @@ public class CsvService {
         try {
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
-            saveArchiveInteraction(jooqCfg, request, file, tenantId,origin,sftpSessionId);
+            saveArchiveInteraction(jooqCfg, request, file, tenantId,origin,sftpSessionId,masterInteractionId);
             session = engine.session()
                     .withMasterInteractionId(masterInteractionId)
                     .withSessionId(UUID.randomUUID().toString())
