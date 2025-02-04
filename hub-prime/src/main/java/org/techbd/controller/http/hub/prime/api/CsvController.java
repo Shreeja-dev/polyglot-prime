@@ -1,6 +1,8 @@
 package org.techbd.controller.http.hub.prime.api;
 
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.techbd.conf.Configuration;
 import org.techbd.service.CsvService;
 import org.techbd.service.constants.CsvProcessingStatus;
-import org.techbd.service.http.InteractionsFilter;
+import org.techbd.service.http.hub.CustomMultiPartFileRequestWrapper;
 
 import io.micrometer.common.util.StringUtils;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -83,22 +85,31 @@ public class CsvController {
       HttpServletResponse response) throws Exception {
     validateFile(file);
     validateTenantId(tenantId);
+    final HttpServletRequest requestUpdated = new CustomMultiPartFileRequestWrapper(request, file);
+    String interactionId = UUID.randomUUID().toString();
     if (isSync) {
-      return csvService.processZipFile(file, request, response, tenantId, origin, sftpSessionId);
+      return csvService.processZipFile(file, requestUpdated, response, tenantId, origin, sftpSessionId, interactionId);
     } else {
-      String interactionId = InteractionsFilter.getActiveRequestEnc(request).requestId().toString();
-      String statusEndpoint = String.format("/flatfile/csv/Bundle/status?interactionType=ZIP&interactionId=%s", interactionId);
-      return  Map.of(
-        "status", CsvProcessingStatus.RECEIVED.name(),
-        "message", "The file has been received and is being processed asynchronously. Use the provided endpoint to check the status.",
-        "zipFileInteractionId", interactionId,
-        "statusEndpoint", statusEndpoint
-    );
+      String statusEndpoint = String.format("/flatfile/csv/Bundle/status?interactionType=ZIP&interactionId=%s",
+          interactionId);
+      CompletableFuture.runAsync(() -> {
+        try {
+          csvService.processZipFile(file, requestUpdated, response, tenantId, origin, sftpSessionId, interactionId);
+        } catch (Exception e) {
+          log.error("Exception while processing ZIP file with interactionId : {} asynchronously ", interactionId, e);
+        }
+      });
+      return Map.of(
+          "status", CsvProcessingStatus.RECEIVED.name(),
+          "message",
+          "The file has been received and is being processed asynchronously. Use the provided endpoint to check the status.",
+          "zipFileInteractionId", interactionId,
+          "statusEndpoint", statusEndpoint);
     }
   }
 
   @PostMapping(value = { "/flatfile/csv/Bundle/$status", "/flatfile/csv/Bundle/$status/" }, consumes = {
-      MediaType.MULTIPART_FORM_DATA_VALUE })
+      MediaType.APPLICATION_FORM_URLENCODED_VALUE })
   @Async
   public Object handleCsvBundleStatus(
       @Parameter(description = "Parameter to specify the Tenant ID. This is a <b>mandatory</b> parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID, required = true) String tenantId,
@@ -107,13 +118,13 @@ public class CsvController {
       HttpServletRequest request,
       HttpServletResponse response) throws Exception {
 
-      validateTenantId(tenantId);
-      if (StringUtils.isEmpty(interactionId)) {
-        throw new IllegalArgumentException("Interaction ID must be provided");
-      }
-      if (StringUtils.isEmpty(interactionType)) {
-        throw new IllegalArgumentException("Interaction Type must be provided");
-      }
-      return csvService.getInteraction(interactionType,interactionId);
+    validateTenantId(tenantId);
+    if (StringUtils.isEmpty(interactionId)) {
+      throw new IllegalArgumentException("Interaction ID must be provided");
+    }
+    if (StringUtils.isEmpty(interactionType)) {
+      throw new IllegalArgumentException("Interaction Type must be provided");
+    }
+    return csvService.getInteraction(interactionType, interactionId);
   }
 }

@@ -21,6 +21,7 @@ import org.techbd.service.constants.Origin;
 import org.techbd.service.http.Interactions;
 import org.techbd.service.http.InteractionsFilter;
 import org.techbd.udi.UdiPrimeJpaConfig;
+import org.techbd.udi.auto.jooq.ingress.routines.GetValidationResponse;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -133,13 +134,13 @@ public class CsvService {
      * @throws Exception If an error occurs during processing the zip file or CSV
      *                   parsing.
      */
-    public List<Object> processZipFile(final MultipartFile file,final HttpServletRequest request ,HttpServletResponse response ,final String tenantId,String origin,String sftpSessionId) throws Exception {
+    public List<Object> processZipFile(final MultipartFile file,final HttpServletRequest request ,HttpServletResponse response ,
+    final String tenantId,String origin,String sftpSessionId,String masterInteractionId) throws Exception {
         CsvOrchestrationEngine.OrchestrationSession session = null;
         try {
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
             saveArchiveInteraction(jooqCfg, request, file, tenantId,origin,sftpSessionId);
-            final String masterInteractionId = getBundleInteractionId(request);
             session = engine.session()
                     .withMasterInteractionId(masterInteractionId)
                     .withSessionId(UUID.randomUUID().toString())
@@ -160,8 +161,13 @@ public class CsvService {
     }
 
     public Object getInteraction(String interactionType, String interactionId) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getInteraction'");
+        final var dslContext = udiPrimeJpaConfig.dsl();
+        final var jooqCfg = dslContext.configuration();
+        GetValidationResponse getValidationResponse = new GetValidationResponse();
+        getValidationResponse.setInteractionId(interactionId);
+        getValidationResponse.setInteractionType(interactionType);
+        getValidationResponse.execute(jooqCfg);
+        return getValidationResponse.getReturnValue();
     }
     
 }

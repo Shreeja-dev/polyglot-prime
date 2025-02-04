@@ -274,9 +274,8 @@ public class CsvOrchestrationEngine {
 
         private void saveScreeningGroup(final String groupInteractionId, final HttpServletRequest request,
                 final MultipartFile file, final List<FileDetail> fileDetailList, final String tenantId) {
-            final var interactionId = getBundleInteractionId(request);
-            log.info("REGISTER State NONE : BEGIN for inteaction id  : {} tenant id : {}",
-                    interactionId, tenantId);
+            log.info("REGISTER State NONE : BEGIN for zipFileInteractionId: {} csvInteraction id  : {} tenant id : {}",
+                    masterInteractionId,groupInteractionId, tenantId);
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
             final var forwardedAt = OffsetDateTime.now();
@@ -291,7 +290,6 @@ public class CsvOrchestrationEngine {
                                 tenantId)));
                 initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
                 initRIHR.setCsvZipFileName(file.getOriginalFilename());
-                initRIHR.setSourceHubInteractionId(interactionId);
                 final InetAddress localHost = InetAddress.getLocalHost();
                 final String ipAddress = localHost.getHostAddress();
                 initRIHR.setClientIpAddress(ipAddress);
@@ -323,18 +321,18 @@ public class CsvOrchestrationEngine {
                 final var provenance = "%s.saveScreeningGroup"
                         .formatted(CsvService.class.getName());
                 initRIHR.setProvenance(provenance);
-                initRIHR.setCsvGroupId(interactionId);
+                initRIHR.setCsvGroupId(masterInteractionId);
                 final var start = Instant.now();
                 final var execResult = initRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 log.info(
-                        "REGISTER State NONE : END for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
+                        "REGISTER State NONE : END for zipFileInteraction id : {} csvInteractionId:{} tenant id : {} .Time taken : {} milliseconds"
                                 + execResult,
-                        interactionId, tenantId,
+                        masterInteractionId,groupInteractionId, tenantId,
                         Duration.between(start, end).toMillis());
             } catch (final Exception e) {
-                log.error("ERROR:: REGISTER State NONE CALL for interaction id : {} tenant id : {}"
-                        + initRIHR.getName() + " initRIHR error", interactionId,
+                log.error("ERROR:: REGISTER State NONE CALL for zipFileinteraction id : {}  csvInteractionId: {} tenant id : {}"
+                        + initRIHR.getName() + " initRIHR error", masterInteractionId,groupInteractionId,
                         tenantId,
                         e);
             }
@@ -373,9 +371,8 @@ public class CsvOrchestrationEngine {
                 final String masterInteractionId,
                 final String groupInteractionId,
                 final String tenantId,List<FileDetail> fileDetails) {
-            final var interactionId = getBundleInteractionId(request);
-            log.info("REGISTER State VALIDATION : BEGIN for inteaction id  : {} tenant id : {}",
-                    interactionId, tenantId);
+            log.info("REGISTER State VALIDATION : BEGIN for zipFileinteraction id  : {} csvInteractionId: {} tenant id : {}",
+                    masterInteractionId,groupInteractionId, tenantId);
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
             final var createdAt = OffsetDateTime.now();
@@ -402,7 +399,7 @@ public class CsvOrchestrationEngine {
                 final var provenance = "%s.saveValidationResults"
                         .formatted(CsvService.class.getName());
                 initRIHR.setProvenance(provenance);
-                initRIHR.setCsvGroupId(interactionId);
+                initRIHR.setCsvGroupId(masterInteractionId);
                 for (final FileDetail fileDetail : fileDetails) {
                     switch (fileDetail.fileType()) {
                         case FileType.DEMOGRAPHIC_DATA -> {
@@ -423,13 +420,13 @@ public class CsvOrchestrationEngine {
                 final var execResult = initRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 log.info(
-                        "REGISTER State VALIDATION : END for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
+                        "REGISTER State VALIDATION : END for zipFileInteraction id : {} csvInteractionId: {} tenant id : {} .Time taken : {} milliseconds"
                                 + execResult,
-                        interactionId, tenantId,
+                        masterInteractionId,groupInteractionId, tenantId,
                         Duration.between(start, end).toMillis());
             } catch (final Exception e) {
                 log.error("ERROR:: REGISTER State VALIDATION CALL for interaction id : {} tenant id : {}"
-                        + initRIHR.getName() + " initRIHR error", interactionId,
+                        + initRIHR.getName() + " initRIHR error", masterInteractionId,groupInteractionId,
                         tenantId,
                         e);
             }
