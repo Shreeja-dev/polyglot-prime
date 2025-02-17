@@ -79,6 +79,9 @@ public class CsvOrchestrationEngine {
 
     public synchronized void orchestrate(@NotNull final OrchestrationSession... sessions) throws Exception {
         for (final OrchestrationSession session : sessions) {
+            if (null == this.sessions) {
+                this.sessions = new ArrayList<>();
+            }
             this.sessions.add(session);
             session.validate();
         }
