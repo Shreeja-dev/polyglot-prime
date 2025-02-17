@@ -62,20 +62,15 @@ import lib.aide.vfs.VfsIngressConsumer;
  */
 @Component
 public class CsvOrchestrationEngine {
-    private final List<OrchestrationSession> sessions;
-    private final AppConfig appConfig;
-    private final VfsCoreService vfsCoreService;
-    private final UdiPrimeJpaConfig udiPrimeJpaConfig;
+    private List<OrchestrationSession> sessions;
+    private AppConfig appConfig;
+    private VfsCoreService vfsCoreService;
+    private UdiPrimeJpaConfig udiPrimeJpaConfig;
     private static final Logger log = LoggerFactory.getLogger(CsvOrchestrationEngine.class);
     private static final Pattern FILE_PATTERN = Pattern.compile(
             "(DEMOGRAPHIC_DATA|QE_ADMIN_DATA|SCREENING)_(.+)");
 
-    public CsvOrchestrationEngine(final AppConfig appConfig, final VfsCoreService vfsCoreService,
-            final UdiPrimeJpaConfig udiPrimeJpaConfig, final FHIRService fhirService) {
-        this.sessions = new ArrayList<>();
-        this.appConfig = appConfig;
-        this.vfsCoreService = vfsCoreService;
-        this.udiPrimeJpaConfig = udiPrimeJpaConfig;
+    public CsvOrchestrationEngine() {
     }
 
     public List<OrchestrationSession> getSessions() {
