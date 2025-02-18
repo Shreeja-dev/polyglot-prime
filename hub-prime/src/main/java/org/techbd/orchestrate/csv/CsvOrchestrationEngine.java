@@ -65,8 +65,8 @@ public class CsvOrchestrationEngine {
     private AppConfig appConfig;
     private VfsCoreService vfsCoreService;
     private UdiPrimeJpaConfig udiPrimeJpaConfig;
-    private String inboundPath;
-    private String ingressFolder;
+    private Map<String,String> requestParamters;
+
 
     private static final Logger log = LoggerFactory.getLogger(CsvOrchestrationEngine.class);
     private static final Pattern FILE_PATTERN = Pattern.compile(
@@ -97,28 +97,22 @@ public class CsvOrchestrationEngine {
     public UdiPrimeJpaConfig getUdiPrimeJpaConfig() {
         return udiPrimeJpaConfig;
     }
-
+    public Map<String, String> getRequestParamters() {
+        if (null == requestParamters) {
+            requestParamters = new HashMap<>();
+        }
+        return requestParamters;
+    }
+    public void setRequestParamters(Map<String, String> requestParamters) {
+        this.requestParamters = requestParamters;
+    }
     public void setUdiPrimeJpaConfig(UdiPrimeJpaConfig udiPrimeJpaConfig) {
         this.udiPrimeJpaConfig = udiPrimeJpaConfig;
     }
     public List<OrchestrationSession> getSessions() {
         return Collections.unmodifiableList(sessions);
     }
-    public String getInboundPath() {
-        return inboundPath;
-    }
 
-    public void setInboundPath(String inboundPath) {
-        this.inboundPath = inboundPath;
-    }
-
-    public String getIngressFolder() {
-        return ingressFolder;
-    }
-
-    public void setIngressFolder(String ingressFolder) {
-        this.ingressFolder = ingressFolder;
-    }
     public synchronized void orchestrate(@NotNull final OrchestrationSession... sessions) throws Exception {
         for (final OrchestrationSession session : sessions) {
             if (null == this.sessions) {
@@ -324,7 +318,6 @@ public class CsvOrchestrationEngine {
                 initRIHR.setInteractionId(groupInteractionId);
                 initRIHR.setGroupHubInteractionId(groupInteractionId);
                 initRIHR.setSourceHubInteractionId(masterInteractionId);
-                initRIHR.setInteractionKey(request.getRequestURI());
                 initRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
                         Map.of("nature", "Original Flat File CSV", "tenant_id",
                                 tenantId)));
@@ -334,7 +327,13 @@ public class CsvOrchestrationEngine {
                 final InetAddress localHost = InetAddress.getLocalHost();
                 final String ipAddress = localHost.getHostAddress();
                 initRIHR.setClientIpAddress(ipAddress);
-                initRIHR.setUserAgent(request.getHeader("User-Agent"));
+                if (null != request) {
+                    initRIHR.setUserAgent(request.getHeader("User-Agent"));
+                    initRIHR.setInteractionKey(request.getRequestURI());
+                } else {
+                    initRIHR.setUserAgent(requestParamters.get("User-Agent"));
+                    initRIHR.setInteractionKey(requestParamters.get("Request-Uri"));
+                }
                 for (final FileDetail fileDetail : fileDetailList) {
                     switch (fileDetail.fileType()) {
                         case FileType.DEMOGRAPHIC_DATA -> {
@@ -423,7 +422,12 @@ public class CsvOrchestrationEngine {
                 initRIHR.setInteractionId(groupInteractionId);
                 initRIHR.setGroupHubInteractionId(groupInteractionId);
                 initRIHR.setSourceHubInteractionId(masterInteractionId);
-                initRIHR.setInteractionKey(request.getRequestURI());
+                
+                if (null != request) {
+                    initRIHR.setInteractionKey(request.getRequestURI());
+                } else {
+                    initRIHR.setInteractionKey(requestParamters.get("Request-Uri"));
+                }
                 initRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
                         Map.of("nature", "CSV Validation Result", "tenant_id",
                                 tenantId)));
@@ -468,7 +472,11 @@ public class CsvOrchestrationEngine {
             final var initRIHR = new SatInteractionCsvRequestUpserted();
             try {
                 initRIHR.setInteractionId(masterInteractionId);
-                initRIHR.setUri(request.getRequestURI());
+                if (null != request) {
+                    initRIHR.setUri(request.getRequestURI());
+                } else {
+                    initRIHR.setUri(requestParamters.get("Request-Uri"));
+                }
                 initRIHR.setNature("Update Zip File Payload");
                 initRIHR.setCreatedAt(createdAt);
                 initRIHR.setCreatedBy(CsvService.class.getName());
@@ -528,16 +536,14 @@ public class CsvOrchestrationEngine {
                 throws Exception {
 
             Map<String, Object> result = new HashMap<>();
-
-            final String userAgent = request.getHeader("User-Agent");
             final Device device = Device.INSTANCE;
             result.put("resourceType", "OperationOutcome");
             result.put("zipFileInteractionId", masterInteractionId);
             result.put("originalFileName", originalFileName);
             result.put("validationResults", combinedValidationResult);
-            result.put("requestUri", request.getRequestURI());
+            result.put("requestUri", null != requestParamters.get("Request-Uri") ? requestParamters.get("Request-Uri") : request.getRequestURI());
             result.put("zipFileSize", zipFileSize);
-            result.put("userAgent", userAgent);
+            result.put("userAgent", null != requestParamters.get("User-Agent") ? requestParamters.get("User-Agent") : request.getHeader("User-Agent"));
             result.put("device", Map.of(
                     "deviceId", device.deviceId(),
                     "deviceName", device.deviceName()));
