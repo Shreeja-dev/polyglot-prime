@@ -43,7 +43,6 @@ import org.techbd.service.CsvService;
 import org.techbd.service.VfsCoreService;
 import org.techbd.service.http.InteractionsFilter;
 import org.techbd.service.http.hub.prime.AppConfig;
-import org.techbd.service.http.hub.prime.api.FHIRService;
 import org.techbd.udi.UdiPrimeJpaConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 import org.techbd.udi.auto.jooq.ingress.routines.SatInteractionCsvRequestUpserted;
@@ -66,17 +65,60 @@ public class CsvOrchestrationEngine {
     private AppConfig appConfig;
     private VfsCoreService vfsCoreService;
     private UdiPrimeJpaConfig udiPrimeJpaConfig;
+    private String inboundPath;
+    private String ingressFolder;
+
     private static final Logger log = LoggerFactory.getLogger(CsvOrchestrationEngine.class);
     private static final Pattern FILE_PATTERN = Pattern.compile(
             "(DEMOGRAPHIC_DATA|QE_ADMIN_DATA|SCREENING)_(.+)");
 
     public CsvOrchestrationEngine() {
     }
+    public void setSessions(List<OrchestrationSession> sessions) {
+        this.sessions = sessions;
+    }
 
+    public AppConfig getAppConfig() {
+        return appConfig;
+    }
+
+    public void setAppConfig(AppConfig appConfig) {
+        this.appConfig = appConfig;
+    }
+
+    public VfsCoreService getVfsCoreService() {
+        return vfsCoreService;
+    }
+
+    public void setVfsCoreService(VfsCoreService vfsCoreService) {
+        this.vfsCoreService = vfsCoreService;
+    }
+
+    public UdiPrimeJpaConfig getUdiPrimeJpaConfig() {
+        return udiPrimeJpaConfig;
+    }
+
+    public void setUdiPrimeJpaConfig(UdiPrimeJpaConfig udiPrimeJpaConfig) {
+        this.udiPrimeJpaConfig = udiPrimeJpaConfig;
+    }
     public List<OrchestrationSession> getSessions() {
         return Collections.unmodifiableList(sessions);
     }
+    public String getInboundPath() {
+        return inboundPath;
+    }
 
+    public void setInboundPath(String inboundPath) {
+        this.inboundPath = inboundPath;
+    }
+
+    public String getIngressFolder() {
+        return ingressFolder;
+    }
+
+    public void setIngressFolder(String ingressFolder) {
+        this.ingressFolder = ingressFolder;
+    }
     public synchronized void orchestrate(@NotNull final OrchestrationSession... sessions) throws Exception {
         for (final OrchestrationSession session : sessions) {
             if (null == this.sessions) {
