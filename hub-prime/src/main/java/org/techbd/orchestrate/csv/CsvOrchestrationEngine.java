@@ -302,7 +302,7 @@ public class CsvOrchestrationEngine {
 
             // Trigger CSV processing and validation
             this.validationResults = processScreenings(masterInteractionId, intiatedAt, originalFilename, tenantId);
-            saveCombinedValidationResults(validationResults, masterInteractionId);
+           // saveCombinedValidationResults(validationResults, masterInteractionId); //TODO phase1 mirth connect- uncomment and fix  
         }
 
         private void saveScreeningGroup(final String groupInteractionId, final HttpServletRequest request,
