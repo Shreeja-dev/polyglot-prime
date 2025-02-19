@@ -1,0 +1,4 @@
+-server
+-Xmx2048m
+-Djava.awt.headless=false
+-Dapple.awt.UIElement=true

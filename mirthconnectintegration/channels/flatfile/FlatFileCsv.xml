@@ -1,0 +1,551 @@
+<channel version="4.5.0">
+  <id>2946693c-0e20-4296-a903-2949dc328100</id>
+  <nextMetaDataId>2</nextMetaDataId>
+  <name>FlatFileCsv</name>
+  <description></description>
+  <revision>56</revision>
+  <sourceConnector version="4.5.0">
+    <metaDataId>0</metaDataId>
+    <name>sourceConnector</name>
+    <properties class="com.mirth.connect.connectors.http.HttpReceiverProperties" version="4.5.0">
+      <pluginProperties>
+        <com.mirth.connect.plugins.httpauth.NoneHttpAuthProperties version="4.5.0">
+  <authType>NONE</authType>
+        </com.mirth.connect.plugins.httpauth.NoneHttpAuthProperties>
+      </pluginProperties>
+      <listenerConnectorProperties version="4.5.0">
+        <host>0.0.0.0</host>
+        <port>1222</port>
+      </listenerConnectorProperties>
+      <sourceConnectorProperties version="4.5.0">
+        <responseVariable>finalResponse</responseVariable>
+        <respondAfterProcessing>true</respondAfterProcessing>
+        <processBatch>false</processBatch>
+        <firstResponse>false</firstResponse>
+        <processingThreads>1</processingThreads>
+        <resourceIds class="linked-hash-map">
+          <entry>
+            <string>Default Resource</string>
+            <string>[Default Resource]</string>
+          </entry>
+        </resourceIds>
+        <queueBufferSize>1000</queueBufferSize>
+      </sourceConnectorProperties>
+      <xmlBody>false</xmlBody>
+      <parseMultipart>true</parseMultipart>
+      <includeMetadata>false</includeMetadata>
+      <binaryMimeTypes>application/.*(?&lt;!json|xml)$|image/.*|video/.*|audio/.*|application/zip</binaryMimeTypes>
+      <binaryMimeTypesRegex>true</binaryMimeTypesRegex>
+      <responseContentType>text/plain</responseContentType>
+      <responseDataTypeBinary>false</responseDataTypeBinary>
+      <responseStatusCode>201</responseStatusCode>
+      <responseHeaders class="linked-hash-map"/>
+      <responseHeadersVariable></responseHeadersVariable>
+      <useResponseHeadersVariable>false</useResponseHeadersVariable>
+      <charset>DEFAULT_ENCODING</charset>
+      <contextPath>/uploadzip</contextPath>
+      <timeout>30000</timeout>
+      <staticResources/>
+    </properties>
+    <transformer version="4.5.0">
+      <elements>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep version="4.5.0">
+          <name>Step1 : Store File To Inbound Folder</name>
+          <sequenceNumber>0</sequenceNumber>
+          <enabled>true</enabled>
+          <script>logger.info(&quot;Fetching AppConfig from Global Map&quot;);
+var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
+var fhirProfileUrlHeader = $(&apos;headers&apos;).getHeader(&quot;FHIR-STRUCT-DEFN-PROFILE-URI&quot;);
+var zipFileInteractionId = java.util.UUID.randomUUID().toString();
+var requestParameters = getRequestParameters();
+uploadFileToInboundFolder();
+logger.info(&quot;Invoke validation - BEGIN&quot;);
+var file = createMultipartFile();
+logger.info(&quot;multi part file created &quot; + file);
+saveArchiveInteraction(zipFileInteractionId, file); //TODO - implement the saving
+var validationResults = invokeValidation(zipFileInteractionId, file,tenantId,requestParameters);
+logger.info(&quot;Invoke validation - END&quot;);
+responseMap.put(&quot;finalResponse&quot;,validationResults);
+return;
+
+function saveArchiveInteraction(zipFileInteractionId, file){
+	//TODO - CHECK AND IMPLEMENT  CsvService:saveArchiveInteraction
+	
+}
+function invokeValidation(zipFileInteractionId, file,tenantId,requestParameters){
+	
+	logger.info(&quot;invokeValidation &quot; + tenantId);
+	var engine = new Packages.org.techbd.orchestrate.csv.CsvOrchestrationEngine();
+	var appConfig = globalMap.get(&quot;appConfig&quot;);
+	var vfsCoreService = new Packages.org.techbd.service.VfsCoreService();
+	engine.setAppConfig(appConfig);	
+	logger.info(&quot;vfscoreservice&quot;+vfsCoreService);
+	engine.setVfsCoreService(vfsCoreService);
+	engine.setRequestParamters(requestParameters);
+     var session = engine.session()
+         .withMasterInteractionId(zipFileInteractionId)
+         .withSessionId(java.util.UUID.randomUUID().toString())
+         .withTenantId(tenantId)
+         .withGenerateBundle(true)
+         .withFile(file)
+         //.withRequest(request) 
+         .build();
+     logger.info(&quot;session created &quot;);    
+     engine.orchestrate(session);
+       logger.info(&quot;after orchestration &quot;);    
+     return session.getValidationResults();
+
+}
+function createMultipartFile() {
+    logger.info(&quot;createMultipartFile -BEGIN &quot;);
+    var fileContent  = getUploadedFileContent(connectorMessage);
+    var fileName = getUploadedFileName(connectorMessage);
+
+    if (!fileContent) {
+        logger.error(&quot;File content is empty or undefined!&quot;);
+        return null;
+    }
+
+    var MultipartFile = function(fileContent, fileName) {
+        this.fileContent = fileContent;
+        this.fileName = fileName;
+
+        this.getName = function() {
+            return fileName;
+        };
+
+        this.getOriginalFilename = function() {
+            return fileName;
+        };
+
+        this.getSize = function() {
+            return fileContent.length;
+        };
+
+        this.getBytes = function() {
+            return fileContent;
+        };
+
+        this.getInputStream = function() {
+            var ByteArrayInputStream = Packages.java.io.ByteArrayInputStream;
+            return new ByteArrayInputStream(fileContent);
+        };
+
+        this.transferTo = function(destinationFile) {
+            var FileOutputStream = Packages.java.io.FileOutputStream;
+            var outputStream = new FileOutputStream(destinationFile);
+            outputStream.write(fileContent);
+            outputStream.close();
+        };
+    };
+    var file = new MultipartFile(fileContent, fileName);
+    logger.info(&quot;MultipartFileCreated successfully &quot;+file);
+    return file;
+}
+
+function getUploadedFileName(connectorMessage) {
+    var rawData = connectorMessage.getRawData();
+    var filenameMatch = rawData.match(/filename=&quot;([^&quot;]+)&quot;/);
+    var uploadedFileName = &quot;unknown.zip&quot;;
+    if (filenameMatch &amp;&amp; filenameMatch[1]) {
+        uploadedFileName = filenameMatch[1];
+    }
+    return uploadedFileName;
+}
+
+function getUploadedFileContent(connectorMessage) {
+    try {
+        var rawData = connectorMessage.getRawData();
+        if (rawData) {
+            return rawData.getBytes(&quot;ISO-8859-1&quot;);
+        } else {
+            logger.error(&quot;Raw data is undefined or null.&quot;);
+            return null;
+        }
+    } catch (e) {
+        logger.error(&quot;Error extracting file content: &quot; + e.message);
+        return null;
+    }
+}
+function getRequestParameters() {
+    var requestParameters = new Packages.java.util.HashMap();
+    var userAgent = &quot;testuseragent&quot;; //TODO - READ FROM CHANNEL MAP /GLOBAL MAP /REQUEST HEADERS
+    var requestUri = &quot;/flatfile/csv/Bundle/$validate&quot;; //TODO - READ FROM CHANNEL MAP /GLOBAL MAP /REQUEST HEADERS
+    requestParameters.put(&quot;User-Agent&quot;, userAgent);
+    requestParameters.put(&quot;Request-Uri&quot;, requestUri);
+    return requestParameters;
+}
+
+
+function uploadFileToInboundFolder() {
+	var File = Packages.java.io.File;
+	var FileOutputStream = Packages.java.io.FileOutputStream;
+	var FileInputStream = Packages.java.io.FileInputStream;
+	var ZipFile = Packages.java.util.zip.ZipFile;
+	var ZipEntry = Packages.java.util.zip.ZipEntry;
+	var BufferedOutputStream = Packages.java.io.BufferedOutputStream;
+	var inboundFolder = &quot;D:/techbyDesign/flatFile/inbound/&quot;; // TODO-move to environment variable
+	var ingressFolder = &quot;D:/techbyDesign/flatFile/ingress/&quot;; // TODO-move to environment variable&apos;
+	var uploadedFileContent  = getUploadedFileContent(connectorMessage);
+	var uploadedFileName = getUploadedFileName(connectorMessage);
+	var uploadedFileFullPath  = inboundFolder+uploadedFileName;
+
+	try {	
+    		var uploadFolder = new File(inboundFolder);
+    		if (!uploadFolder.exists()) {
+        		logger.info(&quot;Upload folder does not exist. Creating it...&quot;);
+        		uploadFolder.mkdirs();
+        		logger.info(&quot;Upload folder created: &quot; + inboundFolder);
+    		}
+    		uploadFolder.setWritable(true);
+    		logger.info(&quot;Write permission granted to the upload folder.&quot;);
+    
+    		if (!uploadedFileContent || uploadedFileContent.length === 0) {
+        		logger.error(&quot;No valid ZIP file found in the uploaded data.&quot;);
+        		throw new Error(&quot;Failed to extract ZIP file from input data.&quot;);
+    		}
+    		logger.info(&quot;Starting to save uploaded ZIP file...&quot;);
+    		var uploadedFile = new File(uploadedFileFullPath);
+    		var fileOutputStream = new FileOutputStream(uploadedFile);
+    		fileOutputStream.write(uploadedFileContent);
+    		fileOutputStream.close();
+	} catch (e) {
+    		logger.error(&quot;Error during ZIP file processing: &quot; + e.message);
+    		throw e;
+	}
+}</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+      </elements>
+      <inboundTemplate encoding="base64"></inboundTemplate>
+      <outboundTemplate encoding="base64"></outboundTemplate>
+      <inboundDataType>XML</inboundDataType>
+      <outboundDataType>RAW</outboundDataType>
+      <inboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="4.5.0">
+        <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="4.5.0">
+          <stripNamespaces>false</stripNamespaces>
+        </serializationProperties>
+        <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="4.5.0">
+          <splitType>Element_Name</splitType>
+          <elementName></elementName>
+          <level>1</level>
+          <query></query>
+          <batchScript></batchScript>
+        </batchProperties>
+      </inboundProperties>
+      <outboundProperties class="com.mirth.connect.plugins.datatypes.raw.RawDataTypeProperties" version="4.5.0">
+        <batchProperties class="com.mirth.connect.plugins.datatypes.raw.RawBatchProperties" version="4.5.0">
+          <splitType>JavaScript</splitType>
+          <batchScript></batchScript>
+        </batchProperties>
+      </outboundProperties>
+    </transformer>
+    <filter version="4.5.0">
+      <elements/>
+    </filter>
+    <transportName>HTTP Listener</transportName>
+    <mode>SOURCE</mode>
+    <enabled>true</enabled>
+    <waitForPrevious>true</waitForPrevious>
+  </sourceConnector>
+  <destinationConnectors>
+    <connector version="4.5.0">
+      <metaDataId>1</metaDataId>
+      <name>Destination 1</name>
+      <properties class="com.mirth.connect.connectors.vm.VmDispatcherProperties" version="4.5.0">
+        <pluginProperties/>
+        <destinationConnectorProperties version="4.5.0">
+          <queueEnabled>false</queueEnabled>
+          <sendFirst>false</sendFirst>
+          <retryIntervalMillis>10000</retryIntervalMillis>
+          <regenerateTemplate>false</regenerateTemplate>
+          <retryCount>0</retryCount>
+          <rotate>false</rotate>
+          <includeFilterTransformer>false</includeFilterTransformer>
+          <threadCount>1</threadCount>
+          <threadAssignmentVariable></threadAssignmentVariable>
+          <validateResponse>false</validateResponse>
+          <resourceIds class="linked-hash-map">
+            <entry>
+              <string>Default Resource</string>
+              <string>[Default Resource]</string>
+            </entry>
+          </resourceIds>
+          <queueBufferSize>1000</queueBufferSize>
+          <reattachAttachments>true</reattachAttachments>
+        </destinationConnectorProperties>
+        <channelId>none</channelId>
+        <channelTemplate>${message.encodedData}</channelTemplate>
+        <mapVariables/>
+      </properties>
+      <transformer version="4.5.0">
+        <elements>
+          <com.mirth.connect.plugins.javascriptstep.JavaScriptStep version="4.5.0">
+            <sequenceNumber>0</sequenceNumber>
+            <enabled>true</enabled>
+            <script>// Import required Java classes
+var File = Packages.java.io.File;
+var FileOutputStream = Packages.java.io.FileOutputStream;
+var FileInputStream = Packages.java.io.FileInputStream;
+var ZipInputStream = Packages.java.util.zip.ZipInputStream;
+var ZipEntry = Packages.java.util.zip.ZipEntry;
+var BufferedOutputStream = Packages.java.io.BufferedOutputStream;
+
+// Define upload and extraction folder paths
+var uploadFolderPath = &quot;D:/CITR/TechD/MirthConnect/FHIR/uploadfolder&quot;;
+var extractionFolderPath = &quot;D:/CITR/TechD/MirthConnect/FHIR/unzipped_files&quot;;
+var savedZipFilePath = uploadFolderPath + &quot;/uploaded_file.zip&quot;;
+
+try {
+    // Ensure the upload folder exists and grant write permission if it does not
+    var uploadFolder = new File(uploadFolderPath);
+
+    // Check if upload folder exists, create it if necessary
+    if (!uploadFolder.exists()) {
+        logger.info(&quot;Upload folder does not exist. Creating it...&quot;);
+        uploadFolder.mkdirs(); // Create the folder if it doesn&apos;t exist
+        logger.info(&quot;Upload folder created: &quot; + uploadFolderPath);
+    }
+
+    // Grant write permission to the upload folder
+    uploadFolder.setWritable(true);
+    logger.info(&quot;Write permission granted to the upload folder.&quot;);
+
+    // Step 1: Save the Uploaded File
+    var binaryContent = connectorMessage.getRawData().getBytes(&quot;ISO-8859-1&quot;);
+    if (!binaryContent || binaryContent.length === 0) {
+        logger.error(&quot;No valid ZIP file found in the uploaded data.&quot;);
+        throw new Error(&quot;Failed to extract ZIP file from input data.&quot;);
+    }
+
+    logger.info(&quot;Starting to save uploaded ZIP file...&quot;);
+    var uploadedFile = new File(savedZipFilePath);
+    var fileOutputStream = new FileOutputStream(uploadedFile);
+    fileOutputStream.write(binaryContent);
+    fileOutputStream.close();
+    logger.info(&quot;Successfully saved uploaded file to: &quot; + savedZipFilePath);
+
+    // Step 2: Extract the ZIP File
+    extractZipFile(savedZipFilePath, extractionFolderPath);
+    logger.info(&quot;ZIP file extraction completed successfully to folder: &quot; + extractionFolderPath);
+
+} catch (e) {
+    logger.error(&quot;Error during ZIP file processing: &quot; + e.message);
+    throw e;
+}
+
+// Function to Extract ZIP File
+function extractZipFile(zipFilePath, outputFolderPath) {
+    var zipFile = new File(zipFilePath);
+    var outputFolder = new File(outputFolderPath);
+
+    // Log paths for verification
+    logger.info(&quot;ZIP File Path: &quot; + zipFilePath);
+    logger.info(&quot;Output Folder Path: &quot; + outputFolderPath);
+
+    // Ensure output folder exists
+    if (!outputFolder.exists()) {
+        logger.info(&quot;Output folder does not exist. Creating it...&quot;);
+        outputFolder.mkdirs();
+        logger.info(&quot;Output folder created: &quot; + outputFolderPath);
+    }
+    outputFolder.setWritable(true);
+
+    // Check if the ZIP file exists and is not empty
+    if (!zipFile.exists() || zipFile.length() === 0) {
+        logger.error(&quot;The ZIP file does not exist or is empty.&quot;);
+        throw new Error(&quot;ZIP file is missing or empty.&quot;);
+    }
+
+    // Log the size of the uploaded file for debugging
+    logger.info(&quot;Size of the uploaded file: &quot; + zipFile.length() + &quot; bytes.&quot;);
+
+    // Initialize ZipInputStream
+    var fileInputStream = new FileInputStream(zipFile);
+    var zipInputStream = new ZipInputStream(fileInputStream);
+
+    // Check if the ZipInputStream is correctly initialized
+    logger.info(&quot;ZipInputStream opened for file: &quot; + zipFilePath);
+
+    var zipEntry;
+
+    // Add debugging before entering the while loop
+    logger.info(&quot;Attempting to get next entry from ZIP file...&quot;);
+
+    // Check if we get an entry at all
+    zipEntry = zipInputStream.getNextEntry();
+    if (zipEntry === null) {
+        logger.error(&quot;No entries found in the ZIP file.&quot;);
+
+        // Manually list the ZIP file contents using ZipFile for debugging
+        try {
+            var javaZipFile = new java.util.zip.ZipFile(zipFile);
+            var entries = javaZipFile.entries();
+            if (!entries.hasMoreElements()) {
+                logger.error(&quot;ZIP file contains no entries.&quot;);
+            } else {
+                while (entries.hasMoreElements()) {
+                    var entry = entries.nextElement();
+                    logger.info(&quot;Manually found entry: &quot; + entry.getName());
+                }
+            }
+            javaZipFile.close();
+        } catch (e) {
+            logger.error(&quot;Error while manually checking ZIP file entries: &quot; + e.message);
+        }
+
+        throw new Error(&quot;ZIP file contains no entries.&quot;);
+    }
+
+    // Log the first entry name for debugging
+    logger.info(&quot;First ZIP entry found: &quot; + zipEntry.getName());
+
+    // Start extracting entries
+    logger.info(&quot;Starting extraction process...&quot;);
+    do {
+        // Log the entry name
+        logger.info(&quot;Found ZIP entry: &quot; + zipEntry.getName());
+
+        // Handle directories
+        if (zipEntry.isDirectory()) {
+            var newDir = new File(outputFolderPath, zipEntry.getName());
+            if (!newDir.exists()) {
+                newDir.mkdirs();
+                logger.info(&quot;Created directory: &quot; + newDir.getAbsolutePath());
+            }
+        } else {
+            // Handle files
+            var newFile = new File(outputFolderPath, zipEntry.getName());
+            var parentDir = newFile.getParentFile();
+            if (!parentDir.exists()) {
+                parentDir.mkdirs();
+                logger.info(&quot;Created parent directory: &quot; + parentDir.getAbsolutePath());
+            }
+
+            // Write content to the new file
+            var buffer = new java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 4096);
+            var bufferedOutputStream = new BufferedOutputStream(new FileOutputStream(newFile));
+            var bytesRead;
+            while ((bytesRead = zipInputStream.read(buffer)) !== -1) {
+                bufferedOutputStream.write(buffer, 0, bytesRead);
+            }
+            bufferedOutputStream.close();
+            logger.info(&quot;Extracted file: &quot; + newFile.getAbsolutePath());
+        }
+
+        // Close the current ZIP entry
+        zipInputStream.closeEntry();
+
+        // Attempt to get the next entry
+        zipEntry = zipInputStream.getNextEntry();
+    } while (zipEntry !== null);
+
+    // Clean up streams
+    zipInputStream.close();
+    fileInputStream.close();
+    logger.info(&quot;All ZIP entries have been extracted successfully.&quot;);
+}</script>
+          </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+        </elements>
+        <inboundTemplate encoding="base64"></inboundTemplate>
+        <outboundTemplate encoding="base64"></outboundTemplate>
+        <inboundDataType>RAW</inboundDataType>
+        <outboundDataType>RAW</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.raw.RawDataTypeProperties" version="4.5.0">
+          <batchProperties class="com.mirth.connect.plugins.datatypes.raw.RawBatchProperties" version="4.5.0">
+            <splitType>JavaScript</splitType>
+            <batchScript></batchScript>
+          </batchProperties>
+        </inboundProperties>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.raw.RawDataTypeProperties" version="4.5.0">
+          <batchProperties class="com.mirth.connect.plugins.datatypes.raw.RawBatchProperties" version="4.5.0">
+            <splitType>JavaScript</splitType>
+            <batchScript></batchScript>
+          </batchProperties>
+        </outboundProperties>
+      </transformer>
+      <responseTransformer version="4.5.0">
+        <elements/>
+        <inboundDataType>RAW</inboundDataType>
+        <outboundDataType>RAW</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.raw.RawDataTypeProperties" version="4.5.0">
+          <batchProperties class="com.mirth.connect.plugins.datatypes.raw.RawBatchProperties" version="4.5.0">
+            <splitType>JavaScript</splitType>
+            <batchScript></batchScript>
+          </batchProperties>
+        </inboundProperties>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.raw.RawDataTypeProperties" version="4.5.0">
+          <batchProperties class="com.mirth.connect.plugins.datatypes.raw.RawBatchProperties" version="4.5.0">
+            <splitType>JavaScript</splitType>
+            <batchScript></batchScript>
+          </batchProperties>
+        </outboundProperties>
+      </responseTransformer>
+      <filter version="4.5.0">
+        <elements/>
+      </filter>
+      <transportName>Channel Writer</transportName>
+      <mode>DESTINATION</mode>
+      <enabled>true</enabled>
+      <waitForPrevious>true</waitForPrevious>
+    </connector>
+  </destinationConnectors>
+  <preprocessingScript>// Modify the message variable below to pre process data
+return message;</preprocessingScript>
+  <postprocessingScript>// This script executes once after a message has been processed
+// Responses returned from here will be stored as &quot;Postprocessor&quot; in the response map
+return;</postprocessingScript>
+  <deployScript>// This script executes once when the channel is deployed
+// You only have access to the globalMap and globalChannelMap here to persist data
+return;</deployScript>
+  <undeployScript>// This script executes once when the channel is undeployed
+// You only have access to the globalMap and globalChannelMap here to persist data
+return;</undeployScript>
+  <properties version="4.5.0">
+    <clearGlobalChannelMap>true</clearGlobalChannelMap>
+    <messageStorageMode>DEVELOPMENT</messageStorageMode>
+    <encryptData>false</encryptData>
+    <encryptAttachments>false</encryptAttachments>
+    <encryptCustomMetaData>false</encryptCustomMetaData>
+    <removeContentOnCompletion>false</removeContentOnCompletion>
+    <removeOnlyFilteredOnCompletion>false</removeOnlyFilteredOnCompletion>
+    <removeAttachmentsOnCompletion>false</removeAttachmentsOnCompletion>
+    <initialState>STARTED</initialState>
+    <storeAttachments>true</storeAttachments>
+    <metaDataColumns>
+      <metaDataColumn>
+        <name>SOURCE</name>
+        <type>STRING</type>
+        <mappingName>mirth_source</mappingName>
+      </metaDataColumn>
+      <metaDataColumn>
+        <name>TYPE</name>
+        <type>STRING</type>
+        <mappingName>mirth_type</mappingName>
+      </metaDataColumn>
+    </metaDataColumns>
+    <attachmentProperties version="4.5.0">
+      <type>None</type>
+      <properties/>
+    </attachmentProperties>
+    <resourceIds class="linked-hash-map">
+      <entry>
+        <string>Default Resource</string>
+        <string>[Default Resource]</string>
+      </entry>
+    </resourceIds>
+  </properties>
+  <exportData>
+    <metadata>
+      <enabled>true</enabled>
+      <lastModified>
+        <time>1739943609587</time>
+        <timezone>Asia/Calcutta</timezone>
+      </lastModified>
+      <pruningSettings>
+        <archiveEnabled>true</archiveEnabled>
+        <pruneErroredMessages>false</pruneErroredMessages>
+      </pruningSettings>
+      <userId>1</userId>
+    </metadata>
+  </exportData>
+</channel>
