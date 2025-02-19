@@ -1,0 +1,43 @@
+{
+	"info": {
+		"_postman_id": "524602ec-a86a-455d-8661-b83ab0b2c2c6",
+		"name": "FlatFileCsvBundleValidate",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "41784900"
+	},
+	"item": [
+		{
+			"name": "Upload Zip API",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": "/C:/Users/Shreeja Jobin/Downloads/SingleSetWith2Encounter.zip"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:1222/flatfile/csv/Bundle/$validate/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "1222",
+					"path": [
+						"flatfile",
+						"csv",
+						"Bundle",
+						"$validate",
+						""
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
