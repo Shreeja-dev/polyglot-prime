@@ -59,6 +59,7 @@ mirthconnectintegration/channels/fhir/bundle/source/transformerscripts/step1.js
 mirthconnectintegration/channels/fhir/bundle/source/transformerscripts/step2.js
 mirthconnectintegration/channels/fhir/bundle/destination/transformerscripts/step1.js
 mirthconnectintegration/channels/fhir/bundle/destination/transformerscripts/step2.js
+mirthconnectintegration/channels/fhir/bundle/FhirBundle.xml
 ```
 
 ## Configuration Changes
