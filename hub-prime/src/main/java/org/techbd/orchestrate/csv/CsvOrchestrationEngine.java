@@ -39,7 +39,6 @@ import org.techbd.conf.Configuration;
 import org.techbd.model.csv.FileDetail;
 import org.techbd.model.csv.FileType;
 import org.techbd.model.csv.PayloadAndValidationOutcome;
-import org.techbd.service.CsvService;
 import org.techbd.service.VfsCoreService;
 import org.techbd.service.http.InteractionsFilter;
 import org.techbd.service.http.hub.prime.AppConfig;
@@ -356,10 +355,10 @@ public class CsvOrchestrationEngine {
                 }
 
                 initRIHR.setCreatedAt(forwardedAt);
-                initRIHR.setCreatedBy(CsvService.class.getName());
+                initRIHR.setCreatedBy(CsvOrchestrationEngine.class.getName());
                 initRIHR.setToState("CSV_ACCEPT");
                 final var provenance = "%s.saveScreeningGroup"
-                        .formatted(CsvService.class.getName());
+                        .formatted(CsvOrchestrationEngine.class.getName());
                 initRIHR.setProvenance(provenance);
                 initRIHR.setCsvGroupId(interactionId);
                 final var start = Instant.now();
@@ -433,7 +432,7 @@ public class CsvOrchestrationEngine {
                                 tenantId)));
                 initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
                 initRIHR.setCreatedAt(createdAt);
-                initRIHR.setCreatedBy(CsvService.class.getName());
+                initRIHR.setCreatedBy(CsvOrchestrationEngine.class.getName());
                 initRIHR.setPayload((JsonNode) Configuration.objectMapper.valueToTree(validationResults));
                 initRIHR.setPayload((JsonNode) Configuration.objectMapper.valueToTree(validationResults));
                 initRIHR.setFromState("CSV_ACCEPT");
@@ -443,7 +442,7 @@ public class CsvOrchestrationEngine {
                     initRIHR.setToState("VALIDATION_FAILED");
                 }
                 final var provenance = "%s.saveValidationResults"
-                        .formatted(CsvService.class.getName());
+                        .formatted(CsvOrchestrationEngine.class.getName());
                 initRIHR.setProvenance(provenance);
                 initRIHR.setCsvGroupId(interactionId);
                 final var start = Instant.now();
@@ -479,7 +478,7 @@ public class CsvOrchestrationEngine {
                 }
                 initRIHR.setNature("Update Zip File Payload");
                 initRIHR.setCreatedAt(createdAt);
-                initRIHR.setCreatedBy(CsvService.class.getName());
+                initRIHR.setCreatedBy(CsvOrchestrationEngine.class.getName());
                 initRIHR.setValidationResultPayload(
                         (JsonNode) Configuration.objectMapper.valueToTree(combinedValidationResults));
                 final var start = Instant.now();
@@ -829,12 +828,14 @@ public class CsvOrchestrationEngine {
 
         private UUID processZipFilesFromInbound(final String interactionId)
                 throws FileSystemException, org.apache.commons.vfs2.FileSystemException {
-            log.info("CsvService : processZipFilesFromInbound - BEGIN for interactionId :{}" + interactionId);
+            log.info("CsvOrchestrationService : processZipFilesFromInbound - BEGIN for interactionId :{}" + interactionId);
             final FileObject inboundFO = vfsCoreService
                     .resolveFile(Paths.get(appConfig.getCsv().validation().inboundPath()).toAbsolutePath().toString());
+            log.info("CsvOrchestrationService : resolveFile inboundFO-  interactionId :{}" + interactionId);                    
             final FileObject ingresshomeFO = vfsCoreService
                     .resolveFile(
                             Paths.get(appConfig.getCsv().validation().ingessHomePath()).toAbsolutePath().toString());
+            log.info("CsvOrchestrationService : resolveFile ingresshomeFO-interactionId :{}" + interactionId);                               
             if (!vfsCoreService.fileExists(inboundFO)) {
                 log.error("Inbound folder does not exist: {} for interactionId :{} ", inboundFO.getName().getPath(),
                         interactionId);
@@ -843,14 +844,15 @@ public class CsvOrchestrationEngine {
                 throw new FileSystemException("Inbound folder does not exist: " + inboundFO.getName().getPath());
             }
             vfsCoreService.validateAndCreateDirectories(ingresshomeFO);
+            log.info("CsvOrchestrationService :created directories at ingresshome interactionId :{}" + interactionId);
             final VfsIngressConsumer consumer = vfsCoreService.createConsumer(
                     inboundFO,
                     this::extractGroupId,
                     this::isGroupComplete);
-
+            log.info("CsvOrchestrationService :Grouping complete interactionId :{}" + interactionId);
             // Important: Capture the returned session UUID and processed file paths
             final UUID processId = vfsCoreService.processFiles(consumer, ingresshomeFO);
-            log.info("CsvService : processZipFilesFromInbound - BEGIN for interactionId :{}" + interactionId);
+            log.info("CsvOrchestrationService : processZipFilesFromInbound - BEGIN for interactionId :{}" + interactionId);
             return processId;
         }
 
@@ -942,7 +944,7 @@ public class CsvOrchestrationEngine {
 
         public String validateCsvUsingPython(final List<FileDetail> fileDetails, final String interactionId)
                 throws Exception {
-            log.info("CsvService : validateCsvUsingPython BEGIN for interactionId :{} " + interactionId);
+            log.info("CsvOrchestrationService : validateCsvUsingPython BEGIN for interactionId :{} " + interactionId);
             try {
                 final var config = appConfig.getCsv().validation();
                 if (config == null) {
@@ -1009,7 +1011,7 @@ public class CsvOrchestrationEngine {
                     throw new IOException("Python script execution failed with exit code " +
                             exitCode + ": " + errorOutput.toString());
                 }
-                log.info("CsvService : validateCsvUsingPython END for interactionId :{} " + interactionId);
+                log.info("CsvOrchestrationService : validateCsvUsingPython END for interactionId :{} " + interactionId);
                 // Return parsed validation results
                 return output.toString();
 

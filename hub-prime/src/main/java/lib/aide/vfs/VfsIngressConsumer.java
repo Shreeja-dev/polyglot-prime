@@ -18,6 +18,9 @@ import java.util.zip.ZipInputStream;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.FileType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.techbd.service.VfsCoreService;
 
 import jakarta.annotation.Nonnull;
 
@@ -84,7 +87,7 @@ public class VfsIngressConsumer {
     private final QuadFunction<IngressIndividual, FileObject, FileObject, Audit, List<IngressIndividual>> populateSnapshot;
     private final QuadFunction<IngressIndividual, FileObject, FileObject, Audit, List<IngressIndividual>> consumables;
     private final Audit audit = new Audit(new ArrayList<>());
-
+    private static final Logger logger = LoggerFactory.getLogger(VfsIngressConsumer.class);
     private UUID sessionId;
     private FileObject sessionHome;
     private FileObject snapshotHome;
@@ -136,11 +139,13 @@ public class VfsIngressConsumer {
         }
 
         public Builder isGroup(final Function<FileObject, String> isGroup) {
+            logger.info("VFSINgressConsumer :isGroup");
             this.isGroup = isGroup;
             return this;
         }
 
         public Builder isGroupComplete(final Predicate<IngressGroup> isGroupComplete) {
+            logger.info("VFSINgressConsumer :isGroupComplete");
             this.isGroupComplete = isGroupComplete;
             return this;
         }
@@ -204,6 +209,7 @@ public class VfsIngressConsumer {
     }
 
     public void drain(final FileObject egressRoot, final Optional<UUID> sessionIdOpt) {
+        logger.info("VFSINgressConsumer :drain");
         sessionId = sessionIdOpt.orElse(UUID.randomUUID());
         try {
             sessionHome = egressRoot.resolveFile(sessionId.toString());
@@ -221,20 +227,27 @@ public class VfsIngressConsumer {
             originalEntries = new ArrayList<>();
             snapshotEntries = new ArrayList<>();
             for (final var ingressPath : ingressPaths) {
+                logger.info("VfsIngressConsumer :: ingressPath"+ingressPath);
                 for (final var entry : ingressPath.entries()) {
+                    logger.info("VfsIngressConsumer :: entry"+entry);
                     if (entry instanceof IngressIndividual activeEntry) {
+                        logger.info("VfsIngressConsumer :: entry instanceof IngressIndividual");
                         // check to see if we should ignore this entry or snapshot it
                         final var snapshot = isSnapshotable.apply(activeEntry, sessionHome, snapshotHome, audit);
+                        logger.info("VfsIngressConsumer :: snapshot"+snapshot);
                         if (!snapshot) {
                             continue;
                         }
 
+
                         // we're going to move the entry so hang on to the original for auditing
                         final var originalEntry = new IngressIndividual(activeEntry.entry());
+                        logger.info("VfsIngressConsumer :: originalEntry"+originalEntry);
                         originalEntries.add(originalEntry);
 
                         // move the file from its original location to the new location
                         final var dest = snapshotHome.resolveFile(activeEntry.entry().getName().getBaseName());
+                        logger.info("VfsIngressConsumer :: dest"+dest);
                         activeEntry.entry().moveTo(dest);
                         audit.addEvent(new AuditEvent("remove", originalEntry.entry().getPublicURIString(),
                                 Optional.of(originalEntry.entry())));
@@ -251,20 +264,27 @@ public class VfsIngressConsumer {
             }
 
             consumeEntries = new ArrayList<>();
+            logger.info("VfsIngressConsumer :: consumeEntries -BEGIN");
             for (final var entry : snapshotHome.getChildren()) {
+                logger.info("VfsIngressConsumer :: INSIDE snapshotHome.getChildren");
                 final var consume = consumables.apply(new IngressIndividual(entry),
                         sessionHome, snapshotHome, audit);
+                logger.info("VfsIngressConsumer :: INSIDE consume"+consume);       
                 for (final var c : consume) {
+                    logger.info("VfsIngressConsumer :: INSIDE loop"+c.entry()); 
                     consumeEntries.add(c);
                     audit.addEvent(new AuditEvent("consume", c.entry().getPublicURIString(), Optional.of(c.entry())));
+                    logger.info("VfsIngressConsumer :: after audit add event"); 
                 }
             }
-
+            logger.info("VfsIngressConsumer :: consumeEntries -END");
             groupedEntriesMap = new HashMap<>();
             individualEntries = new ArrayList<>();
 
             for (final var entry : consumeEntries) {
+                logger.info("VfsIngressConsumer :: loop through consumeEntries-BEGIN"); 
                 final var groupId = isGroup.apply(entry.entry());
+                logger.info("VfsIngressConsumer :: groupId"+groupId); 
                 if (groupId != null) {
                     groupedEntriesMap
                             .computeIfAbsent(groupId, k -> new ArrayList<>())
@@ -272,9 +292,11 @@ public class VfsIngressConsumer {
                     audit.addEvent(new AuditEvent("grouped",
                             "[%s] %s".formatted(groupId, entry.entry().getPublicURIString(),
                                     Optional.of(entry.entry()))));
+                   logger.info("VfsIngressConsumer :: grouped"+entry.entry().getPublicURIString());                 
                 } else {
                     individualEntries.add(entry);
                 }
+                logger.info("VfsIngressConsumer :: loop through consumeEntries-END"); 
             }
 
             groupedEntries = groupedEntriesMap.entrySet().stream()
@@ -285,12 +307,16 @@ public class VfsIngressConsumer {
             incompleteGroups = new ArrayList<>();
 
             for (final var group : groupedEntries) {
+                logger.info("VfsIngressConsumer :: loop through groupedEntries-BEGIN"); 
                 if (isGroupComplete.test(group)) {
+                    logger.info("VfsIngressConsumer :: ADD TO COMPLETE GROUP"+group); 
                     completeGroups.add(group);
                 } else {
+                    logger.info("VfsIngressConsumer :: ADD TO incompleteGroups"+group); 
                     incompleteGroups.add(group);
                     audit.addEvent(new AuditEvent("incomplete-group", group.groupId));
                 }
+                logger.info("VfsIngressConsumer :: loop through groupedEntries-END");
             }
 
         } catch (final Exception e) {
@@ -357,53 +383,79 @@ public class VfsIngressConsumer {
      * @return either entries of the ZIP or the original individual file if it's not
      *         a ZIP
      */
-    public static List<IngressIndividual> consumeUnzipped(IngressIndividual individual, FileObject sessionHome,
-            FileObject snapshotHome, Audit audit) {
-        final var zipFile = individual.entry();
-        if (!zipFile.getName().getBaseName().toLowerCase().endsWith(".zip")) {
-            return List.of(individual);
-        }
+ public static List<IngressIndividual> consumeUnzipped(IngressIndividual individual, FileObject sessionHome,
+        FileObject snapshotHome, Audit audit) {
+    final var zipFile = individual.entry();
+    logger.info("Starting unzip process for file: {}", zipFile.getPublicURIString());
 
-        final List<IngressIndividual> unzippedFiles = new ArrayList<>();
-        FileObject fileObject = individual.entry();
-
-        try (InputStream inputStream = fileObject.getContent().getInputStream();
-                ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
-
-            ZipEntry entry;
-            while ((entry = zipInputStream.getNextEntry()) != null) {
-                // Flattening directory structure
-                final var flattenedName = entry.getName().replaceAll(".*/", "");
-                if (flattenedName.isEmpty()) {
-                    continue; // Skip directories
-                }
-
-                final var unzippedFile = snapshotHome.resolveFile(flattenedName);
-                if (unzippedFile.exists()) {
-                    audit.addEvent(new AuditEvent("unzipped-will-overwrite",
-                            "%s in %s overwrites %s".formatted(unzippedFile.getName().getBaseName(),
-                                    zipFile.getPublicURIString(), unzippedFile.getPublicURIString())));
-                }
-
-                // Write file content using VFS
-                try (var outputStream = unzippedFile.getContent().getOutputStream()) {
-                    byte[] buffer = new byte[1024];
-                    int len;
-                    while ((len = zipInputStream.read(buffer)) > 0) {
-                        outputStream.write(buffer, 0, len);
-                    }
-                }
-
-                unzippedFiles.add(new IngressIndividual(unzippedFile));
-                audit.addEvent(new AuditEvent("unzipped",
-                        "%s from %s".formatted(unzippedFile.getName().getBaseName(), zipFile.getPublicURIString())));
-                zipInputStream.closeEntry();
-            }
-        } catch (RuntimeException | IOException e) {
-            audit.addEvent(new AuditEvent("exception", zipFile.getPublicURIString(), Optional.of(individual.entry()),
-                    Optional.of(e)));
-        } 
-
-        return unzippedFiles;
+    if (!zipFile.getName().getBaseName().toLowerCase().endsWith(".zip")) {
+        logger.warn("Skipping file {} as it is not a zip archive.", zipFile.getPublicURIString());
+        return List.of(individual);
     }
+
+    final List<IngressIndividual> unzippedFiles = new ArrayList<>();
+    FileObject fileObject = individual.entry();
+
+    try (InputStream inputStream = fileObject.getContent().getInputStream();
+         ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+
+        logger.info("Opened zip file: {}", zipFile.getPublicURIString());
+
+        ZipEntry entry;
+        while ((entry = zipInputStream.getNextEntry()) != null) {
+            final var flattenedName = entry.getName().replaceAll(".*/", "");
+            if (flattenedName.isEmpty()) {
+                logger.info("Skipping directory entry: {}", entry.getName());
+                continue;
+            }
+
+            logger.info("Extracting entry: {} from zip file: {}", flattenedName, zipFile.getPublicURIString());
+
+            final var unzippedFile = snapshotHome.resolveFile(flattenedName);
+            if (unzippedFile.exists()) {
+                logger.warn("File {} already exists in {}. It will be overwritten.",
+                        unzippedFile.getName().getBaseName(), snapshotHome.getPublicURIString());
+
+                audit.addEvent(new AuditEvent("unzipped-will-overwrite",
+                        "%s in %s overwrites %s".formatted(unzippedFile.getName().getBaseName(),
+                                zipFile.getPublicURIString(), unzippedFile.getPublicURIString())));
+            }
+
+            try (var outputStream = unzippedFile.getContent().getOutputStream()) {
+                logger.info("Writing to file: {}", unzippedFile.getPublicURIString());
+                
+                byte[] buffer = new byte[1024];
+                int len;
+                int totalBytes = 0;
+                while ((len = zipInputStream.read(buffer)) > 0) {
+                    outputStream.write(buffer, 0, len);
+                    totalBytes += len;
+                }
+
+                logger.info("Successfully wrote {} bytes to file: {}", totalBytes, unzippedFile.getPublicURIString());
+            } catch (IOException e) {
+                logger.error("Error writing to file: {}", unzippedFile.getPublicURIString(), e);
+                throw e;
+            }
+
+            unzippedFiles.add(new IngressIndividual(unzippedFile));
+            logger.info("Successfully extracted: {}", unzippedFile.getPublicURIString());
+
+            audit.addEvent(new AuditEvent("unzipped",
+                    "%s from %s".formatted(unzippedFile.getName().getBaseName(), zipFile.getPublicURIString())));
+            zipInputStream.closeEntry();
+        }
+        
+        logger.info("Finished processing all entries in zip file: {}", zipFile.getPublicURIString());
+
+    } catch (RuntimeException | IOException e) {
+        logger.error("Exception occurred while processing zip file: {}", zipFile.getPublicURIString(), e);
+        audit.addEvent(new AuditEvent("exception", zipFile.getPublicURIString(), Optional.of(individual.entry()),
+                Optional.of(e)));
+    }
+
+    logger.info("Unzip process completed for file: {}. Total files extracted: {}", zipFile.getPublicURIString(), unzippedFiles.size());
+    return unzippedFiles;
+}
+
 }
