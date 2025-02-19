@@ -1,9 +1,9 @@
 <channel version="4.5.0">
-  <id>2946693c-0e20-4296-a903-2949dc328100</id>
+  <id>cd84dbed-a8d7-4e60-a640-7307ad62e68c</id>
   <nextMetaDataId>2</nextMetaDataId>
   <name>FlatFileCsvBundleValidate</name>
   <description></description>
-  <revision>58</revision>
+  <revision>2</revision>
   <sourceConnector version="4.5.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -43,7 +43,7 @@
       <responseHeadersVariable></responseHeadersVariable>
       <useResponseHeadersVariable>false</useResponseHeadersVariable>
       <charset>DEFAULT_ENCODING</charset>
-      <contextPath>/flatfile/csv/Bundle/$validate</contextPath>
+      <contextPath>/flatfile/csv/Bundle/$validate/</contextPath>
       <timeout>30000</timeout>
       <staticResources/>
     </properties>
@@ -538,7 +538,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1739952738498</time>
+        <time>1739962607733</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>
@@ -547,6 +547,5 @@ return;</undeployScript>
       </pruningSettings>
       <userId>1</userId>
     </metadata>
-    <channelTags/>
   </exportData>
 </channel>
