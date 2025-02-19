@@ -6,7 +6,7 @@ This document provides a step-by-step guide for integrating channel XML files an
 ## Directory Structure
 The Mirth Connect integration files are maintained in the following directory:
 ```
-/home/shreeja/workspaces/github.com/Shreeja-dev/polyglot-prime/mirthconnectintegration
+/polyglot-prime/mirthconnectintegration
 ```
 All Mirth Connect-related changes should be updated in this directory.
 
@@ -51,7 +51,7 @@ Follow the same folder structure for other channels:
 mirthconnectintegration/channels/<channel>/source/transformerscripts
 mirthconnectintegration/channels/<channel>/destination/transformerscripts
 ```
-Example for another channel:
+Example for another channel (/Bundle) endpoint:
 ```
 mirthconnectintegration/channels/fhir/bundle/source/transformerscripts
 mirthconnectintegration/channels/fhir/bundle/destination/transformerscripts
