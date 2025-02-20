@@ -807,7 +807,7 @@ public class CsvOrchestrationEngine {
             // Log the group being processed
             log.info("Processing group {} with {} files for interactionId: {}", groupKey, fileDetails.size(),
                     masterInteractionId);
-            saveScreeningGroup(groupInteractionId, request, file, fileDetails, tenantId);
+            // saveScreeningGroup(groupInteractionId, request, file, fileDetails, tenantId);
 
             // Validate CSV files inside the group
             String validationResults = validateCsvUsingPython(fileDetails, masterInteractionId);
