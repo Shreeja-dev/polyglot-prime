@@ -154,6 +154,7 @@ public class CsvOrchestrationEngine {
         private String masterInteractionId;
         private HttpServletRequest request;
         private boolean generateBundle;
+        private List<String> csvFileList;
 
         public OrchestrationSessionBuilder withSessionId(final String sessionId) {
             this.sessionId = sessionId;
@@ -175,6 +176,10 @@ public class CsvOrchestrationEngine {
             return this;
         }
 
+        public OrchestrationSessionBuilder withCsvFileList(final List<String> csvFileList) {
+            this.csvFileList = csvFileList;
+            return this;
+        }
         public OrchestrationSessionBuilder withMasterInteractionId(final String masterInteractionId) {
             this.masterInteractionId = masterInteractionId;
             return this;
@@ -201,7 +206,7 @@ public class CsvOrchestrationEngine {
                 throw new IllegalArgumentException("File must not be null");
             }
             return new OrchestrationSession(sessionId, tenantId, device, file, masterInteractionId, request,
-                    generateBundle);
+                    generateBundle,csvFileList);
         }
     }
 
@@ -232,11 +237,13 @@ public class CsvOrchestrationEngine {
         private final String tenantId;
         HttpServletRequest request;
         private final boolean generateBundle;
+        private final List<String> csvFileList;
 
         public OrchestrationSession(final String sessionId, final String tenantId, final Device device,
                 final MultipartFile file,
                 final String masterInteractionId,
-                final HttpServletRequest request, boolean generateBundle) {
+                final HttpServletRequest request, boolean generateBundle,
+                final List<String> csvFileList) {
             this.sessionId = sessionId;
             this.tenantId = tenantId;
             this.device = device;
@@ -247,6 +254,10 @@ public class CsvOrchestrationEngine {
             this.generateBundle = generateBundle;
             this.payloadAndValidationOutcomes = new HashMap<>();
             this.filesNotProcessed = new ArrayList<>();
+            this.csvFileList = csvFileList;
+        }
+        public List<String> getCsvFileList() {
+            return csvFileList;
         }
 
         public boolean isGenerateBundle() {
@@ -290,16 +301,17 @@ public class CsvOrchestrationEngine {
                     file.getOriginalFilename(), masterInteractionId);
             final Instant intiatedAt = Instant.now();
             final String originalFilename = file.getOriginalFilename();
-            final String uniqueFilename = masterInteractionId + "_"
-                    + (originalFilename != null ? originalFilename : "upload.zip");
-            final Path destinationPath = Path.of(appConfig.getCsv().validation().inboundPath(), uniqueFilename);
-            Files.createDirectories(destinationPath.getParent());
+            if (CollectionUtils.isEmpty(csvFileList)) {
+                final String uniqueFilename = masterInteractionId + "_"
+                        + (originalFilename != null ? originalFilename : "upload.zip");
+                final Path destinationPath = Path.of(appConfig.getCsv().validation().inboundPath(), uniqueFilename);
+                Files.createDirectories(destinationPath.getParent());
 
-            // Save the uploaded file to the inbound folder
-            Files.copy(file.getInputStream(), destinationPath, StandardCopyOption.REPLACE_EXISTING);
-            log.info("File saved to: {}", destinationPath);
-
-            // Trigger CSV processing and validation
+                // Save the uploaded file to the inbound folder
+                Files.copy(file.getInputStream(), destinationPath, StandardCopyOption.REPLACE_EXISTING);
+                log.info("File saved to: {}", destinationPath);
+            }
+            //Trigger CSV processing and validation
             this.validationResults = processScreenings(masterInteractionId, intiatedAt, originalFilename, tenantId);
            // saveCombinedValidationResults(validationResults, masterInteractionId); //TODO phase1 mirth connect- uncomment and fix  
         }
@@ -576,37 +588,42 @@ public class CsvOrchestrationEngine {
         public Map<String, Object> processScreenings(final String masterInteractionId, final Instant initiatedAt,
                 final String originalFileName, final String tenantId) {
             try {
-                log.info("Inbound Folder Path: {} for interactionid :{} ",
-                        appConfig.getCsv().validation().inboundPath(), masterInteractionId);
-                log.info("Ingress Home Path: {} for interactionId : {}",
-                        appConfig.getCsv().validation().ingessHomePath(), masterInteractionId);
-                // Process ZIP files and get the session ID
-                final UUID processId = processZipFilesFromInbound(masterInteractionId);
-                log.info("ZIP files processed with session ID: {} for interaction id :{} ", processId,
-                        masterInteractionId);
-
-                // Construct processed directory path
-                final String processedDirPath = appConfig.getCsv().validation().ingessHomePath() + "/" + processId
-                        + "/ingress";
-
-                copyFilesToProcessedDir(processedDirPath);
-                createOutputFileInProcessedDir(processedDirPath);
-                log.info("Attempting to resolve processed directory: {} for interactionId : {}", processedDirPath,
-                        masterInteractionId);
-
-                // Get processed files for validation
-                final FileObject processedDir = vfsCoreService
-                        .resolveFile(Paths.get(processedDirPath).toAbsolutePath().toString());
-
-                if (!vfsCoreService.fileExists(processedDir)) {
-                    log.error("Processed directory does not exist: {} for interactionId : {}", processedDirPath,
+                List<String> csvFiles = null;
+                if (CollectionUtils.isEmpty(csvFileList)) { 
+                    log.info("Inbound Folder Path: {} for interactionid :{} ",
+                            appConfig.getCsv().validation().inboundPath(), masterInteractionId);
+                    log.info("Ingress Home Path: {} for interactionId : {}",
+                            appConfig.getCsv().validation().ingessHomePath(), masterInteractionId);
+                    // Process ZIP files and get the session ID
+                    final UUID processId = processZipFilesFromInbound(masterInteractionId);
+                    log.info("ZIP files processed with session ID: {} for interaction id :{} ", processId,
                             masterInteractionId);
-                    throw new FileSystemException("Processed directory not found: " + processedDirPath);
+
+                    // Construct processed directory path
+                    final String processedDirPath = appConfig.getCsv().validation().ingessHomePath() + "/" + processId
+                            + "/ingress";
+
+                    copyFilesToProcessedDir(processedDirPath);
+                    createOutputFileInProcessedDir(processedDirPath);
+                    log.info("Attempting to resolve processed directory: {} for interactionId : {}", processedDirPath,
+                            masterInteractionId);
+
+                    // Get processed files for validation
+                    final FileObject processedDir = vfsCoreService
+                            .resolveFile(Paths.get(processedDirPath).toAbsolutePath().toString());
+
+                    if (!vfsCoreService.fileExists(processedDir)) {
+                        log.error("Processed directory does not exist: {} for interactionId : {}", processedDirPath,
+                                masterInteractionId);
+                        throw new FileSystemException("Processed directory not found: " + processedDirPath);
+                    }
+
+                    // Collect CSV files for validation
+                    csvFiles = scanForCsvFiles(processedDir, masterInteractionId);
+                } else { 
+                    //Source is MirthConnect
+                    csvFiles = this.csvFileList;
                 }
-
-                // Collect CSV files for validation
-                final List<String> csvFiles = scanForCsvFiles(processedDir, masterInteractionId);
-
                 final Map<String, List<FileDetail>> groupedFiles = FileProcessor.processAndGroupFiles(csvFiles);
                 List<Map<String, Object>> combinedValidationResults = new ArrayList<>();
 
