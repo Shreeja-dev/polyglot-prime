@@ -14,7 +14,8 @@ call :SetVarIfNotExist "TECHBD_BASE_FHIR_URL" "http://test.shinny.org"
 
 REM --- CSV Validation Settings ---
 call :SetVarIfNotExist "TECHBD_CSV_PYTHON_SCRIPT_PATH" "D:/techbyDesign/specification/flat-file/validate-nyher-fhir-ig-equivalent.py"
-call :SetVarIfNotExist "TECHBD_CSV_PYTHON_EXECUTABLE" "python3"
+REM Edit and provide the full path to the Python executable as per your installation directory
+call :SetVarIfNotExist "TECHBD_CSV_PYTHON_EXECUTABLE" "<path to python exe>/python.exe"
 call :SetVarIfNotExist "TECHBD_CSV_PACKAGE_PATH" "D:/techbyDesign/specification/flat-file/datapackage-nyher-fhir-ig-equivalent.json"
 call :SetVarIfNotExist "TECHBD_CSV_INBOUND_PATH" "D:/techbyDesign/flatfile/inbound"
 call :SetVarIfNotExist "TECHBD_CSV_INGRESS_PATH" "D:/techbyDesign/flatfile/ingress"

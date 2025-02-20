@@ -1,9 +1,9 @@
 <channel version="4.5.0">
-  <id>cd84dbed-a8d7-4e60-a640-7307ad62e68c</id>
+  <id>fc36c056-84bc-4f0a-9a71-f5c1c32c5941</id>
   <nextMetaDataId>2</nextMetaDataId>
   <name>FlatFileCsvBundleValidate</name>
   <description></description>
-  <revision>2</revision>
+  <revision>29</revision>
   <sourceConnector version="4.5.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -53,26 +53,99 @@
           <name>Step1 : Store File To Inbound Folder</name>
           <sequenceNumber>0</sequenceNumber>
           <enabled>true</enabled>
-          <script>logger.info(&quot;Fetching AppConfig from Global Map&quot;);
+          <script>var File = Packages.java.io.File;
+var FileOutputStream = Packages.java.io.FileOutputStream;
+var FileInputStream = Packages.java.io.FileInputStream;
+var ZipFile = Packages.java.util.zip.ZipFile;
+var ZipEntry = Packages.java.util.zip.ZipEntry;
+var BufferedOutputStream = Packages.java.io.BufferedOutputStream;
+var ObjectMapper = Packages.com.fasterxml.jackson.databind.ObjectMapper;
+var JavaTimeModule = Packages.com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+var mapper = new ObjectMapper();
+mapper.registerModule(new JavaTimeModule()); 
+
+logger.info(&quot;Fetching AppConfig from Global Map&quot;);
 var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
 var fhirProfileUrlHeader = $(&apos;headers&apos;).getHeader(&quot;FHIR-STRUCT-DEFN-PROFILE-URI&quot;);
 var zipFileInteractionId = java.util.UUID.randomUUID().toString();
 var requestParameters = getRequestParameters();
-uploadFileToInboundFolder();
+var inboundFolder = &quot;D:/techbyDesign/flatFile/inbound/&quot;; // TODO-move to environment variable
+var ingressFolder = &quot;D:/techbyDesign/flatFile/ingress/&quot;+zipFileInteractionId+&quot;/ingress&quot;; // TODO-move to environment variable&apos;
+var pythonPackageFullPath = &quot;D:/techbyDesign/specification/datapackage-nyher-fhir-ig-equivalent.json&quot;
+var pythonScriptFullPath =&quot;D:/techbyDesign/specification/validate-nyher-fhir-ig-equivalent.py&quot;;
+var uploadedFileFullPath = uploadFileToInboundFolder(inboundFolder);
+extractZipFile(uploadedFileFullPath,ingressFolder);
+var csvFiles = getCsvFilesFromDirectory(ingressFolder); //TODO - non csv files to be listed as not-processed
+copyFileToFolder(pythonPackageFullPath,ingressFolder);
+copyFileToFolder(pythonScriptFullPath,ingressFolder);
 logger.info(&quot;Invoke validation - BEGIN&quot;);
 var file = createMultipartFile();
 logger.info(&quot;multi part file created &quot; + file);
 saveArchiveInteraction(zipFileInteractionId, file); //TODO - implement the saving
-var validationResults = invokeValidation(zipFileInteractionId, file,tenantId,requestParameters);
+var validationResults = invokeValidation(zipFileInteractionId, file,csvFiles,tenantId,requestParameters);
+var validationResultsJson = convertMapToJson(validationResults);
+responseMap.put(&quot;finalResponse&quot;, validationResultsJson);
 logger.info(&quot;Invoke validation - END&quot;);
-responseMap.put(&quot;finalResponse&quot;,validationResults);
 return;
+
+function convertMapToJson(map) {
+    return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(map);
+}
 
 function saveArchiveInteraction(zipFileInteractionId, file){
 	//TODO - CHECK AND IMPLEMENT  CsvService:saveArchiveInteraction
 	
 }
-function invokeValidation(zipFileInteractionId, file,tenantId,requestParameters){
+function copyFileToFolder(sourcePath, destinationFolderPath) {
+    var Files = Packages.java.nio.file.Files;
+    var Paths = Packages.java.nio.file.Paths;
+    var StandardCopyOption = Packages.java.nio.file.StandardCopyOption;
+
+    try {
+        var source = Paths.get(sourcePath);
+        var destinationFolder = Paths.get(destinationFolderPath);
+
+        // Ensure destination folder exists
+        if (!Files.exists(destinationFolder)) {
+            Files.createDirectories(destinationFolder); // Create the directory if it doesn&apos;t exist
+        }
+
+        // Extract filename from sourcePath
+        var fileName = source.getFileName();
+        var destinationPath = destinationFolder.resolve(fileName); // Append filename to folder path
+
+        // Copy file to the folder
+        Files.copy(source, destinationPath, StandardCopyOption.REPLACE_EXISTING);
+
+        return &quot;File copied successfully to: &quot; + destinationPath.toString();
+    } catch (e) {
+        return &quot;Error copying file: &quot; + e.message;
+    }
+}
+
+
+function getCsvFilesFromDirectory(folderPath) {
+    var File = Packages.java.io.File;
+    var Arrays = Packages.java.util.Arrays;
+    var ArrayList = Packages.java.util.ArrayList;
+
+    var folder = new File(folderPath);
+    var fileList = new ArrayList();
+
+    if (folder.exists() &amp;&amp; folder.isDirectory()) {
+        var files = folder.listFiles();
+        if (files !== null) {
+            for (var i = 0; i &lt; files.length; i++) {
+                if (files[i].isFile() &amp;&amp; files[i].getName().toLowerCase().endsWith(&quot;.csv&quot;)) {
+                    fileList.add(files[i].getAbsolutePath());
+                }
+            }
+        }
+    }
+    return fileList;
+}
+
+function invokeValidation(zipFileInteractionId, file,csvFiles,tenantId,requestParameters){
 	
 	logger.info(&quot;invokeValidation &quot; + tenantId);
 	var engine = new Packages.org.techbd.orchestrate.csv.CsvOrchestrationEngine();
@@ -87,8 +160,8 @@ function invokeValidation(zipFileInteractionId, file,tenantId,requestParameters)
          .withSessionId(java.util.UUID.randomUUID().toString())
          .withTenantId(tenantId)
          .withGenerateBundle(true)
+         .withCsvFileList(csvFiles)
          .withFile(file)
-         //.withRequest(request) 
          .build();
      logger.info(&quot;session created &quot;);    
      engine.orchestrate(session);
@@ -176,43 +249,183 @@ function getRequestParameters() {
     return requestParameters;
 }
 
-
-function uploadFileToInboundFolder() {
-	var File = Packages.java.io.File;
-	var FileOutputStream = Packages.java.io.FileOutputStream;
-	var FileInputStream = Packages.java.io.FileInputStream;
-	var ZipFile = Packages.java.util.zip.ZipFile;
-	var ZipEntry = Packages.java.util.zip.ZipEntry;
-	var BufferedOutputStream = Packages.java.io.BufferedOutputStream;
-	var inboundFolder = &quot;D:/techbyDesign/flatFile/inbound/&quot;; // TODO-move to environment variable
-	var ingressFolder = &quot;D:/techbyDesign/flatFile/ingress/&quot;; // TODO-move to environment variable&apos;
-	var uploadedFileContent  = getUploadedFileContent(connectorMessage);
-	var uploadedFileName = getUploadedFileName(connectorMessage);
-	var uploadedFileFullPath  = inboundFolder+uploadedFileName;
-
-	try {	
-    		var uploadFolder = new File(inboundFolder);
-    		if (!uploadFolder.exists()) {
-        		logger.info(&quot;Upload folder does not exist. Creating it...&quot;);
-        		uploadFolder.mkdirs();
-        		logger.info(&quot;Upload folder created: &quot; + inboundFolder);
-    		}
-    		uploadFolder.setWritable(true);
-    		logger.info(&quot;Write permission granted to the upload folder.&quot;);
-    
-    		if (!uploadedFileContent || uploadedFileContent.length === 0) {
-        		logger.error(&quot;No valid ZIP file found in the uploaded data.&quot;);
-        		throw new Error(&quot;Failed to extract ZIP file from input data.&quot;);
-    		}
-    		logger.info(&quot;Starting to save uploaded ZIP file...&quot;);
-    		var uploadedFile = new File(uploadedFileFullPath);
-    		var fileOutputStream = new FileOutputStream(uploadedFile);
-    		fileOutputStream.write(uploadedFileContent);
-    		fileOutputStream.close();
+function uploadFileToInboundFolder(uploadFolderPath) {
+	try {
+		logger.info(&quot;uploadFileToInboundFolder&quot;);
+	    var uploadedFileName = getUploadedFileName(connectorMessage);
+	    logger.info(&quot;uploadedFileName&quot;+uploadedFileName);
+	    var uploadedFileFullPath  = uploadFolderPath+uploadedFileName;
+	    // Ensure the upload folder exists and grant write permission if it does not
+	    logger.info(&quot;uploadedFileFullPath&quot;+uploadedFileFullPath);
+	    var uploadFolder = new File(uploadFolderPath);
+	    if (!uploadFolder.exists()) {
+	        logger.info(&quot;Upload folder does not exist. Creating it...&quot;);
+	        uploadFolder.mkdirs();
+	        logger.info(&quot;Upload folder created: &quot; + uploadFolderPath);
+	    }
+	    uploadFolder.setWritable(true);
+	    logger.info(&quot;Write permission granted to the upload folder.&quot;);
+	
+	    // Step 1: Save the Uploaded File
+	    var binaryContent = connectorMessage.getRawData().getBytes(&quot;ISO-8859-1&quot;);
+	    if (!binaryContent || binaryContent.length === 0) {
+	        logger.error(&quot;No valid ZIP file found in the uploaded data.&quot;);
+	        throw new Error(&quot;Failed to extract ZIP file from input data.&quot;);
+	    }
+	    logger.info(&quot;Starting to save uploaded ZIP file...&quot;);
+	    var uploadedFile = new File(uploadedFileFullPath);
+	    var fileOutputStream = new FileOutputStream(uploadedFile);
+	    fileOutputStream.write(binaryContent);
+	    fileOutputStream.close();
+	    logger.info(&quot;Successfully saved uploaded file to: &quot; + uploadedFileFullPath);
+		return uploadedFileFullPath;
 	} catch (e) {
-    		logger.error(&quot;Error during ZIP file processing: &quot; + e.message);
-    		throw e;
+	    logger.error(&quot;Error during ZIP file processing: &quot; + e.message);
+	    throw e;
 	}
+}
+
+function extractFileContent() {
+	try {
+		var rawPayload = connectorMessage.getRawData();
+		var boundary = rawPayload.split(&quot;\r\n&quot;)[0]; // Get the boundary string from the first line
+
+		// Split the payload using the boundary string. This should create an array like:
+		// [ &quot;&quot;, &quot;\r\nContent-Disposition: ...\r\n\r\nPK BINARYDATA\r\n&quot;, &quot;--&quot; ]
+		var parts = rawPayload.split(boundary);
+
+		// Check that we have at least one part with content
+		if (parts.length &gt;= 2) {
+		    // parts[1] contains the headers and the binary content. Trim any extra whitespace.
+		    var partContent = parts[1].trim();
+
+		    // The headers end at the first blank line, i.e. after &quot;\r\n\r\n&quot;
+		    var headerBodySeparator = &quot;\r\n\r\n&quot;;
+		    var headerEndIndex = partContent.indexOf(headerBodySeparator);
+
+		    if (headerEndIndex !== -1) {
+		        // The binary data starts after the headers and the blank line.
+		        var binaryData = partContent.substring(headerEndIndex + headerBodySeparator.length);
+
+		        // Sometimes there might be an extra trailing boundary marker (e.g. ending with &quot;--&quot;)
+		        // Remove it if present.
+		        if (binaryData.endsWith(&quot;--&quot;)) {
+		            binaryData = binaryData.substring(0, binaryData.length - 2).trim();
+		        }
+
+		        // At this point, binaryData contains only the binary data.
+		        logger.info(&quot;Extracted binary data: &quot; + binaryData);
+		    } else {
+		        logger.error(&quot;Header separator not found in the payload.&quot;);
+		    }
+		} else {
+		    logger.error(&quot;Payload does not contain the expected parts.&quot;);
+		}
+		return binaryData;
+
+	} catch (e) {
+		// Log any errors that occur during execution.
+		logger.error(&quot;Error in sendFlatfileCsv function: &quot; + e);
+	}
+}
+
+function extractZipFile(zipFilePath, outputFolderPath) {
+    var zipFile = new File(zipFilePath);
+    var outputFolder = new File(outputFolderPath);
+
+    logger.info(&quot;ZIP File Path: &quot; + zipFilePath);
+    logger.info(&quot;Output Folder Path: &quot; + outputFolderPath);
+
+    // Ensure output folder exists
+    if (!outputFolder.exists()) {
+        logger.info(&quot;Output folder does not exist. Creating it...&quot;);
+        outputFolder.mkdirs();
+        logger.info(&quot;Output folder created: &quot; + outputFolderPath);
+    }
+    outputFolder.setWritable(true);
+    if (!zipFile.exists() || zipFile.length() === 0) {
+        logger.error(&quot;The ZIP file does not exist or is empty.&quot;);
+        throw new Error(&quot;ZIP file is missing or empty.&quot;);
+    }
+    logger.info(&quot;Size of the uploaded file: &quot; + zipFile.length() + &quot; bytes.&quot;);
+    var extractionDone = false;
+
+    try {
+        // Use ZipFile for handling extraction
+        var javaZipFile = new ZipFile(zipFile);
+        var entries = javaZipFile.entries();
+
+        // Check if entries are present
+        var entryCount = 0;
+        while (entries.hasMoreElements()) {
+            entries.nextElement();
+            entryCount++;
+        }
+        logger.info(&quot;Found &quot; + entryCount + &quot; entries in the ZIP file.&quot;);
+
+        if (entryCount === 0) {
+            javaZipFile.close();
+            logger.error(&quot;ZIP file contains no entries.&quot;);
+            throw new Error(&quot;ZIP file contains no entries.&quot;);
+        }
+
+        // Reset the entries enumeration to start extraction
+        entries = javaZipFile.entries();
+        logger.info(&quot;Starting extraction process...&quot;);
+
+        // Loop through entries and extract them
+        while (entries.hasMoreElements()) {
+            var entry = entries.nextElement();
+            logger.info(&quot;Found ZIP entry: &quot; + entry.getName());
+
+            // Handle directories
+            if (entry.isDirectory()) {
+                var newDir = new File(outputFolderPath, entry.getName());
+                if (!newDir.exists()) {
+                    newDir.mkdirs();
+                    logger.info(&quot;Created directory: &quot; + newDir.getAbsolutePath());
+                }
+            } else {
+                // Handle files
+                var newFile = new File(outputFolderPath, entry.getName());
+                var parentDir = newFile.getParentFile();
+                if (!parentDir.exists()) {
+                    parentDir.mkdirs();
+                    logger.info(&quot;Created parent directory: &quot; + parentDir.getAbsolutePath());
+                }
+
+                // Extract file content
+                var inputStream = javaZipFile.getInputStream(entry);
+                var buffer = new java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 4096);
+                var bufferedOutputStream = new BufferedOutputStream(new FileOutputStream(newFile));
+
+                var bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) !== -1) {
+                    bufferedOutputStream.write(buffer, 0, bytesRead);
+                }
+
+                bufferedOutputStream.close();
+                inputStream.close();
+                logger.info(&quot;Extracted file: &quot; + newFile.getAbsolutePath());
+            }
+        }
+
+        // Mark extraction as complete
+        extractionDone = true;
+        javaZipFile.close();
+        logger.info(&quot;All ZIP entries have been extracted successfully.&quot;);
+    } catch (e) {
+        // Log only actual errors and not expected scenarios (like no entries in the ZIP)
+        if (e.message !== &quot;ZIP file contains no entries.&quot;) {
+            logger.error(&quot;Error during ZIP file extraction: &quot; + e.message);
+        }
+        throw e;
+    }
+
+    // Prevent second logging after extraction
+    if (!extractionDone) {
+        logger.error(&quot;Extraction failed or no entries found.&quot;);
+    }
 }</script>
         </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
       </elements>
@@ -278,174 +491,7 @@ function uploadFileToInboundFolder() {
         <mapVariables/>
       </properties>
       <transformer version="4.5.0">
-        <elements>
-          <com.mirth.connect.plugins.javascriptstep.JavaScriptStep version="4.5.0">
-            <sequenceNumber>0</sequenceNumber>
-            <enabled>true</enabled>
-            <script>// Import required Java classes
-var File = Packages.java.io.File;
-var FileOutputStream = Packages.java.io.FileOutputStream;
-var FileInputStream = Packages.java.io.FileInputStream;
-var ZipInputStream = Packages.java.util.zip.ZipInputStream;
-var ZipEntry = Packages.java.util.zip.ZipEntry;
-var BufferedOutputStream = Packages.java.io.BufferedOutputStream;
-
-// Define upload and extraction folder paths
-var uploadFolderPath = &quot;D:/CITR/TechD/MirthConnect/FHIR/uploadfolder&quot;;
-var extractionFolderPath = &quot;D:/CITR/TechD/MirthConnect/FHIR/unzipped_files&quot;;
-var savedZipFilePath = uploadFolderPath + &quot;/uploaded_file.zip&quot;;
-
-try {
-    // Ensure the upload folder exists and grant write permission if it does not
-    var uploadFolder = new File(uploadFolderPath);
-
-    // Check if upload folder exists, create it if necessary
-    if (!uploadFolder.exists()) {
-        logger.info(&quot;Upload folder does not exist. Creating it...&quot;);
-        uploadFolder.mkdirs(); // Create the folder if it doesn&apos;t exist
-        logger.info(&quot;Upload folder created: &quot; + uploadFolderPath);
-    }
-
-    // Grant write permission to the upload folder
-    uploadFolder.setWritable(true);
-    logger.info(&quot;Write permission granted to the upload folder.&quot;);
-
-    // Step 1: Save the Uploaded File
-    var binaryContent = connectorMessage.getRawData().getBytes(&quot;ISO-8859-1&quot;);
-    if (!binaryContent || binaryContent.length === 0) {
-        logger.error(&quot;No valid ZIP file found in the uploaded data.&quot;);
-        throw new Error(&quot;Failed to extract ZIP file from input data.&quot;);
-    }
-
-    logger.info(&quot;Starting to save uploaded ZIP file...&quot;);
-    var uploadedFile = new File(savedZipFilePath);
-    var fileOutputStream = new FileOutputStream(uploadedFile);
-    fileOutputStream.write(binaryContent);
-    fileOutputStream.close();
-    logger.info(&quot;Successfully saved uploaded file to: &quot; + savedZipFilePath);
-
-    // Step 2: Extract the ZIP File
-    extractZipFile(savedZipFilePath, extractionFolderPath);
-    logger.info(&quot;ZIP file extraction completed successfully to folder: &quot; + extractionFolderPath);
-
-} catch (e) {
-    logger.error(&quot;Error during ZIP file processing: &quot; + e.message);
-    throw e;
-}
-
-// Function to Extract ZIP File
-function extractZipFile(zipFilePath, outputFolderPath) {
-    var zipFile = new File(zipFilePath);
-    var outputFolder = new File(outputFolderPath);
-
-    // Log paths for verification
-    logger.info(&quot;ZIP File Path: &quot; + zipFilePath);
-    logger.info(&quot;Output Folder Path: &quot; + outputFolderPath);
-
-    // Ensure output folder exists
-    if (!outputFolder.exists()) {
-        logger.info(&quot;Output folder does not exist. Creating it...&quot;);
-        outputFolder.mkdirs();
-        logger.info(&quot;Output folder created: &quot; + outputFolderPath);
-    }
-    outputFolder.setWritable(true);
-
-    // Check if the ZIP file exists and is not empty
-    if (!zipFile.exists() || zipFile.length() === 0) {
-        logger.error(&quot;The ZIP file does not exist or is empty.&quot;);
-        throw new Error(&quot;ZIP file is missing or empty.&quot;);
-    }
-
-    // Log the size of the uploaded file for debugging
-    logger.info(&quot;Size of the uploaded file: &quot; + zipFile.length() + &quot; bytes.&quot;);
-
-    // Initialize ZipInputStream
-    var fileInputStream = new FileInputStream(zipFile);
-    var zipInputStream = new ZipInputStream(fileInputStream);
-
-    // Check if the ZipInputStream is correctly initialized
-    logger.info(&quot;ZipInputStream opened for file: &quot; + zipFilePath);
-
-    var zipEntry;
-
-    // Add debugging before entering the while loop
-    logger.info(&quot;Attempting to get next entry from ZIP file...&quot;);
-
-    // Check if we get an entry at all
-    zipEntry = zipInputStream.getNextEntry();
-    if (zipEntry === null) {
-        logger.error(&quot;No entries found in the ZIP file.&quot;);
-
-        // Manually list the ZIP file contents using ZipFile for debugging
-        try {
-            var javaZipFile = new java.util.zip.ZipFile(zipFile);
-            var entries = javaZipFile.entries();
-            if (!entries.hasMoreElements()) {
-                logger.error(&quot;ZIP file contains no entries.&quot;);
-            } else {
-                while (entries.hasMoreElements()) {
-                    var entry = entries.nextElement();
-                    logger.info(&quot;Manually found entry: &quot; + entry.getName());
-                }
-            }
-            javaZipFile.close();
-        } catch (e) {
-            logger.error(&quot;Error while manually checking ZIP file entries: &quot; + e.message);
-        }
-
-        throw new Error(&quot;ZIP file contains no entries.&quot;);
-    }
-
-    // Log the first entry name for debugging
-    logger.info(&quot;First ZIP entry found: &quot; + zipEntry.getName());
-
-    // Start extracting entries
-    logger.info(&quot;Starting extraction process...&quot;);
-    do {
-        // Log the entry name
-        logger.info(&quot;Found ZIP entry: &quot; + zipEntry.getName());
-
-        // Handle directories
-        if (zipEntry.isDirectory()) {
-            var newDir = new File(outputFolderPath, zipEntry.getName());
-            if (!newDir.exists()) {
-                newDir.mkdirs();
-                logger.info(&quot;Created directory: &quot; + newDir.getAbsolutePath());
-            }
-        } else {
-            // Handle files
-            var newFile = new File(outputFolderPath, zipEntry.getName());
-            var parentDir = newFile.getParentFile();
-            if (!parentDir.exists()) {
-                parentDir.mkdirs();
-                logger.info(&quot;Created parent directory: &quot; + parentDir.getAbsolutePath());
-            }
-
-            // Write content to the new file
-            var buffer = new java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 4096);
-            var bufferedOutputStream = new BufferedOutputStream(new FileOutputStream(newFile));
-            var bytesRead;
-            while ((bytesRead = zipInputStream.read(buffer)) !== -1) {
-                bufferedOutputStream.write(buffer, 0, bytesRead);
-            }
-            bufferedOutputStream.close();
-            logger.info(&quot;Extracted file: &quot; + newFile.getAbsolutePath());
-        }
-
-        // Close the current ZIP entry
-        zipInputStream.closeEntry();
-
-        // Attempt to get the next entry
-        zipEntry = zipInputStream.getNextEntry();
-    } while (zipEntry !== null);
-
-    // Clean up streams
-    zipInputStream.close();
-    fileInputStream.close();
-    logger.info(&quot;All ZIP entries have been extracted successfully.&quot;);
-}</script>
-          </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
-        </elements>
+        <elements/>
         <inboundTemplate encoding="base64"></inboundTemplate>
         <outboundTemplate encoding="base64"></outboundTemplate>
         <inboundDataType>RAW</inboundDataType>
@@ -538,7 +584,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1739962607733</time>
+        <time>1740049486786</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>
