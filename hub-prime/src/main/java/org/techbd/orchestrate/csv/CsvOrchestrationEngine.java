@@ -818,7 +818,7 @@ public class CsvOrchestrationEngine {
                     request,
                     file.getSize(), initiatedAtForThisGroup, completedAtForThisGroup, originalFileName);
 
-            saveValidationResults(operationOutomeForThisGroup, masterInteractionId, groupInteractionId, tenantId);
+            //saveValidationResults(operationOutomeForThisGroup, masterInteractionId, groupInteractionId, tenantId);//TODO -comment out for now.Need to integrate with mirth connect
             return operationOutomeForThisGroup;
         }
 
