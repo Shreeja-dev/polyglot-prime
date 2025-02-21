@@ -3,7 +3,7 @@
   <nextMetaDataId>2</nextMetaDataId>
   <name>FlatFileCsvBundleValidate</name>
   <description></description>
-  <revision>29</revision>
+  <revision>47</revision>
   <sourceConnector version="4.5.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -53,7 +53,8 @@
           <name>Step1 : Store File To Inbound Folder</name>
           <sequenceNumber>0</sequenceNumber>
           <enabled>true</enabled>
-          <script>var File = Packages.java.io.File;
+          <script>logger.info(&quot;Message Recived in Channel&quot;+channelName)
+var File = Packages.java.io.File;
 var FileOutputStream = Packages.java.io.FileOutputStream;
 var FileInputStream = Packages.java.io.FileInputStream;
 var ZipFile = Packages.java.util.zip.ZipFile;
@@ -62,30 +63,30 @@ var BufferedOutputStream = Packages.java.io.BufferedOutputStream;
 var ObjectMapper = Packages.com.fasterxml.jackson.databind.ObjectMapper;
 var JavaTimeModule = Packages.com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 var mapper = new ObjectMapper();
+var appConfig = globalMap.get(&quot;appConfig&quot;);
 mapper.registerModule(new JavaTimeModule()); 
 
-logger.info(&quot;Fetching AppConfig from Global Map&quot;);
 var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
 var fhirProfileUrlHeader = $(&apos;headers&apos;).getHeader(&quot;FHIR-STRUCT-DEFN-PROFILE-URI&quot;);
-var zipFileInteractionId = java.util.UUID.randomUUID().toString();
+var zipFileInteractionId = channelMap.get(&quot;interactionId&quot;);
+logger.info(&quot;Invoke validation - BEGIN for interaction id&quot;+zipFileInteractionId);
 var requestParameters = getRequestParameters();
-var inboundFolder = &quot;D:/techbyDesign/flatFile/inbound/&quot;; // TODO-move to environment variable
-var ingressFolder = &quot;D:/techbyDesign/flatFile/ingress/&quot;+zipFileInteractionId+&quot;/ingress&quot;; // TODO-move to environment variable&apos;
-var pythonPackageFullPath = &quot;D:/techbyDesign/specification/datapackage-nyher-fhir-ig-equivalent.json&quot;
-var pythonScriptFullPath =&quot;D:/techbyDesign/specification/validate-nyher-fhir-ig-equivalent.py&quot;;
+var inboundFolder = appConfig.getCsv().validation().inboundPath();
+var ingressFolder = appConfig.getCsv().validation().ingessHomePath()+zipFileInteractionId+&quot;/ingress&quot;;
+var pythonPackageFullPath = appConfig.getCsv().validation().packagePath();
+var pythonScriptFullPath = appConfig.getCsv().validation().pythonScriptPath();
 var uploadedFileFullPath = uploadFileToInboundFolder(inboundFolder);
 extractZipFile(uploadedFileFullPath,ingressFolder);
 var csvFiles = getCsvFilesFromDirectory(ingressFolder); //TODO - non csv files to be listed as not-processed
 copyFileToFolder(pythonPackageFullPath,ingressFolder);
 copyFileToFolder(pythonScriptFullPath,ingressFolder);
-logger.info(&quot;Invoke validation - BEGIN&quot;);
-var file = createMultipartFile();
-logger.info(&quot;multi part file created &quot; + file);
+
+var file = createMultipartFile(); 
 saveArchiveInteraction(zipFileInteractionId, file); //TODO - implement the saving
 var validationResults = invokeValidation(zipFileInteractionId, file,csvFiles,tenantId,requestParameters);
 var validationResultsJson = convertMapToJson(validationResults);
 responseMap.put(&quot;finalResponse&quot;, validationResultsJson);
-logger.info(&quot;Invoke validation - END&quot;);
+logger.info(&quot;Invoke validation - END for interactionId &quot;+zipFileInteractionId);
 return;
 
 function convertMapToJson(map) {
@@ -97,6 +98,7 @@ function saveArchiveInteraction(zipFileInteractionId, file){
 	
 }
 function copyFileToFolder(sourcePath, destinationFolderPath) {
+    logger.debug(&quot;CopyFileToFolder BEGIN for interactionId &quot;+zipFileInteractionId);
     var Files = Packages.java.nio.file.Files;
     var Paths = Packages.java.nio.file.Paths;
     var StandardCopyOption = Packages.java.nio.file.StandardCopyOption;
@@ -116,15 +118,17 @@ function copyFileToFolder(sourcePath, destinationFolderPath) {
 
         // Copy file to the folder
         Files.copy(source, destinationPath, StandardCopyOption.REPLACE_EXISTING);
-
+	   logger.debug(&quot;CopyFileToFolder END for interactionId &quot;+zipFileInteractionId);
         return &quot;File copied successfully to: &quot; + destinationPath.toString();
     } catch (e) {
+    	   logger.error(&quot;Error while copying for interactionId &quot;+zipFileInteractionId);
         return &quot;Error copying file: &quot; + e.message;
     }
 }
 
 
 function getCsvFilesFromDirectory(folderPath) {
+    logger.debug(&quot;getCsvFilesFromDirectory BEGIN for interactionId &quot;+zipFileInteractionId);
     var File = Packages.java.io.File;
     var Arrays = Packages.java.util.Arrays;
     var ArrayList = Packages.java.util.ArrayList;
@@ -142,35 +146,43 @@ function getCsvFilesFromDirectory(folderPath) {
             }
         }
     }
+    logger.debug(&quot;getCsvFilesFromDirectory END for interactionId &quot;+zipFileInteractionId);
     return fileList;
 }
+function invokeValidation(zipFileInteractionId, file, csvFiles, tenantId, requestParameters) {
+    logger.debug(&quot;invokeValidation BEGIN for interactionId &quot;+zipFileInteractionId);
+    var engine = new Packages.org.techbd.orchestrate.csv.CsvOrchestrationEngine();
+    var session = null;
 
-function invokeValidation(zipFileInteractionId, file,csvFiles,tenantId,requestParameters){
-	
-	logger.info(&quot;invokeValidation &quot; + tenantId);
-	var engine = new Packages.org.techbd.orchestrate.csv.CsvOrchestrationEngine();
-	var appConfig = globalMap.get(&quot;appConfig&quot;);
-	var vfsCoreService = new Packages.org.techbd.service.VfsCoreService();
-	engine.setAppConfig(appConfig);	
-	logger.info(&quot;vfscoreservice&quot;+vfsCoreService);
-	engine.setVfsCoreService(vfsCoreService);
-	engine.setRequestParamters(requestParameters);
-     var session = engine.session()
-         .withMasterInteractionId(zipFileInteractionId)
-         .withSessionId(java.util.UUID.randomUUID().toString())
-         .withTenantId(tenantId)
-         .withGenerateBundle(true)
-         .withCsvFileList(csvFiles)
-         .withFile(file)
-         .build();
-     logger.info(&quot;session created &quot;);    
-     engine.orchestrate(session);
-       logger.info(&quot;after orchestration &quot;);    
-     return session.getValidationResults();
+    try {
+        var appConfig = globalMap.get(&quot;appConfig&quot;);
+        var vfsCoreService = new Packages.org.techbd.service.VfsCoreService();
 
+        engine.setAppConfig(appConfig);
+        engine.setVfsCoreService(vfsCoreService);
+        engine.setRequestParamters(requestParameters);
+
+        session = engine.session()
+            .withMasterInteractionId(zipFileInteractionId)
+            .withSessionId(java.util.UUID.randomUUID().toString())
+            .withTenantId(tenantId)
+            .withGenerateBundle(true)
+            .withCsvFileList(csvFiles)
+            .withFile(file)
+            .build();
+
+        engine.orchestrate(session);
+        logger.debug(&quot;invokeValidation END for interactionId &quot;+zipFileInteractionId);
+        return session.getValidationResults();
+    } finally {
+        if (session !== null) {
+            engine.clear(session);
+        }
+    }
 }
+
 function createMultipartFile() {
-    logger.info(&quot;createMultipartFile -BEGIN &quot;);
+    logger.debug(&quot;createMultipartFile BEGIN for interactionId &quot;+zipFileInteractionId);
     var fileContent  = getUploadedFileContent(connectorMessage);
     var fileName = getUploadedFileName(connectorMessage);
 
@@ -212,7 +224,7 @@ function createMultipartFile() {
         };
     };
     var file = new MultipartFile(fileContent, fileName);
-    logger.info(&quot;MultipartFileCreated successfully &quot;+file);
+    logger.debug(&quot;createMultipartFile END for interactionId &quot;+zipFileInteractionId);
     return file;
 }
 
@@ -251,41 +263,37 @@ function getRequestParameters() {
 
 function uploadFileToInboundFolder(uploadFolderPath) {
 	try {
-		logger.info(&quot;uploadFileToInboundFolder&quot;);
+	    logger.debug(&quot;uploadFileToInboundFolder BEGIN for interactionId &quot;+zipFileInteractionId);
 	    var uploadedFileName = getUploadedFileName(connectorMessage);
 	    logger.info(&quot;uploadedFileName&quot;+uploadedFileName);
 	    var uploadedFileFullPath  = uploadFolderPath+uploadedFileName;
 	    // Ensure the upload folder exists and grant write permission if it does not
-	    logger.info(&quot;uploadedFileFullPath&quot;+uploadedFileFullPath);
 	    var uploadFolder = new File(uploadFolderPath);
 	    if (!uploadFolder.exists()) {
-	        logger.info(&quot;Upload folder does not exist. Creating it...&quot;);
 	        uploadFolder.mkdirs();
-	        logger.info(&quot;Upload folder created: &quot; + uploadFolderPath);
 	    }
 	    uploadFolder.setWritable(true);
-	    logger.info(&quot;Write permission granted to the upload folder.&quot;);
-	
 	    // Step 1: Save the Uploaded File
 	    var binaryContent = connectorMessage.getRawData().getBytes(&quot;ISO-8859-1&quot;);
 	    if (!binaryContent || binaryContent.length === 0) {
-	        logger.error(&quot;No valid ZIP file found in the uploaded data.&quot;);
+	        logger.error(&quot;No valid ZIP file found in the uploaded data for interaction id &quot;+zipFileInteractionId);
 	        throw new Error(&quot;Failed to extract ZIP file from input data.&quot;);
 	    }
-	    logger.info(&quot;Starting to save uploaded ZIP file...&quot;);
+	    logger.debug(&quot;Starting to save uploaded ZIP file for interaction Id &quot;+zipFileInteractionId);
 	    var uploadedFile = new File(uploadedFileFullPath);
 	    var fileOutputStream = new FileOutputStream(uploadedFile);
 	    fileOutputStream.write(binaryContent);
 	    fileOutputStream.close();
-	    logger.info(&quot;Successfully saved uploaded file to: &quot; + uploadedFileFullPath);
+	    logger.debug(&quot;uploadFileToInboundFolder END for interactionId&quot;+ zipFileInteractionId+&quot;Successfully saved uploaded file to: &quot; + uploadedFileFullPath);
 		return uploadedFileFullPath;
 	} catch (e) {
-	    logger.error(&quot;Error during ZIP file processing: &quot; + e.message);
+	    logger.error(&quot;Error during ZIP file processing for interactionId&quot;+zipFileInteractionId + e.message);
 	    throw e;
 	}
 }
 
 function extractFileContent() {
+	logger.debug(&quot;extractFileContent BEGIN for interactionId &quot;+zipFileInteractionId);
 	try {
 		var rawPayload = connectorMessage.getRawData();
 		var boundary = rawPayload.split(&quot;\r\n&quot;)[0]; // Get the boundary string from the first line
@@ -314,40 +322,38 @@ function extractFileContent() {
 		        }
 
 		        // At this point, binaryData contains only the binary data.
-		        logger.info(&quot;Extracted binary data: &quot; + binaryData);
+		       logger.debug(&quot;extractFileContent END for interactionId &quot;+zipFileInteractionId);
 		    } else {
-		        logger.error(&quot;Header separator not found in the payload.&quot;);
+		        logger.error(&quot;Header separator not found in the payload.&quot;+zipFileInteractionId);
 		    }
 		} else {
-		    logger.error(&quot;Payload does not contain the expected parts.&quot;);
+		    logger.error(&quot;Payload does not contain the expected parts.&quot;+zipFileInteractionId);
 		}
 		return binaryData;
 
 	} catch (e) {
 		// Log any errors that occur during execution.
-		logger.error(&quot;Error in sendFlatfileCsv function: &quot; + e);
+		logger.error(&quot;Error in sendFlatfileCsv function: &quot;+zipFileInteractionId+&quot; error &quot; + e);
 	}
 }
 
 function extractZipFile(zipFilePath, outputFolderPath) {
+    logger.debug(&quot;extractZipFile BEGIN for interactionId &quot;+zipFileInteractionId);
     var zipFile = new File(zipFilePath);
     var outputFolder = new File(outputFolderPath);
 
-    logger.info(&quot;ZIP File Path: &quot; + zipFilePath);
-    logger.info(&quot;Output Folder Path: &quot; + outputFolderPath);
-
     // Ensure output folder exists
     if (!outputFolder.exists()) {
-        logger.info(&quot;Output folder does not exist. Creating it...&quot;);
+        logger.info(&quot;Output folder does not exist. Creating it for interactionId &quot;+zipFileInteractionId);
         outputFolder.mkdirs();
-        logger.info(&quot;Output folder created: &quot; + outputFolderPath);
+        logger.info(&quot;Output folder created for interactionId:  &quot;+zipFileInteractionId +&quot; Output File Path =&quot; + outputFolderPath);
     }
     outputFolder.setWritable(true);
     if (!zipFile.exists() || zipFile.length() === 0) {
-        logger.error(&quot;The ZIP file does not exist or is empty.&quot;);
+        logger.error(&quot;The ZIP file does not exist or is empty for interactionId : &quot;+zipFileInteractionId);
         throw new Error(&quot;ZIP file is missing or empty.&quot;);
     }
-    logger.info(&quot;Size of the uploaded file: &quot; + zipFile.length() + &quot; bytes.&quot;);
+    logger.info(&quot;Size of the uploaded file: &quot; + zipFile.length() + &quot; bytes. for interactionId : &quot;+zipFileInteractionId);
     var extractionDone = false;
 
     try {
@@ -361,29 +367,25 @@ function extractZipFile(zipFilePath, outputFolderPath) {
             entries.nextElement();
             entryCount++;
         }
-        logger.info(&quot;Found &quot; + entryCount + &quot; entries in the ZIP file.&quot;);
 
         if (entryCount === 0) {
             javaZipFile.close();
-            logger.error(&quot;ZIP file contains no entries.&quot;);
+            logger.error(&quot;ZIP file contains no entries for interactionId :&quot;+zipFileInteractionId);
             throw new Error(&quot;ZIP file contains no entries.&quot;);
         }
 
         // Reset the entries enumeration to start extraction
         entries = javaZipFile.entries();
-        logger.info(&quot;Starting extraction process...&quot;);
+        logger.info(&quot;Starting extraction process for interactionId :&quot;+zipFileInteractionId);
 
         // Loop through entries and extract them
         while (entries.hasMoreElements()) {
             var entry = entries.nextElement();
-            logger.info(&quot;Found ZIP entry: &quot; + entry.getName());
-
             // Handle directories
             if (entry.isDirectory()) {
                 var newDir = new File(outputFolderPath, entry.getName());
                 if (!newDir.exists()) {
                     newDir.mkdirs();
-                    logger.info(&quot;Created directory: &quot; + newDir.getAbsolutePath());
                 }
             } else {
                 // Handle files
@@ -391,7 +393,6 @@ function extractZipFile(zipFilePath, outputFolderPath) {
                 var parentDir = newFile.getParentFile();
                 if (!parentDir.exists()) {
                     parentDir.mkdirs();
-                    logger.info(&quot;Created parent directory: &quot; + parentDir.getAbsolutePath());
                 }
 
                 // Extract file content
@@ -406,25 +407,24 @@ function extractZipFile(zipFilePath, outputFolderPath) {
 
                 bufferedOutputStream.close();
                 inputStream.close();
-                logger.info(&quot;Extracted file: &quot; + newFile.getAbsolutePath());
             }
         }
 
         // Mark extraction as complete
         extractionDone = true;
         javaZipFile.close();
-        logger.info(&quot;All ZIP entries have been extracted successfully.&quot;);
+        logger.info(&quot;extractZipFile END - All ZIP entries have been extracted successfully for interaction Id&quot;+zipFileInteractionId);
     } catch (e) {
         // Log only actual errors and not expected scenarios (like no entries in the ZIP)
         if (e.message !== &quot;ZIP file contains no entries.&quot;) {
-            logger.error(&quot;Error during ZIP file extraction: &quot; + e.message);
+            logger.error(&quot;Error during ZIP file extraction: for interactionId : &quot;+zipFileInteractionId + &quot; Message is &quot; + e.message);
         }
         throw e;
     }
 
     // Prevent second logging after extraction
     if (!extractionDone) {
-        logger.error(&quot;Extraction failed or no entries found.&quot;);
+        logger.error(&quot;Extraction failed or no entries found for interactionId : &quot;+zipFileInteractionId);
     }
 }</script>
         </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
@@ -584,7 +584,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1740049486786</time>
+        <time>1740121949804</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>
@@ -593,5 +593,6 @@ return;</undeployScript>
       </pruningSettings>
       <userId>1</userId>
     </metadata>
+    <channelTags/>
   </exportData>
 </channel>

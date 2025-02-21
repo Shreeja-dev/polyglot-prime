@@ -1,3 +1,4 @@
+logger.info("Message Recived in Channel"+channelName)
 var File = Packages.java.io.File;
 var FileOutputStream = Packages.java.io.FileOutputStream;
 var FileInputStream = Packages.java.io.FileInputStream;
@@ -7,30 +8,30 @@ var BufferedOutputStream = Packages.java.io.BufferedOutputStream;
 var ObjectMapper = Packages.com.fasterxml.jackson.databind.ObjectMapper;
 var JavaTimeModule = Packages.com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 var mapper = new ObjectMapper();
+var appConfig = globalMap.get("appConfig");
 mapper.registerModule(new JavaTimeModule()); 
 
-logger.info("Fetching AppConfig from Global Map");
 var tenantId = $('headers').getHeader('X-TechBD-Tenant-ID');
 var fhirProfileUrlHeader = $('headers').getHeader("FHIR-STRUCT-DEFN-PROFILE-URI");
-var zipFileInteractionId = java.util.UUID.randomUUID().toString();
+var zipFileInteractionId = channelMap.get("interactionId");
+logger.info("Invoke validation - BEGIN for interaction id"+zipFileInteractionId);
 var requestParameters = getRequestParameters();
-var inboundFolder = "D:/techbyDesign/flatFile/inbound/"; // TODO-move to environment variable
-var ingressFolder = "D:/techbyDesign/flatFile/ingress/"+zipFileInteractionId+"/ingress"; // TODO-move to environment variable'
-var pythonPackageFullPath = "D:/techbyDesign/specification/datapackage-nyher-fhir-ig-equivalent.json"
-var pythonScriptFullPath ="D:/techbyDesign/specification/validate-nyher-fhir-ig-equivalent.py";
+var inboundFolder = appConfig.getCsv().validation().inboundPath();
+var ingressFolder = appConfig.getCsv().validation().ingessHomePath()+zipFileInteractionId+"/ingress";
+var pythonPackageFullPath = appConfig.getCsv().validation().packagePath();
+var pythonScriptFullPath = appConfig.getCsv().validation().pythonScriptPath();
 var uploadedFileFullPath = uploadFileToInboundFolder(inboundFolder);
 extractZipFile(uploadedFileFullPath,ingressFolder);
 var csvFiles = getCsvFilesFromDirectory(ingressFolder); //TODO - non csv files to be listed as not-processed
 copyFileToFolder(pythonPackageFullPath,ingressFolder);
 copyFileToFolder(pythonScriptFullPath,ingressFolder);
-logger.info("Invoke validation - BEGIN");
-var file = createMultipartFile();
-logger.info("multi part file created " + file);
+
+var file = createMultipartFile(); 
 saveArchiveInteraction(zipFileInteractionId, file); //TODO - implement the saving
 var validationResults = invokeValidation(zipFileInteractionId, file,csvFiles,tenantId,requestParameters);
 var validationResultsJson = convertMapToJson(validationResults);
 responseMap.put("finalResponse", validationResultsJson);
-logger.info("Invoke validation - END");
+logger.info("Invoke validation - END for interactionId "+zipFileInteractionId);
 return;
 
 function convertMapToJson(map) {
@@ -42,6 +43,7 @@ function saveArchiveInteraction(zipFileInteractionId, file){
 	
 }
 function copyFileToFolder(sourcePath, destinationFolderPath) {
+    logger.debug("CopyFileToFolder BEGIN for interactionId "+zipFileInteractionId);
     var Files = Packages.java.nio.file.Files;
     var Paths = Packages.java.nio.file.Paths;
     var StandardCopyOption = Packages.java.nio.file.StandardCopyOption;
@@ -61,15 +63,17 @@ function copyFileToFolder(sourcePath, destinationFolderPath) {
 
         // Copy file to the folder
         Files.copy(source, destinationPath, StandardCopyOption.REPLACE_EXISTING);
-
+	   logger.debug("CopyFileToFolder END for interactionId "+zipFileInteractionId);
         return "File copied successfully to: " + destinationPath.toString();
     } catch (e) {
+    	   logger.error("Error while copying for interactionId "+zipFileInteractionId);
         return "Error copying file: " + e.message;
     }
 }
 
 
 function getCsvFilesFromDirectory(folderPath) {
+    logger.debug("getCsvFilesFromDirectory BEGIN for interactionId "+zipFileInteractionId);
     var File = Packages.java.io.File;
     var Arrays = Packages.java.util.Arrays;
     var ArrayList = Packages.java.util.ArrayList;
@@ -87,35 +91,43 @@ function getCsvFilesFromDirectory(folderPath) {
             }
         }
     }
+    logger.debug("getCsvFilesFromDirectory END for interactionId "+zipFileInteractionId);
     return fileList;
 }
+function invokeValidation(zipFileInteractionId, file, csvFiles, tenantId, requestParameters) {
+    logger.debug("invokeValidation BEGIN for interactionId "+zipFileInteractionId);
+    var engine = new Packages.org.techbd.orchestrate.csv.CsvOrchestrationEngine();
+    var session = null;
 
-function invokeValidation(zipFileInteractionId, file,csvFiles,tenantId,requestParameters){
-	
-	logger.info("invokeValidation " + tenantId);
-	var engine = new Packages.org.techbd.orchestrate.csv.CsvOrchestrationEngine();
-	var appConfig = globalMap.get("appConfig");
-	var vfsCoreService = new Packages.org.techbd.service.VfsCoreService();
-	engine.setAppConfig(appConfig);	
-	logger.info("vfscoreservice"+vfsCoreService);
-	engine.setVfsCoreService(vfsCoreService);
-	engine.setRequestParamters(requestParameters);
-     var session = engine.session()
-         .withMasterInteractionId(zipFileInteractionId)
-         .withSessionId(java.util.UUID.randomUUID().toString())
-         .withTenantId(tenantId)
-         .withGenerateBundle(true)
-         .withCsvFileList(csvFiles)
-         .withFile(file)
-         .build();
-     logger.info("session created ");    
-     engine.orchestrate(session);
-       logger.info("after orchestration ");    
-     return session.getValidationResults();
+    try {
+        var appConfig = globalMap.get("appConfig");
+        var vfsCoreService = new Packages.org.techbd.service.VfsCoreService();
 
+        engine.setAppConfig(appConfig);
+        engine.setVfsCoreService(vfsCoreService);
+        engine.setRequestParamters(requestParameters);
+
+        session = engine.session()
+            .withMasterInteractionId(zipFileInteractionId)
+            .withSessionId(java.util.UUID.randomUUID().toString())
+            .withTenantId(tenantId)
+            .withGenerateBundle(true)
+            .withCsvFileList(csvFiles)
+            .withFile(file)
+            .build();
+
+        engine.orchestrate(session);
+        logger.debug("invokeValidation END for interactionId "+zipFileInteractionId);
+        return session.getValidationResults();
+    } finally {
+        if (session !== null) {
+            engine.clear(session);
+        }
+    }
 }
+
 function createMultipartFile() {
-    logger.info("createMultipartFile -BEGIN ");
+    logger.debug("createMultipartFile BEGIN for interactionId "+zipFileInteractionId);
     var fileContent  = getUploadedFileContent(connectorMessage);
     var fileName = getUploadedFileName(connectorMessage);
 
@@ -157,7 +169,7 @@ function createMultipartFile() {
         };
     };
     var file = new MultipartFile(fileContent, fileName);
-    logger.info("MultipartFileCreated successfully "+file);
+    logger.debug("createMultipartFile END for interactionId "+zipFileInteractionId);
     return file;
 }
 
@@ -196,41 +208,37 @@ function getRequestParameters() {
 
 function uploadFileToInboundFolder(uploadFolderPath) {
 	try {
-		logger.info("uploadFileToInboundFolder");
+	    logger.debug("uploadFileToInboundFolder BEGIN for interactionId "+zipFileInteractionId);
 	    var uploadedFileName = getUploadedFileName(connectorMessage);
 	    logger.info("uploadedFileName"+uploadedFileName);
 	    var uploadedFileFullPath  = uploadFolderPath+uploadedFileName;
 	    // Ensure the upload folder exists and grant write permission if it does not
-	    logger.info("uploadedFileFullPath"+uploadedFileFullPath);
 	    var uploadFolder = new File(uploadFolderPath);
 	    if (!uploadFolder.exists()) {
-	        logger.info("Upload folder does not exist. Creating it...");
 	        uploadFolder.mkdirs();
-	        logger.info("Upload folder created: " + uploadFolderPath);
 	    }
 	    uploadFolder.setWritable(true);
-	    logger.info("Write permission granted to the upload folder.");
-	
 	    // Step 1: Save the Uploaded File
 	    var binaryContent = connectorMessage.getRawData().getBytes("ISO-8859-1");
 	    if (!binaryContent || binaryContent.length === 0) {
-	        logger.error("No valid ZIP file found in the uploaded data.");
+	        logger.error("No valid ZIP file found in the uploaded data for interaction id "+zipFileInteractionId);
 	        throw new Error("Failed to extract ZIP file from input data.");
 	    }
-	    logger.info("Starting to save uploaded ZIP file...");
+	    logger.debug("Starting to save uploaded ZIP file for interaction Id "+zipFileInteractionId);
 	    var uploadedFile = new File(uploadedFileFullPath);
 	    var fileOutputStream = new FileOutputStream(uploadedFile);
 	    fileOutputStream.write(binaryContent);
 	    fileOutputStream.close();
-	    logger.info("Successfully saved uploaded file to: " + uploadedFileFullPath);
+	    logger.debug("uploadFileToInboundFolder END for interactionId"+ zipFileInteractionId+"Successfully saved uploaded file to: " + uploadedFileFullPath);
 		return uploadedFileFullPath;
 	} catch (e) {
-	    logger.error("Error during ZIP file processing: " + e.message);
+	    logger.error("Error during ZIP file processing for interactionId"+zipFileInteractionId + e.message);
 	    throw e;
 	}
 }
 
 function extractFileContent() {
+	logger.debug("extractFileContent BEGIN for interactionId "+zipFileInteractionId);
 	try {
 		var rawPayload = connectorMessage.getRawData();
 		var boundary = rawPayload.split("\r\n")[0]; // Get the boundary string from the first line
@@ -259,40 +267,38 @@ function extractFileContent() {
 		        }
 
 		        // At this point, binaryData contains only the binary data.
-		        logger.info("Extracted binary data: " + binaryData);
+		       logger.debug("extractFileContent END for interactionId "+zipFileInteractionId);
 		    } else {
-		        logger.error("Header separator not found in the payload.");
+		        logger.error("Header separator not found in the payload."+zipFileInteractionId);
 		    }
 		} else {
-		    logger.error("Payload does not contain the expected parts.");
+		    logger.error("Payload does not contain the expected parts."+zipFileInteractionId);
 		}
 		return binaryData;
 
 	} catch (e) {
 		// Log any errors that occur during execution.
-		logger.error("Error in sendFlatfileCsv function: " + e);
+		logger.error("Error in sendFlatfileCsv function: "+zipFileInteractionId+" error " + e);
 	}
 }
 
 function extractZipFile(zipFilePath, outputFolderPath) {
+    logger.debug("extractZipFile BEGIN for interactionId "+zipFileInteractionId);
     var zipFile = new File(zipFilePath);
     var outputFolder = new File(outputFolderPath);
 
-    logger.info("ZIP File Path: " + zipFilePath);
-    logger.info("Output Folder Path: " + outputFolderPath);
-
     // Ensure output folder exists
     if (!outputFolder.exists()) {
-        logger.info("Output folder does not exist. Creating it...");
+        logger.info("Output folder does not exist. Creating it for interactionId "+zipFileInteractionId);
         outputFolder.mkdirs();
-        logger.info("Output folder created: " + outputFolderPath);
+        logger.info("Output folder created for interactionId:  "+zipFileInteractionId +" Output File Path =" + outputFolderPath);
     }
     outputFolder.setWritable(true);
     if (!zipFile.exists() || zipFile.length() === 0) {
-        logger.error("The ZIP file does not exist or is empty.");
+        logger.error("The ZIP file does not exist or is empty for interactionId : "+zipFileInteractionId);
         throw new Error("ZIP file is missing or empty.");
     }
-    logger.info("Size of the uploaded file: " + zipFile.length() + " bytes.");
+    logger.info("Size of the uploaded file: " + zipFile.length() + " bytes. for interactionId : "+zipFileInteractionId);
     var extractionDone = false;
 
     try {
@@ -306,29 +312,25 @@ function extractZipFile(zipFilePath, outputFolderPath) {
             entries.nextElement();
             entryCount++;
         }
-        logger.info("Found " + entryCount + " entries in the ZIP file.");
 
         if (entryCount === 0) {
             javaZipFile.close();
-            logger.error("ZIP file contains no entries.");
+            logger.error("ZIP file contains no entries for interactionId :"+zipFileInteractionId);
             throw new Error("ZIP file contains no entries.");
         }
 
         // Reset the entries enumeration to start extraction
         entries = javaZipFile.entries();
-        logger.info("Starting extraction process...");
+        logger.info("Starting extraction process for interactionId :"+zipFileInteractionId);
 
         // Loop through entries and extract them
         while (entries.hasMoreElements()) {
             var entry = entries.nextElement();
-            logger.info("Found ZIP entry: " + entry.getName());
-
             // Handle directories
             if (entry.isDirectory()) {
                 var newDir = new File(outputFolderPath, entry.getName());
                 if (!newDir.exists()) {
                     newDir.mkdirs();
-                    logger.info("Created directory: " + newDir.getAbsolutePath());
                 }
             } else {
                 // Handle files
@@ -336,7 +338,6 @@ function extractZipFile(zipFilePath, outputFolderPath) {
                 var parentDir = newFile.getParentFile();
                 if (!parentDir.exists()) {
                     parentDir.mkdirs();
-                    logger.info("Created parent directory: " + parentDir.getAbsolutePath());
                 }
 
                 // Extract file content
@@ -351,24 +352,23 @@ function extractZipFile(zipFilePath, outputFolderPath) {
 
                 bufferedOutputStream.close();
                 inputStream.close();
-                logger.info("Extracted file: " + newFile.getAbsolutePath());
             }
         }
 
         // Mark extraction as complete
         extractionDone = true;
         javaZipFile.close();
-        logger.info("All ZIP entries have been extracted successfully.");
+        logger.info("extractZipFile END - All ZIP entries have been extracted successfully for interaction Id"+zipFileInteractionId);
     } catch (e) {
         // Log only actual errors and not expected scenarios (like no entries in the ZIP)
         if (e.message !== "ZIP file contains no entries.") {
-            logger.error("Error during ZIP file extraction: " + e.message);
+            logger.error("Error during ZIP file extraction: for interactionId : "+zipFileInteractionId + " Message is " + e.message);
         }
         throw e;
     }
 
     // Prevent second logging after extraction
     if (!extractionDone) {
-        logger.error("Extraction failed or no entries found.");
+        logger.error("Extraction failed or no entries found for interactionId : "+zipFileInteractionId);
     }
 }
