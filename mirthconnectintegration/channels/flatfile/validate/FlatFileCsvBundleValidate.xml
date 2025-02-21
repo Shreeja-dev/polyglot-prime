@@ -3,7 +3,7 @@
   <nextMetaDataId>2</nextMetaDataId>
   <name>FlatFileCsvBundleValidate</name>
   <description></description>
-  <revision>52</revision>
+  <revision>53</revision>
   <sourceConnector version="4.5.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -56,8 +56,8 @@
           <script>var validateCsv = globalMap.get(&quot;validateCsv&quot;);
 var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
 var zipFileInteractionId = channelMap.get(&quot;interactionId&quot;);
-var validationResponse = validateCsv(channelName, connectorMessage, channelMap,tenantId,zipFileInteractionId);
-responseMap.put(&quot;finalResponse&quot;, validationResponse);</script>
+validateCsv(channelName, connectorMessage, channelMap,tenantId,zipFileInteractionId);
+responseMap.put(&quot;finalResponse&quot;, channelMap.get(&quot;csvValidationResults&quot;));</script>
         </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
       </elements>
       <inboundTemplate encoding="base64"></inboundTemplate>
@@ -215,7 +215,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1740129020125</time>
+        <time>1740135877518</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>

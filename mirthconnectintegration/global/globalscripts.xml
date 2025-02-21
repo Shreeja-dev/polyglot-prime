@@ -94,7 +94,7 @@ function getCsvFilesFromDirectory(folderPath,zipFileInteractionId) {
     logger.debug(&quot;getCsvFilesFromDirectory END for interactionId &quot;+zipFileInteractionId);
     return fileList;
 }
-function invokeValidation(zipFileInteractionId, file, csvFiles, tenantId, requestParameters,zipFileInteractionId) {
+function invokeValidation(zipFileInteractionId, file, csvFiles, tenantId, requestParameters,zipFileInteractionId,channelMap) {
     logger.debug(&quot;invokeValidation BEGIN for interactionId &quot;+zipFileInteractionId);
     var engine = new Packages.org.techbd.orchestrate.csv.CsvOrchestrationEngine();
     var session = null;
@@ -117,8 +117,10 @@ function invokeValidation(zipFileInteractionId, file, csvFiles, tenantId, reques
             .build();
 
         engine.orchestrate(session);
+        channelMap.put(&quot;csvPayloadAndValidationOutcome&quot;,session.getPayloadAndValidationOutcomes());
+        channelMap.put(&quot;csvFilesNotProcessed&quot;,session.getFilesNotProcessed());
+        channelMap.put(&quot;csvValidationResults&quot;,convertMapToJson(session.getValidationResults()));
         logger.debug(&quot;invokeValidation END for interactionId &quot;+zipFileInteractionId);
-        return session.getValidationResults();
     } finally {
         if (session !== null) {
             engine.clear(session);
@@ -461,10 +463,7 @@ globalMap.put(&quot;validateCsv&quot;, function validateCsv(channelName, connect
     var file = createMultipartFile(zipFileInteractionId,connectorMessage);
     saveArchiveInteraction(zipFileInteractionId, file);
 
-    var validationResults = invokeValidation(zipFileInteractionId, file, csvFiles, tenantId, requestParameters,zipFileInteractionId);
-    var validationResultsJson = convertMapToJson(validationResults);
-    
-    return validationResultsJson;
+    invokeValidation(zipFileInteractionId, file, csvFiles, tenantId, requestParameters,zipFileInteractionId,channelMap);
 });
 
 return;
