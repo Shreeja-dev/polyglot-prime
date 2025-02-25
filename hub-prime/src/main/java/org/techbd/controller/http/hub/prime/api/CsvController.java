@@ -69,10 +69,9 @@ public class CsvController {
 
     validateFile(file);
     validateTenantId(tenantId);
-    Map<String,String> requestParameters = Map.of(Constants.REQUEST_URI,request.getRequestURI()
-    ,Constants.INTERACTION_ID,UUID.randomUUID().toString(),Constants.REQUESTED_SESSION_ID,request.getRequestedSessionId(),
-    Constants.ORIGIN,origin,Constants.SFTP_SESSION_ID,sftpSessionId);
-    Map<String,String> headerParameters = Map.of(Constants.USER_AGENT,tenantId);
+    Map<String, String> requestParameters = getRequestParameters(request.getRequestURI(), request.getRequestedSessionId(), origin, sftpSessionId);
+    Map<String, String> headerParameters = getHeaderParameters(tenantId);
+
     csvService.setRequestParameters(requestParameters);
     csvService.setHeaderParameters(headerParameters);
     return csvService.validateCsvFile(file);
@@ -93,13 +92,28 @@ public class CsvController {
     validateFile(file);
     validateTenantId(tenantId);
     
-    Map<String,String> requestParameters = Map.of(Constants.REQUEST_URI,request.getRequestURI()
-    ,Constants.INTERACTION_ID,UUID.randomUUID().toString(),Constants.REQUESTED_SESSION_ID,request.getRequestedSessionId());
-    Map<String,String> headerParameters = Map.of(Constants.USER_AGENT,request.getHeader("User-Agent"));
+    Map<String, String> requestParameters = getRequestParameters(request.getRequestURI(), request.getRequestedSessionId(), origin, sftpSessionId);
+    Map<String, String> headerParameters = getHeaderParameters(tenantId);
+
     csvService.setRequestParameters(requestParameters);
     csvService.setHeaderParameters(headerParameters);
     List<Object> processedFiles = csvService.processZipFile(file, request, response, tenantId, origin, sftpSessionId);
     return ResponseEntity.ok(processedFiles);
   
   }
+  public Map<String, String> getRequestParameters(String requestURI, String requestedSessionId, String origin, String sftpSessionId) {
+    Map<String, String> requestParameters = new HashMap<>();
+    if (requestURI != null) requestParameters.put(Constants.REQUEST_URI, requestURI);
+    requestParameters.put(Constants.INTERACTION_ID, UUID.randomUUID().toString());
+    if (requestedSessionId != null) requestParameters.put(Constants.REQUESTED_SESSION_ID, requestedSessionId);
+    if (origin != null) requestParameters.put(Constants.ORIGIN, origin);
+    if (sftpSessionId != null) requestParameters.put(Constants.SFTP_SESSION_ID, sftpSessionId);
+    return requestParameters;
+}
+
+public Map<String, String> getHeaderParameters(String tenantId) {
+    Map<String, String> headerParameters = new HashMap<>();    
+    if (tenantId != null) headerParameters.put(Constants.USER_AGENT, tenantId);
+    return headerParameters;
+}
 }
