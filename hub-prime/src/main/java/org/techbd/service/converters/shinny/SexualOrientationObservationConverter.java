@@ -22,7 +22,7 @@ import org.techbd.model.csv.DemographicData;
 import org.techbd.model.csv.QeAdminData;
 import org.techbd.model.csv.ScreeningObservationData;
 import org.techbd.model.csv.ScreeningProfileData;
-import org.techbd.util.CsvConstants;
+import org.techbd.util.Constants;
 import org.techbd.util.CsvConversionUtil;
 import org.techbd.util.DateUtil;
 import org.techbd.util.FHIRUtil;
@@ -59,7 +59,7 @@ public class SexualOrientationObservationConverter extends BaseConverter {
             meta.setLastUpdated(DateUtil.parseDate(demographicData.getSexualOrientationLastUpdated()));
             observation.setStatus(Observation.ObservationStatus.fromCode("final")); // TODO : remove static reference
             Reference subjectReference = new Reference();
-            subjectReference.setReference("Patient/" + idsGenerated.get(CsvConstants.PATIENT_ID)); // TODO : remove static reference
+            subjectReference.setReference("Patient/" + idsGenerated.get(Constants.PATIENT_ID)); // TODO : remove static reference
             observation.setSubject(subjectReference);
             CodeableConcept code = new CodeableConcept();
             code.addCoding(new Coding("http://loinc.org", // TODO : remove static reference

@@ -21,7 +21,7 @@ import org.techbd.model.csv.DemographicData;
 import org.techbd.model.csv.QeAdminData;
 import org.techbd.model.csv.ScreeningObservationData;
 import org.techbd.model.csv.ScreeningProfileData;
-import org.techbd.util.CsvConstants;
+import org.techbd.util.Constants;
 import org.techbd.util.CsvConversionUtil;
 import org.techbd.util.DateUtil;
 
@@ -70,7 +70,7 @@ public class EncounterConverter extends BaseConverter {
 
         encounter.setId(CsvConversionUtil.sha256(screeningProfileData.getEncounterId()));
         
-        idsGenerated.put(CsvConstants.ENCOUNTER_ID, encounter.getId());
+        idsGenerated.put(Constants.ENCOUNTER_ID, encounter.getId());
 
         String fullUrl = "http://shinny.org/us/ny/hrsn/Encounter/" + encounter.getId();
 
@@ -101,7 +101,7 @@ public class EncounterConverter extends BaseConverter {
     }
 
     private void populatePatientReference(Encounter encounter, Map<String, String> idsGenerated) {
-        encounter.setSubject(new Reference("Patient/" + idsGenerated.get(CsvConstants.PATIENT_ID)));
+        encounter.setSubject(new Reference("Patient/" + idsGenerated.get(Constants.PATIENT_ID)));
     }
 
     private static void populateEncounterClass(Encounter encounter, ScreeningProfileData data) {
@@ -160,7 +160,7 @@ public class EncounterConverter extends BaseConverter {
             Map<String, String> idsGenerated) {
         if (screeningResourceData != null) {
             encounter.addLocation(new Encounter.EncounterLocationComponent()
-                    .setLocation(new Reference("Location/" + idsGenerated.get(CsvConstants.PATIENT_ID))));
+                    .setLocation(new Reference("Location/" + idsGenerated.get(Constants.PATIENT_ID))));
         }
     }
 }

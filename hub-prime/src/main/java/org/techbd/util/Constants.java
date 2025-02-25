@@ -1,6 +1,6 @@
 package org.techbd.util;
 
-public interface CsvConstants {
+public interface Constants {
 
     public static final String PATIENT_ID="PATIENT_ID";
     public static final String ENCOUNTER_ID="ENCOUNTER_ID";

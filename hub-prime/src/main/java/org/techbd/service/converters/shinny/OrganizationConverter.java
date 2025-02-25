@@ -25,7 +25,7 @@ import org.techbd.model.csv.DemographicData;
 import org.techbd.model.csv.QeAdminData;
 import org.techbd.model.csv.ScreeningObservationData;
 import org.techbd.model.csv.ScreeningProfileData;
-import org.techbd.util.CsvConstants;
+import org.techbd.util.Constants;
 import org.techbd.util.CsvConversionUtil;
 import org.techbd.util.DateUtil;
 
@@ -69,7 +69,7 @@ public class OrganizationConverter extends BaseConverter {
         Organization organization = new Organization();
         setMeta(organization);
         organization.setId(CsvConversionUtil.sha256(qeAdminData.getFacilityId())); // Assuming qrAdminData contains orgId
-        idsGenerated.put(CsvConstants.ORGANIZATION_ID,organization.getId());
+        idsGenerated.put(Constants.ORGANIZATION_ID,organization.getId());
         String fullUrl = "http://shinny.org/us/ny/hrsn/Organization/" + organization.getId();
         Meta meta = organization.getMeta();
         meta.setLastUpdated(DateUtil.parseDate(qeAdminData.getFacilityLastUpdated()));

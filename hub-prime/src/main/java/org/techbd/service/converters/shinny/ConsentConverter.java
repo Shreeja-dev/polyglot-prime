@@ -26,7 +26,7 @@ import org.techbd.model.csv.DemographicData;
 import org.techbd.model.csv.QeAdminData;
 import org.techbd.model.csv.ScreeningObservationData;
 import org.techbd.model.csv.ScreeningProfileData;
-import org.techbd.util.CsvConstants;
+import org.techbd.util.Constants;
 import org.techbd.util.CsvConversionUtil;
 import org.techbd.util.DateUtil;
 
@@ -149,11 +149,11 @@ public class ConsentConverter extends BaseConverter {
     }
 
     private void populatePatientReference(Consent consent, Map<String,String> idsGenerated) {
-            consent.getPatient().setReference("Patient/" + idsGenerated.get(CsvConstants.PATIENT_ID));
+            consent.getPatient().setReference("Patient/" + idsGenerated.get(Constants.PATIENT_ID));
     }
 
     private void populateOrganizationReference(Consent consent,Map<String,String> idsGenerated) {
-            consent.getOrganizationFirstRep().setReference("Organization/"+idsGenerated.get(CsvConstants.ORGANIZATION_ID));
+            consent.getOrganizationFirstRep().setReference("Organization/"+idsGenerated.get(Constants.ORGANIZATION_ID));
     }
 
     private void populateConsentState(Consent consent, ScreeningProfileData screeningResourceData) {

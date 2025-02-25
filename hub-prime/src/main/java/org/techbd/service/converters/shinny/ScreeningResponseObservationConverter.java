@@ -28,7 +28,7 @@ import org.techbd.model.csv.DemographicData;
 import org.techbd.model.csv.QeAdminData;
 import org.techbd.model.csv.ScreeningObservationData;
 import org.techbd.model.csv.ScreeningProfileData;
-import org.techbd.util.CsvConstants;
+import org.techbd.util.Constants;
 import org.techbd.util.CsvConversionUtil;
 import org.techbd.util.DateUtil;
 import org.techbd.util.FHIRUtil;
@@ -147,7 +147,7 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
                         code.setText(data.getQuestionCodeText());
                         observation.setCode(code);
                         observation.setSubject(new Reference("Patient/" +
-                                        idsGenerated.get(CsvConstants.PATIENT_ID)));
+                                        idsGenerated.get(Constants.PATIENT_ID)));
                         if (data.getRecordedTime() != null) {
                                 observation.setEffective(new DateTimeType(DateUtil.convertStringToDate(data.getRecordedTime())));
                         }
@@ -344,11 +344,11 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
                 groupObservation.setCode(code);
 
                 // Set subject, effective time, and issued date
-                String patientId = idsGenerated.getOrDefault(CsvConstants.PATIENT_ID, null);
+                String patientId = idsGenerated.getOrDefault(Constants.PATIENT_ID, null);
                 if (patientId != null){
                         groupObservation.setSubject(new Reference("Patient/" + patientId));
                 }
-                String encounterId = idsGenerated.getOrDefault(CsvConstants.ENCOUNTER_ID, null);
+                String encounterId = idsGenerated.getOrDefault(Constants.ENCOUNTER_ID, null);
                 if (encounterId != null){
                         groupObservation.setEncounter( new Reference("Encounter/" + encounterId));
                 }

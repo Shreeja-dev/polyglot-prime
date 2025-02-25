@@ -31,7 +31,7 @@ import org.techbd.model.csv.DemographicData;
 import org.techbd.model.csv.QeAdminData;
 import org.techbd.model.csv.ScreeningObservationData;
 import org.techbd.model.csv.ScreeningProfileData;
-import org.techbd.util.CsvConstants;
+import org.techbd.util.Constants;
 import org.techbd.util.CsvConversionUtil;
 import org.techbd.util.DateUtil;
 
@@ -73,7 +73,7 @@ public class PatientConverter extends BaseConverter {
         patient.setId(CsvConversionUtil
                 .sha256(generateUniqueId(screeningProfileData.getEncounterId(), qeAdminData.getFacilityId(),
                         demographicData.getPatientMrIdValue())));
-        idsGenerated.put(CsvConstants.PATIENT_ID, patient.getId());
+        idsGenerated.put(Constants.PATIENT_ID, patient.getId());
         String fullUrl = "http://shinny.org/us/ny/hrsn/Patient/" + patient.getId();
         Meta meta = patient.getMeta();
         meta.setLastUpdated(DateUtil.parseDate(demographicData.getPatientLastUpdated())); // max date available in all
@@ -213,7 +213,7 @@ public class PatientConverter extends BaseConverter {
 
             // Optional: Add assigner if needed (uncomment if required)
             Reference assigner = new Reference();
-            assigner.setReference("Organization/"+idsGenerated.get(CsvConstants.ORGANIZATION_ID));
+            assigner.setReference("Organization/"+idsGenerated.get(Constants.ORGANIZATION_ID));
             // populate while organization is populated
             identifier.setAssigner(assigner);
 
