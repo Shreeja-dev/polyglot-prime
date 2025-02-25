@@ -27,22 +27,20 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.micrometer.common.util.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.Setter;
+
 @Service
+@Setter
 public class CsvService {
 
-    private final CsvOrchestrationEngine engine;
+    private CsvOrchestrationEngine engine;
     private static final Logger LOG = LoggerFactory.getLogger(CsvService.class);
+    
     @Value("${org.techbd.service.http.interactions.saveUserDataToInteractions:true}")
     private boolean saveUserDataToInteractions;
-    private final UdiPrimeJpaConfig udiPrimeJpaConfig;
-    private final CsvBundleProcessorService csvBundleProcessorService;
 
-    public CsvService(final CsvOrchestrationEngine engine, final UdiPrimeJpaConfig udiPrimeJpaConfig,
-            final CsvBundleProcessorService csvBundleProcessorService) {
-        this.engine = engine;
-        this.udiPrimeJpaConfig = udiPrimeJpaConfig;
-        this.csvBundleProcessorService = csvBundleProcessorService;
-    }
+    private UdiPrimeJpaConfig udiPrimeJpaConfig;
+    private CsvBundleProcessorService csvBundleProcessorService;
 
     public Object validateCsvFile(final MultipartFile file, final HttpServletRequest request,
             final HttpServletResponse response,
