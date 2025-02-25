@@ -1,6 +1,9 @@
 package org.techbd.controller.http.hub.prime.api;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.techbd.conf.Configuration;
 import org.techbd.service.CsvService;
+import org.techbd.util.Constants;
 
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -65,7 +69,13 @@ public class CsvController {
 
     validateFile(file);
     validateTenantId(tenantId);
-    return csvService.validateCsvFile(file, request, response, tenantId, origin, sftpSessionId);
+    Map<String,String> requestParameters = Map.of(Constants.REQUEST_URI,request.getRequestURI()
+    ,Constants.INTERACTION_ID,UUID.randomUUID().toString(),Constants.REQUESTED_SESSION_ID,request.getRequestedSessionId(),
+    Constants.ORIGIN,origin,Constants.SFTP_SESSION_ID,sftpSessionId);
+    Map<String,String> headerParameters = Map.of(Constants.USER_AGENT,tenantId);
+    csvService.setRequestParameters(requestParameters);
+    csvService.setHeaderParameters(headerParameters);
+    return csvService.validateCsvFile(file);
   }
 
   @PostMapping(value = { "/flatfile/csv/Bundle", "/flatfile/csv/Bundle/" }, consumes = {
@@ -82,6 +92,12 @@ public class CsvController {
         
     validateFile(file);
     validateTenantId(tenantId);
+    
+    Map<String,String> requestParameters = Map.of(Constants.REQUEST_URI,request.getRequestURI()
+    ,Constants.INTERACTION_ID,UUID.randomUUID().toString(),Constants.REQUESTED_SESSION_ID,request.getRequestedSessionId());
+    Map<String,String> headerParameters = Map.of(Constants.USER_AGENT,request.getHeader("User-Agent"));
+    csvService.setRequestParameters(requestParameters);
+    csvService.setHeaderParameters(headerParameters);
     List<Object> processedFiles = csvService.processZipFile(file, request, response, tenantId, origin, sftpSessionId);
     return ResponseEntity.ok(processedFiles);
   

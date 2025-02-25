@@ -12,4 +12,13 @@ public interface Constants {
     public static final String MENTAL_HEALTH_SCORE_QUESTIONS = "MENTAL_HEALTH_SCORE_QUESTIONS";
     public static final String PHYSICAL_ACTIVITY_SCORE_QUESTIONS = "PHYSICAL_ACTIVITY_SCORE_QUESTIONS";
 
+    //Constants for request paramteres
+    public static final String INTERACTION_ID="INTERACTION_ID";
+    public static final String REQUEST_URI="REQUEST_URI";
+    public static final String USER_AGENT="USER_AGENT";
+    public static final String TENANT_ID="TENANT_ID";
+    public static final String SFTP_SESSION_ID="SFTP_SESSION_ID";
+    public static final String REQUESTED_SESSION_ID="REQUESTED_SESSION_ID";
+    public static final String ORIGIN="ORIGIN";
+
 }

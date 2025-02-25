@@ -22,6 +22,7 @@ import org.techbd.orchestrate.csv.CsvOrchestrationEngine.OrchestrationSessionBui
 import org.techbd.service.http.Interactions;
 import org.techbd.service.http.InteractionsFilter;
 import org.techbd.udi.UdiPrimeJpaConfig;
+import org.techbd.util.Constants;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -53,13 +54,15 @@ class CsvServiceTest {
         mockRequest = mock(HttpServletRequest.class);
         mockResponse = mock(HttpServletResponse.class);
         testFile = new MockMultipartFile("test.csv", "test.csv", "text/csv", "test data".getBytes());
-        
+        csvService.setHeaderParameters(getHeaderParameters());
+        csvService.setRequestParameters(getRequestParameters());
         when(engine.session()).thenReturn(sessionBuilder);
         when(sessionBuilder.withMasterInteractionId(anyString())).thenReturn(sessionBuilder);
         when(sessionBuilder.withSessionId(anyString())).thenReturn(sessionBuilder);
         when(sessionBuilder.withTenantId(anyString())).thenReturn(sessionBuilder);
         when(sessionBuilder.withFile(any())).thenReturn(sessionBuilder);
-        when(sessionBuilder.withRequest(any())).thenReturn(sessionBuilder);
+        when(sessionBuilder.withRequestParameters(any())).thenReturn(sessionBuilder);
+        when(sessionBuilder.withHeaderParameters(any())).thenReturn(sessionBuilder);
     }
 
     @Nested
@@ -92,7 +95,8 @@ class CsvServiceTest {
         when(sessionBuilder.withSessionId(anyString())).thenReturn(sessionBuilder);
         when(sessionBuilder.withTenantId(tenantId)).thenReturn(sessionBuilder);
         when(sessionBuilder.withFile(file)).thenReturn(sessionBuilder);
-        when(sessionBuilder.withRequest(request)).thenReturn(sessionBuilder);
+        when(sessionBuilder.withRequestParameters(any())).thenReturn(sessionBuilder);
+        when(sessionBuilder.withHeaderParameters(any())).thenReturn(sessionBuilder);
         when(sessionBuilder.build()).thenReturn(session);
 
         Map<String, Object> expectedValidationResults = new HashMap<>();
@@ -100,7 +104,7 @@ class CsvServiceTest {
         when(session.getValidationResults()).thenReturn(expectedValidationResults);
 
         // Act
-        Object result = csvService.validateCsvFile(file, request, response, tenantId, origin, sftpSessionId);
+        Object result = csvService.validateCsvFile(file);
 
         // Assert
         assertNotNull(result);
@@ -117,8 +121,7 @@ class CsvServiceTest {
             // Act & Assert
             assertThrows(RuntimeException.class, () -> 
                 csvService.validateCsvFile(
-                    testFile, mockRequest, mockResponse,
-                    TEST_TENANT_ID, TEST_ORIGIN, TEST_SFTP_SESSION_ID
+                    testFile
                 )
             );
         }
@@ -129,8 +132,7 @@ class CsvServiceTest {
             void shouldRequireNonNullFile() {
                 assertThrows(NullPointerException.class, () ->
                     csvService.validateCsvFile(
-                        null, mockRequest, mockResponse,
-                        TEST_TENANT_ID, TEST_ORIGIN, TEST_SFTP_SESSION_ID
+                        null
                     )
                 );
             }
@@ -139,8 +141,7 @@ class CsvServiceTest {
             void shouldRequireNonNullTenantId() {
                 assertThrows(NullPointerException.class, () ->
                     csvService.validateCsvFile(
-                        testFile, mockRequest, mockResponse,
-                        null, TEST_ORIGIN, TEST_SFTP_SESSION_ID
+                        testFile
                     )
                 );
             }
@@ -150,11 +151,11 @@ class CsvServiceTest {
                 // Testing all null parameter combinations in one test
                 assertAll(
                     () -> assertThrows(NullPointerException.class, () ->
-                        csvService.validateCsvFile(null, null, null, null, null, null)),
+                        csvService.validateCsvFile(null)),
                     () -> assertThrows(NullPointerException.class, () ->
-                        csvService.validateCsvFile(testFile, mockRequest, mockResponse, null, TEST_ORIGIN, TEST_SFTP_SESSION_ID)),
+                        csvService.validateCsvFile(testFile)),
                     () -> assertThrows(NullPointerException.class, () ->
-                        csvService.validateCsvFile(testFile, null, mockResponse, TEST_TENANT_ID, TEST_ORIGIN, TEST_SFTP_SESSION_ID))
+                        csvService.validateCsvFile(testFile))
                 );
             }
         }
@@ -166,6 +167,23 @@ class CsvServiceTest {
         when(interactionsFilter.getActiveRequestEnc(mockRequest)).thenReturn(mockRequestEncountered);
         when(mockRequestEncountered.requestId()).thenReturn(UUID.randomUUID());
         return interactionsFilter;
+    }
+
+    public Map<String, String> getRequestParameters() {
+        return Map.of(
+            Constants.REQUEST_URI, "/api/resource",
+            Constants.INTERACTION_ID, UUID.randomUUID().toString(),
+            Constants.REQUESTED_SESSION_ID, "mockSessionId123",
+            Constants.ORIGIN, "MockOrigin",
+            Constants.SFTP_SESSION_ID, "MockSftpSessionId"
+        );
+    }
+
+    public Map<String, String> getHeaderParameters() {
+        return Map.of(
+            Constants.USER_AGENT, "MockTenantId",
+            Constants.TENANT_ID, "MockSftpSessionId"
+        );
     }
 }
 
