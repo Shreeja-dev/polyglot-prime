@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -34,7 +35,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.MimeTypeUtils;
-import org.springframework.web.multipart.MultipartFile;
 import org.techbd.conf.Configuration;
 import org.techbd.model.csv.FileDetail;
 import org.techbd.model.csv.FileType;
@@ -116,7 +116,8 @@ public class CsvOrchestrationEngine {
         private String sessionId;
         private String tenantId;
         private Device device;
-        private MultipartFile file;
+        private byte[] content;
+        private String originalFileName;
         private String masterInteractionId;
         private boolean generateBundle;
         private Map<String,String> requestParameters;
@@ -136,8 +137,13 @@ public class CsvOrchestrationEngine {
             return this;
         }
 
-        public OrchestrationSessionBuilder withFile(final MultipartFile file) {
-            this.file = file;
+        public OrchestrationSessionBuilder withOriginalFileName(final String originalFileName) {
+            this.originalFileName = originalFileName;
+            return this;
+        }
+
+        public OrchestrationSessionBuilder withFileContent(final byte[] content) {
+            this.content = content;
             return this;
         }
 
@@ -166,10 +172,10 @@ public class CsvOrchestrationEngine {
             if (device == null) {
                 device = Device.INSTANCE;
             }
-            if (file == null) {
+            if (content == null || content.length <=0 ) {
                 throw new IllegalArgumentException("File must not be null");
             }
-            return new OrchestrationSession(sessionId, tenantId, device, file, masterInteractionId, requestParameters,headerParameters,
+            return new OrchestrationSession(sessionId, tenantId, device, content,originalFileName, masterInteractionId, requestParameters,headerParameters,
                     generateBundle);
         }
     }
@@ -194,7 +200,8 @@ public class CsvOrchestrationEngine {
         private final String sessionId;
         private final String masterInteractionId;
         private final Device device;
-        private final MultipartFile file;
+        private final byte[] content;
+        private final String originalFileName;
         private Map<String, Object> validationResults;
         private List<String> filesNotProcessed;
         private Map<String, PayloadAndValidationOutcome> payloadAndValidationOutcomes;
@@ -203,13 +210,15 @@ public class CsvOrchestrationEngine {
         private Map<String,String> requestParameters;
         private Map<String,String> headerParameters;
         public OrchestrationSession(final String sessionId, final String tenantId, final Device device,
-                final MultipartFile file,
+                final byte[] content,
+                final String originalFileName,
                 final String masterInteractionId,
                 final Map<String,String> requestParameters,final Map<String,String> headerParameters, boolean generateBundle) {
             this.sessionId = sessionId;
             this.tenantId = tenantId;
             this.device = device;
-            this.file = file;
+            this.content = content;
+            this.originalFileName = originalFileName;
             this.validationResults = new HashMap<>();
             this.masterInteractionId = masterInteractionId;
             this.requestParameters = requestParameters;
@@ -235,8 +244,12 @@ public class CsvOrchestrationEngine {
             return device;
         }
 
-        public MultipartFile getFile() {
-            return file;
+        public byte[] getContent() {
+            return content;
+        }
+
+        public String getOriginalFileName () {
+            return originalFileName;
         }
 
         public String getMasterInteractionId() {
@@ -257,25 +270,23 @@ public class CsvOrchestrationEngine {
 
         public void validate() throws IOException {
             log.info("CsvOrchestrationEngine : validate - file : {} BEGIN for interaction id : {}",
-                    file.getOriginalFilename(), masterInteractionId);
+                    originalFileName, masterInteractionId);
             final Instant intiatedAt = Instant.now();
-            final String originalFilename = file.getOriginalFilename();
             final String uniqueFilename = masterInteractionId + "_"
-                    + (originalFilename != null ? originalFilename : "upload.zip");
+                    + (originalFileName != null ? originalFileName : "upload.zip");
             final Path destinationPath = Path.of(appConfig.getCsv().validation().inboundPath(), uniqueFilename);
             Files.createDirectories(destinationPath.getParent());
 
             // Save the uploaded file to the inbound folder
-            Files.copy(file.getInputStream(), destinationPath, StandardCopyOption.REPLACE_EXISTING);
+            Files.write(destinationPath, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             log.info("File saved to: {}", destinationPath);
 
             // Trigger CSV processing and validation
-            this.validationResults = processScreenings(masterInteractionId, intiatedAt, originalFilename, tenantId);
+            this.validationResults = processScreenings(masterInteractionId, intiatedAt, originalFileName, tenantId);
             saveCombinedValidationResults(validationResults, masterInteractionId);
         }
 
-        private void saveScreeningGroup(final String groupInteractionId,
-                final MultipartFile file, final List<FileDetail> fileDetailList, final String tenantId) {
+        private void saveScreeningGroup(final String groupInteractionId, final List<FileDetail> fileDetailList, final String tenantId) {
             final var interactionId = requestParameters.get(Constants.INTERACTION_ID);
             log.info("REGISTER State NONE : BEGIN for inteaction id  : {} tenant id : {}",
                     interactionId, tenantId);
@@ -292,7 +303,7 @@ public class CsvOrchestrationEngine {
                         Map.of("nature", "Original Flat File CSV", "tenant_id",
                                 tenantId)));
                 initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
-                initRIHR.setCsvZipFileName(file.getOriginalFilename());
+                initRIHR.setCsvZipFileName(originalFileName);
                 initRIHR.setSourceHubInteractionId(interactionId);
                 final InetAddress localHost = InetAddress.getLocalHost();
                 final String ipAddress = localHost.getHostAddress();
@@ -601,7 +612,7 @@ public class CsvOrchestrationEngine {
                 }
                 Instant completedAt = Instant.now();
                 return generateValidationResults(masterInteractionId, 
-                        file.getSize(), initiatedAt, completedAt, originalFileName, combinedValidationResults);
+                        content.length, initiatedAt, completedAt, originalFileName, combinedValidationResults);
             } catch (final Exception e) {
                 log.error("Error in ZIP processing tasklet for interactionId: {}", masterInteractionId, e);
                 throw new RuntimeException("Error processing ZIP files: " + e.getMessage(), e);
@@ -747,7 +758,7 @@ public class CsvOrchestrationEngine {
             // Log the group being processed
             log.info("Processing group {} with {} files for interactionId: {}", groupKey, fileDetails.size(),
                     masterInteractionId);
-            saveScreeningGroup(groupInteractionId, file, fileDetails, tenantId);
+            saveScreeningGroup(groupInteractionId, fileDetails, tenantId);
 
             // Validate CSV files inside the group
             String validationResults = validateCsvUsingPython(fileDetails, masterInteractionId);
@@ -755,7 +766,7 @@ public class CsvOrchestrationEngine {
 
             Map<String, Object> operationOutomeForThisGroup = createOperationOutcome(masterInteractionId,
                     groupInteractionId, validationResults, fileDetails,
-                    file.getSize(), initiatedAtForThisGroup, completedAtForThisGroup, originalFileName);
+                    content.length, initiatedAtForThisGroup, completedAtForThisGroup, originalFileName);
 
             saveValidationResults(operationOutomeForThisGroup, masterInteractionId, groupInteractionId, tenantId);
             return operationOutomeForThisGroup;

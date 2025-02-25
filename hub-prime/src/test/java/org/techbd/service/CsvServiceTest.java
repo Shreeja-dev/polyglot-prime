@@ -60,7 +60,8 @@ class CsvServiceTest {
         when(sessionBuilder.withMasterInteractionId(anyString())).thenReturn(sessionBuilder);
         when(sessionBuilder.withSessionId(anyString())).thenReturn(sessionBuilder);
         when(sessionBuilder.withTenantId(anyString())).thenReturn(sessionBuilder);
-        when(sessionBuilder.withFile(any())).thenReturn(sessionBuilder);
+        when(sessionBuilder.withFileContent(any())).thenReturn(sessionBuilder);
+        when(sessionBuilder.withOriginalFileName(any())).thenReturn(sessionBuilder);
         when(sessionBuilder.withRequestParameters(any())).thenReturn(sessionBuilder);
         when(sessionBuilder.withHeaderParameters(any())).thenReturn(sessionBuilder);
     }
@@ -94,7 +95,8 @@ class CsvServiceTest {
         when(sessionBuilder.withMasterInteractionId(anyString())).thenReturn(sessionBuilder);
         when(sessionBuilder.withSessionId(anyString())).thenReturn(sessionBuilder);
         when(sessionBuilder.withTenantId(tenantId)).thenReturn(sessionBuilder);
-        when(sessionBuilder.withFile(file)).thenReturn(sessionBuilder);
+        when(sessionBuilder.withFileContent(file.getBytes())).thenReturn(sessionBuilder);
+        when(sessionBuilder.withOriginalFileName(file.getOriginalFilename())).thenReturn(sessionBuilder);
         when(sessionBuilder.withRequestParameters(any())).thenReturn(sessionBuilder);
         when(sessionBuilder.withHeaderParameters(any())).thenReturn(sessionBuilder);
         when(sessionBuilder.build()).thenReturn(session);
@@ -104,7 +106,7 @@ class CsvServiceTest {
         when(session.getValidationResults()).thenReturn(expectedValidationResults);
 
         // Act
-        Object result = csvService.validateCsvFile(file);
+        Object result = csvService.validateCsvFile(file.getBytes(),file.getOriginalFilename());
 
         // Assert
         assertNotNull(result);
@@ -121,7 +123,7 @@ class CsvServiceTest {
             // Act & Assert
             assertThrows(RuntimeException.class, () -> 
                 csvService.validateCsvFile(
-                    testFile
+                    testFile.getBytes(),testFile.getOriginalFilename()
                 )
             );
         }
@@ -132,7 +134,7 @@ class CsvServiceTest {
             void shouldRequireNonNullFile() {
                 assertThrows(NullPointerException.class, () ->
                     csvService.validateCsvFile(
-                        null
+                        null,null
                     )
                 );
             }
@@ -141,7 +143,7 @@ class CsvServiceTest {
             void shouldRequireNonNullTenantId() {
                 assertThrows(NullPointerException.class, () ->
                     csvService.validateCsvFile(
-                        testFile
+                        testFile.getBytes(),testFile.getOriginalFilename()
                     )
                 );
             }
@@ -151,11 +153,11 @@ class CsvServiceTest {
                 // Testing all null parameter combinations in one test
                 assertAll(
                     () -> assertThrows(NullPointerException.class, () ->
-                        csvService.validateCsvFile(null)),
+                        csvService.validateCsvFile(null,null)),
                     () -> assertThrows(NullPointerException.class, () ->
-                        csvService.validateCsvFile(testFile)),
+                        csvService.validateCsvFile(testFile.getBytes(),testFile.getOriginalFilename())),
                     () -> assertThrows(NullPointerException.class, () ->
-                        csvService.validateCsvFile(testFile))
+                        csvService.validateCsvFile(testFile.getBytes(),testFile.getOriginalFilename()))
                 );
             }
         }

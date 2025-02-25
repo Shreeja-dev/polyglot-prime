@@ -43,19 +43,20 @@ public class CsvService {
     private UdiPrimeJpaConfig udiPrimeJpaConfig;
     private CsvBundleProcessorService csvBundleProcessorService;
 
-    public Object validateCsvFile(final MultipartFile file) throws Exception {
+    public Object validateCsvFile(final byte[]content,final String originalFileName) throws Exception {
         CsvOrchestrationEngine.OrchestrationSession session = null;
         try {
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
-            saveArchiveInteraction(jooqCfg, file, headerParameters.get(Constants.TENANT_ID),requestParameters.get(Constants.ORIGIN),requestParameters.get(Constants.SFTP_SESSION_ID));
+            saveArchiveInteraction(jooqCfg, content,originalFileName, headerParameters.get(Constants.TENANT_ID),requestParameters.get(Constants.ORIGIN),requestParameters.get(Constants.SFTP_SESSION_ID));
             session = engine.session()
                     .withMasterInteractionId(requestParameters.get(Constants.INTERACTION_ID))
                     .withSessionId(UUID.randomUUID().toString())
                     .withTenantId(headerParameters.get(Constants.TENANT_ID))
                     .withRequestParameters(requestParameters)
                     .withHeaderParameters(headerParameters)
-                    .withFile(file)
+                    .withFileContent(content)
+                    .withOriginalFileName(originalFileName)
                     .build();
             engine.orchestrate(session);
             return session.getValidationResults();
@@ -67,7 +68,7 @@ public class CsvService {
     }
 
     private void saveArchiveInteraction(final org.jooq.Configuration jooqCfg,
-            final MultipartFile file,
+            final byte[] content,final String originalFileName,
             final String tenantId,String origin,String sftpSessionId) {
         final var interactionId = requestParameters.get(Constants.INTERACTION_ID);
         LOG.info("REGISTER State NONE : BEGIN for inteaction id  : {} tenant id : {}",
@@ -85,8 +86,8 @@ public class CsvService {
                     Map.of("nature", "Original CSV Zip Archive", "tenant_id",
                             tenantId)));
             initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
-            initRIHR.setCsvZipFileContent(file.getBytes());
-            initRIHR.setCsvZipFileName(file.getOriginalFilename());
+            initRIHR.setCsvZipFileContent(content);
+            initRIHR.setCsvZipFileName(originalFileName);
             initRIHR.setCreatedAt(forwardedAt);
             final InetAddress localHost = InetAddress.getLocalHost();
             final String ipAddress = localHost.getHostAddress();
@@ -124,26 +125,27 @@ public class CsvService {
      * @throws Exception If an error occurs during processing the zip file or CSV
      *                   parsing.
      */
-    public List<Object> processZipFile(final MultipartFile file,final HttpServletRequest request ,HttpServletResponse response ,final String tenantId,String origin,String sftpSessionId) throws Exception {
+    public List<Object> processZipFile(final byte[] content,final String originalFileName,final HttpServletRequest request ,HttpServletResponse response ,final String tenantId,String origin,String sftpSessionId) throws Exception {
         CsvOrchestrationEngine.OrchestrationSession session = null;
         try {
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
-            saveArchiveInteraction(jooqCfg, file, tenantId,origin,sftpSessionId);
+            saveArchiveInteraction(jooqCfg,content,originalFileName, tenantId,origin,sftpSessionId);
             final String masterInteractionId = requestParameters.get(Constants.INTERACTION_ID);
             session = engine.session()
                     .withMasterInteractionId(masterInteractionId)
                     .withSessionId(UUID.randomUUID().toString())
                     .withTenantId(tenantId)
                     .withGenerateBundle(true)
-                    .withFile(file)
+                    .withOriginalFileName(originalFileName)
+                    .withFileContent(content)
                     .withRequestParameters(requestParameters)
                     .withHeaderParameters(headerParameters)
                     .build();
             engine.orchestrate(session);
             return csvBundleProcessorService.processPayload(masterInteractionId,
             session.getPayloadAndValidationOutcomes(), session.getFilesNotProcessed(),request,
-             response,tenantId,file.getOriginalFilename());
+             response,tenantId,originalFileName);
         } finally {
             if (null == session) {
                 engine.clear(session);

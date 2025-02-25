@@ -74,7 +74,7 @@ public class CsvController {
 
     csvService.setRequestParameters(requestParameters);
     csvService.setHeaderParameters(headerParameters);
-    return csvService.validateCsvFile(file);
+    return csvService.validateCsvFile(file.getBytes(),file.getOriginalFilename());
   }
 
   @PostMapping(value = { "/flatfile/csv/Bundle", "/flatfile/csv/Bundle/" }, consumes = {
@@ -97,7 +97,7 @@ public class CsvController {
 
     csvService.setRequestParameters(requestParameters);
     csvService.setHeaderParameters(headerParameters);
-    List<Object> processedFiles = csvService.processZipFile(file, request, response, tenantId, origin, sftpSessionId);
+    List<Object> processedFiles = csvService.processZipFile(file.getBytes(),file.getOriginalFilename(), request, response, tenantId, origin, sftpSessionId);
     return ResponseEntity.ok(processedFiles);
   
   }
