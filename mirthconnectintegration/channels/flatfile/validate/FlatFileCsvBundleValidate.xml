@@ -1,9 +1,9 @@
 <channel version="4.5.0">
-  <id>fc36c056-84bc-4f0a-9a71-f5c1c32c5941</id>
+  <id>5374a1b7-c97b-474e-91cd-8f74325d856b</id>
   <nextMetaDataId>2</nextMetaDataId>
   <name>FlatFileCsvBundleValidate</name>
   <description></description>
-  <revision>53</revision>
+  <revision>3</revision>
   <sourceConnector version="4.5.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -15,7 +15,7 @@
       </pluginProperties>
       <listenerConnectorProperties version="4.5.0">
         <host>0.0.0.0</host>
-        <port>1222</port>
+        <port>1444</port>
       </listenerConnectorProperties>
       <sourceConnectorProperties version="4.5.0">
         <responseVariable>finalResponse</responseVariable>
@@ -56,8 +56,16 @@
           <script>var validateCsv = globalMap.get(&quot;validateCsv&quot;);
 var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
 var zipFileInteractionId = channelMap.get(&quot;interactionId&quot;);
+var ObjectMapper = Packages.com.fasterxml.jackson.databind.ObjectMapper;
+var JavaTimeModule = Packages.com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+var mapper = new ObjectMapper();
+mapper.registerModule(new JavaTimeModule());
 validateCsv(channelName, connectorMessage, channelMap,tenantId,zipFileInteractionId);
-responseMap.put(&quot;finalResponse&quot;, channelMap.get(&quot;csvValidationResults&quot;));</script>
+responseMap.put(&quot;finalResponse&quot;, convertMapToJson(channelMap.get(&quot;csvValidationResults&quot;)));
+
+function convertMapToJson(map) {
+    return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(map);
+}</script>
         </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
       </elements>
       <inboundTemplate encoding="base64"></inboundTemplate>
@@ -215,7 +223,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1740135877518</time>
+        <time>1740658635145</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>
@@ -224,6 +232,5 @@ return;</undeployScript>
       </pruningSettings>
       <userId>1</userId>
     </metadata>
-    <channelTags/>
   </exportData>
 </channel>
