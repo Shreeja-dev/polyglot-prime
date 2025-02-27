@@ -1,0 +1,52 @@
+package org.techbd.udi;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+
+import org.jooq.DSLContext;
+import org.jooq.SQLDialect;
+import org.jooq.impl.DataSourceConnectionProvider;
+import org.jooq.impl.DefaultConfiguration;
+import org.jooq.impl.DefaultDSLContext;
+
+import com.zaxxer.hikari.HikariDataSource; // ✅ Use HikariCP instead of Spring Boot's proxy
+
+public class MirthJooqConfig {
+
+    private static final String DB_URL = System.getProperty("org.techbd.udi.prime.jdbc.url", 
+        "jdbc:postgresql://ep-cold-sea-a5v4ylnp.us-east-2.aws.neon.tech/neondb");
+    private static final String DB_USER = System.getProperty("org.techbd.udi.prime.jdbc.username", "neondb_owner");
+    private static final String DB_PASSWORD = System.getProperty("org.techbd.udi.prime.jdbc.password", "mZ5iwhYUb2Fx");
+
+    private static HikariDataSource dataSource; // ✅ Use HikariCP
+
+    /**
+     * Creates and returns a DSLContext for JOOQ.
+     */
+    public static DSLContext dsl() {
+        if (dataSource == null) {
+            dataSource = new HikariDataSource();
+            dataSource.setJdbcUrl(DB_URL);
+            dataSource.setUsername(DB_USER);
+            dataSource.setPassword(DB_PASSWORD);
+            dataSource.setMaximumPoolSize(10);
+        }
+
+        var jooqConfiguration = new DefaultConfiguration();
+        jooqConfiguration.set(new DataSourceConnectionProvider(dataSource));
+        jooqConfiguration.setSQLDialect(SQLDialect.POSTGRES);
+
+        return new DefaultDSLContext(jooqConfiguration);
+    }
+
+    /**
+     * Checks if the database connection is alive.
+     */
+    public static boolean isDatabaseAlive() {
+        try (Connection conn = dataSource.getConnection()) {
+            return conn != null && !conn.isClosed();
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+}

@@ -13,12 +13,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeTypeUtils;
-import org.springframework.web.multipart.MultipartFile;
 import org.techbd.conf.Configuration;
 import org.techbd.orchestrate.csv.CsvOrchestrationEngine;
+import org.techbd.orchestrate.csv.OrchestrationSession;
 import org.techbd.service.constants.Origin;
 import org.techbd.service.http.Interactions;
-import org.techbd.udi.UdiPrimeJpaConfig;
+import org.techbd.service.http.hub.prime.AppConfig;
+import org.techbd.udi.MirthJooqConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 import org.techbd.util.Constants;
 
@@ -33,36 +34,39 @@ import lombok.Setter;
 @Setter
 public class CsvService {
 
-    private CsvOrchestrationEngine engine;
+    private CsvOrchestrationEngine engine = new CsvOrchestrationEngine();
     private static final Logger LOG = LoggerFactory.getLogger(CsvService.class);
     private Map<String,String> requestParameters;
     private Map<String,String> headerParameters;
     @Value("${org.techbd.service.http.interactions.saveUserDataToInteractions:true}")
     private boolean saveUserDataToInteractions;
-
-    private UdiPrimeJpaConfig udiPrimeJpaConfig;
     private CsvBundleProcessorService csvBundleProcessorService;
-
+    private AppConfig appConfig;
     public Object validateCsvFile(final byte[]content,final String originalFileName) throws Exception {
-        CsvOrchestrationEngine.OrchestrationSession session = null;
+        OrchestrationSession session = null;
+        
         try {
-            final var dslContext = udiPrimeJpaConfig.dsl();
+            final var dslContext = MirthJooqConfig.dsl();
             final var jooqCfg = dslContext.configuration();
-            saveArchiveInteraction(jooqCfg, content,originalFileName, headerParameters.get(Constants.TENANT_ID),requestParameters.get(Constants.ORIGIN),requestParameters.get(Constants.SFTP_SESSION_ID));
-            session = engine.session()
-                    .withMasterInteractionId(requestParameters.get(Constants.INTERACTION_ID))
-                    .withSessionId(UUID.randomUUID().toString())
-                    .withTenantId(headerParameters.get(Constants.TENANT_ID))
-                    .withRequestParameters(requestParameters)
-                    .withHeaderParameters(headerParameters)
-                    .withFileContent(content)
-                    .withOriginalFileName(originalFileName)
+            //saveArchiveInteraction(jooqCfg, content,originalFileName, headerParameters.get(Constants.TENANT_ID),requestParameters.get(Constants.ORIGIN),requestParameters.get(Constants.SFTP_SESSION_ID));
+            session = OrchestrationSession.builder()
+                    .masterInteractionId(requestParameters.get(Constants.INTERACTION_ID))
+                    .sessionId(UUID.randomUUID().toString())
+                    .tenantId(headerParameters.get(Constants.TENANT_ID))
+                    .requestParameters(requestParameters)
+                    .headerParameters(headerParameters)
+                    .content(content)
+                    .originalFileName(originalFileName)
+                    .appConfig(appConfig)
+                    .vfsCoreService(new VfsCoreService())
                     .build();
             engine.orchestrate(session);
             return session.getValidationResults();
         } finally {
             if (null == session) {
-                engine.clear(session);
+                if (null != engine) {
+                    engine.clear(session);
+                }
             }
         }
     }
@@ -126,22 +130,23 @@ public class CsvService {
      *                   parsing.
      */
     public List<Object> processZipFile(final byte[] content,final String originalFileName,final HttpServletRequest request ,HttpServletResponse response ,final String tenantId,String origin,String sftpSessionId) throws Exception {
-        CsvOrchestrationEngine.OrchestrationSession session = null;
+        OrchestrationSession session = null;
         try {
-            final var dslContext = udiPrimeJpaConfig.dsl();
+            final var dslContext = MirthJooqConfig.dsl();
             final var jooqCfg = dslContext.configuration();
             saveArchiveInteraction(jooqCfg,content,originalFileName, tenantId,origin,sftpSessionId);
             final String masterInteractionId = requestParameters.get(Constants.INTERACTION_ID);
-            session = engine.session()
-                    .withMasterInteractionId(masterInteractionId)
-                    .withSessionId(UUID.randomUUID().toString())
-                    .withTenantId(tenantId)
-                    .withGenerateBundle(true)
-                    .withOriginalFileName(originalFileName)
-                    .withFileContent(content)
-                    .withRequestParameters(requestParameters)
-                    .withHeaderParameters(headerParameters)
+            session = OrchestrationSession.builder()
+                    .masterInteractionId(masterInteractionId)
+                    .sessionId(UUID.randomUUID().toString())
+                    .tenantId(tenantId)
+                    .generateBundle(true)
+                    .originalFileName(originalFileName)
+                    .content(content)
+                    .requestParameters(requestParameters)
+                    .headerParameters(headerParameters)
                     .build();
+    
             engine.orchestrate(session);
             return csvBundleProcessorService.processPayload(masterInteractionId,
             session.getPayloadAndValidationOutcomes(), session.getFilesNotProcessed(),request,
