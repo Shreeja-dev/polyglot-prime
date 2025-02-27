@@ -41,7 +41,6 @@ import org.techbd.service.CsvService;
 import org.techbd.service.VfsCoreService;
 import org.techbd.service.http.hub.prime.AppConfig;
 import org.techbd.udi.MirthJooqConfig;
-import org.techbd.udi.UdiPrimeJpaConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 import org.techbd.udi.auto.jooq.ingress.routines.SatInteractionCsvRequestUpserted;
 import org.techbd.util.Constants;
@@ -69,6 +68,7 @@ public class OrchestrationSession {
     private String originalFileName;
     private Map<String, Object> validationResults = new HashMap<>();
     private List<String> filesNotProcessed = new ArrayList<>();
+    private List<String> csvFiles;
     private Map<String, PayloadAndValidationOutcome> payloadAndValidationOutcomes = new HashMap<>();
     private String tenantId;
     private boolean generateBundle;
@@ -84,18 +84,19 @@ public class OrchestrationSession {
         log.info("CsvOrchestrationEngine : validate - file : {} BEGIN for interaction id : {}",
                 originalFileName, masterInteractionId);
         final Instant intiatedAt = Instant.now();
-        final String uniqueFilename = masterInteractionId + "_"
-                + (originalFileName != null ? originalFileName : "upload.zip");
-        final Path destinationPath = Path.of(appConfig.getCsv().validation().inboundPath(), uniqueFilename);
-        Files.createDirectories(destinationPath.getParent());
+        //TODO - commented as not working from mirth.Check later and uncomment.Now doing extraction from mirth
+        // final String uniqueFilename = masterInteractionId + "_"
+        //         + (originalFileName != null ? originalFileName : "upload.zip");
+        // final Path destinationPath = Path.of(appConfig.getCsv().validation().inboundPath(), uniqueFilename);
+        // Files.createDirectories(destinationPath.getParent());
 
-        // Save the uploaded file to the inbound folder
-        Files.write(destinationPath, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        log.info("File saved to: {}", destinationPath);
+        // // Save the uploaded file to the inbound folder
+        // Files.write(destinationPath, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        // log.info("File saved to: {}", destinationPath);
 
         // Trigger CSV processing and validation
         this.validationResults = processScreenings(masterInteractionId, intiatedAt, originalFileName, tenantId);
-        saveCombinedValidationResults(validationResults, masterInteractionId);
+      //  saveCombinedValidationResults(validationResults, masterInteractionId);
     }
 
     private void saveScreeningGroup(final String groupInteractionId, final List<FileDetail> fileDetailList, final String tenantId) {
@@ -356,36 +357,37 @@ public class OrchestrationSession {
     public Map<String, Object> processScreenings(final String masterInteractionId, final Instant initiatedAt,
             final String originalFileName, final String tenantId) {
         try {
-            log.info("Inbound Folder Path: {} for interactionid :{} ",
-                    appConfig.getCsv().validation().inboundPath(), masterInteractionId);
-            log.info("Ingress Home Path: {} for interactionId : {}",
-                    appConfig.getCsv().validation().ingessHomePath(), masterInteractionId);
-            // Process ZIP files and get the session ID
-            final UUID processId = processZipFilesFromInbound(masterInteractionId);
-            log.info("ZIP files processed with session ID: {} for interaction id :{} ", processId,
-                    masterInteractionId);
+            //TODO - commented as not working from mirth.Check later and uncomment.Now doing extraction from mirth
+            // log.info("Inbound Folder Path: {} for interactionid :{} ",
+            //         appConfig.getCsv().validation().inboundPath(), masterInteractionId);
+            // log.info("Ingress Home Path: {} for interactionId : {}",
+            //         appConfig.getCsv().validation().ingessHomePath(), masterInteractionId);
+            // // Process ZIP files and get the session ID
+            // final UUID processId = processZipFilesFromInbound(masterInteractionId);
+            // log.info("ZIP files processed with session ID: {} for interaction id :{} ", processId,
+            //         masterInteractionId);
 
-            // Construct processed directory path
-            final String processedDirPath = appConfig.getCsv().validation().ingessHomePath() + "/" + processId
-                    + "/ingress";
+            // // Construct processed directory path
+            // final String processedDirPath = appConfig.getCsv().validation().ingessHomePath() + "/" + processId
+            //         + "/ingress";
 
-            copyFilesToProcessedDir(processedDirPath);
-            createOutputFileInProcessedDir(processedDirPath);
-            log.info("Attempting to resolve processed directory: {} for interactionId : {}", processedDirPath,
-                    masterInteractionId);
+            // copyFilesToProcessedDir(processedDirPath);
+            // createOutputFileInProcessedDir(processedDirPath);
+            // log.info("Attempting to resolve processed directory: {} for interactionId : {}", processedDirPath,
+            //         masterInteractionId);
 
-            // Get processed files for validation
-            final FileObject processedDir = vfsCoreService
-                    .resolveFile(Paths.get(processedDirPath).toAbsolutePath().toString());
+            // // Get processed files for validation
+            // final FileObject processedDir = vfsCoreService
+            //         .resolveFile(Paths.get(processedDirPath).toAbsolutePath().toString());
 
-            if (!vfsCoreService.fileExists(processedDir)) {
-                log.error("Processed directory does not exist: {} for interactionId : {}", processedDirPath,
-                        masterInteractionId);
-                throw new FileSystemException("Processed directory not found: " + processedDirPath);
-            }
+            // if (!vfsCoreService.fileExists(processedDir)) {
+            //     log.error("Processed directory does not exist: {} for interactionId : {}", processedDirPath,
+            //             masterInteractionId);
+            //     throw new FileSystemException("Processed directory not found: " + processedDirPath);
+            // }
 
             // Collect CSV files for validation
-            final List<String> csvFiles = scanForCsvFiles(processedDir, masterInteractionId);
+            // final List<String> csvFiles = scanForCsvFiles(processedDir, masterInteractionId);
 
             final Map<String, List<FileDetail>> groupedFiles = FileProcessor.processAndGroupFiles(csvFiles);
             List<Map<String, Object>> combinedValidationResults = new ArrayList<>();

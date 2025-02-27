@@ -42,13 +42,14 @@ public class CsvService {
     private boolean saveUserDataToInteractions;
     private CsvBundleProcessorService csvBundleProcessorService;
     private AppConfig appConfig;
+    private List<String> csvFiles;
     public Object validateCsvFile(final byte[]content,final String originalFileName) throws Exception {
         OrchestrationSession session = null;
         
         try {
             final var dslContext = MirthJooqConfig.dsl();
             final var jooqCfg = dslContext.configuration();
-            //saveArchiveInteraction(jooqCfg, content,originalFileName, headerParameters.get(Constants.TENANT_ID),requestParameters.get(Constants.ORIGIN),requestParameters.get(Constants.SFTP_SESSION_ID));
+            saveArchiveInteraction(jooqCfg, content,originalFileName, headerParameters.get(Constants.TENANT_ID),requestParameters.get(Constants.ORIGIN),requestParameters.get(Constants.SFTP_SESSION_ID));
             session = OrchestrationSession.builder()
                     .masterInteractionId(requestParameters.get(Constants.INTERACTION_ID))
                     .sessionId(UUID.randomUUID().toString())
@@ -58,6 +59,7 @@ public class CsvService {
                     .content(content)
                     .originalFileName(originalFileName)
                     .appConfig(appConfig)
+                    .csvFiles(csvFiles)
                     .vfsCoreService(new VfsCoreService())
                     .build();
             engine.orchestrate(session);
