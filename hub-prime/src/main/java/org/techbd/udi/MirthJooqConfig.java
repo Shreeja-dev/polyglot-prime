@@ -30,6 +30,7 @@ public class MirthJooqConfig {
             dataSource.setUsername(DB_USER);
             dataSource.setPassword(DB_PASSWORD);
             dataSource.setMaximumPoolSize(10);
+            dataSource.setDriverClassName("org.postgresql.Driver");
         }
 
         var jooqConfiguration = new DefaultConfiguration();
