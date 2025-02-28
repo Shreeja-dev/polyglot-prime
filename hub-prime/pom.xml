@@ -11,8 +11,8 @@
 	</parent>
 	<groupId>org.techbd</groupId>
 	<artifactId>hub-prime</artifactId>
-	<version>0.473.0</version>
-	<packaging>jar</packaging>
+	<version>0.476.0</version>
+	<packaging>war</packaging>
 	<name>Tech by Design Hub (Prime)</name>
 	<description>Tech by Design Hub (Primary)</description>
 	<properties>
