@@ -73,7 +73,7 @@ public class CsvService {
         }
     }
 
-    private void saveArchiveInteraction(final org.jooq.Configuration jooqCfg,
+    public void saveArchiveInteraction(final org.jooq.Configuration jooqCfg,
             final byte[] content,final String originalFileName,
             final String tenantId,String origin,String sftpSessionId) {
         final var interactionId = requestParameters.get(Constants.INTERACTION_ID);
