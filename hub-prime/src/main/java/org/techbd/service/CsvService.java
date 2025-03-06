@@ -131,7 +131,7 @@ public class CsvService {
      * @throws Exception If an error occurs during processing the zip file or CSV
      *                   parsing.
      */
-    public List<Object> processZipFile(final byte[] content,final String originalFileName,final HttpServletRequest request ,HttpServletResponse response ,final String tenantId,String origin,String sftpSessionId) throws Exception {
+    public List<Object> processZipFile(final byte[] content,final String originalFileName,final HttpServletRequest request ,HttpServletResponse response ,final String tenantId,String origin,String sftpSessionId,String baseFHIRUrl) throws Exception {
         OrchestrationSession session = null;
         try {
             final var dslContext = MirthJooqConfig.dsl();
@@ -152,7 +152,7 @@ public class CsvService {
             engine.orchestrate(session);
             return csvBundleProcessorService.processPayload(masterInteractionId,
             session.getPayloadAndValidationOutcomes(), session.getFilesNotProcessed(),request,
-             response,tenantId,originalFileName);
+             response,tenantId,originalFileName,baseFHIRUrl);
         } finally {
             if (null == session) {
                 engine.clear(session);
