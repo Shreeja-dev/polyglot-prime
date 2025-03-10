@@ -2,22 +2,19 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-	<modelVersion>4.0.0</modelVersion>
 	<parent>
-		<groupId>org.springframework.boot</groupId>
-		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.3.3</version>
-		<relativePath /> <!-- lookup parent from repository -->
-	</parent>
-	<groupId>org.techbd</groupId>
-	<artifactId>hub-prime</artifactId>
-	<version>0.484.0</version>
-	<packaging>war</packaging>
-	<name>Tech by Design Hub (Prime)</name>
-	<description>Tech by Design Hub (Primary)</description>
-	<properties>
-		<java.version>21</java.version>
-	</properties>
+        <groupId>org.techbd</groupId>
+        <artifactId>polyglot-prime</artifactId>
+        <version>0.484.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>hub-prime</artifactId>
+    <packaging>war</packaging>
+    <name>Tech by Design Hub (Prime)</name>
+    <description>Tech by Design Hub (Primary)</description>	
+	<modelVersion>4.0.0</modelVersion>
+
 	<distributionManagement>
 		<site>
 			<id>github</id>
@@ -346,6 +343,15 @@
 
 	<build>
 		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.11.0</version>
+				<configuration>
+					<release>${java.version}</release>  <!-- Uses Java 21 from <properties> -->
+				</configuration>
+			</plugin>
+
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
