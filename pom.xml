@@ -12,7 +12,7 @@
 
     <modules>
         <module>hub-prime</module>
-        <module>tech-by-design-base</module>
+        <module>tech-by-design-core-lib</module>
     </modules>
 
     <properties>
