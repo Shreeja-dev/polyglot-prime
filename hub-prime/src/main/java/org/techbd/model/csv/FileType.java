@@ -27,3 +27,4 @@ public enum FileType {
         throw new IllegalArgumentException(errorMessage.toString());
     }
 }
+

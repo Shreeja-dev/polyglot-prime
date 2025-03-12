@@ -216,7 +216,7 @@ public class FHIRService {
 				.map(map -> (Map<String, Object>) map.get("OperationOutcome"))
 				.map(outcome -> (List<Map<String, Object>>) outcome.get("techByDesignDisposition"))
 				.flatMap(dispositions -> dispositions.stream()
-						.map(disposition -> (String) disposition.get("action"))
+						.map(disposition -> Optional.ofNullable(disposition.get("action")).map(String::valueOf).orElse(null))
 						.filter(TechByDesignDisposition.DISCARD.action::equals)
 						.findFirst())
 				.isPresent();

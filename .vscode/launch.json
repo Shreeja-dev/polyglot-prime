@@ -2,6 +2,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "JavaScriptRunner",
+            "request": "launch",
+            "mainClass": "org.techbd.JavaScriptRunner",
+            "projectName": "tech-by-design-core-lib"
+        },
+        {
+            "type": "java",
             "name": "Spring Boot-Application<hub-prime>",
             "request": "launch",
             "cwd": "${workspaceFolder}",
@@ -9,6 +16,6 @@
             "projectName": "hub-prime",
             "args": "",
             "envFile": "${workspaceFolder}/.env"
-        },
+        }
     ]
 }
