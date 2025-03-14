@@ -62,7 +62,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import io.micrometer.common.util.StringUtils;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -91,7 +90,7 @@ public class FHIRService {
 	private static final Logger LOG = LoggerFactory.getLogger(FHIRService.class.getName());
 	private AppConfig appConfig;
 	private Tracer tracer;
-
+	private OrchestrationEngine engine;
 
 	public FHIRService() {
 		try {
@@ -124,114 +123,116 @@ public class FHIRService {
 	public Object processBundle(final @RequestBody @Nonnull String payload, Map<String,String> requestParameters, Map<String,String> headerParameters,
 	Map<String,Object> responseParameters)
 			throws IOException {
-		Span span = tracer.spanBuilder("FHIRService.processBundle").startSpan();
-		try {
-			final var start = Instant.now();
-			var interactionId = requestParameters.get(Constants.INTERACTION_ID);
-			LOG.info("Bundle processing start at {} for interaction id {}.",interactionId);
-			try {
-				JsonNode jsonNode = Configuration.objectMapper.readTree(payload);
-				LOG.info(Configuration.objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode));
-			} catch (JsonProcessingException e) {
-				LOG.info(payload);
-			}
-			var dataLakeApiContentType = requestParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE);
-			final var tenantId = requestParameters.get(Constants.TENANT_ID);
-			var customDataLakeApi = requestParameters.get(Constants.CUSTOM_DATA_LAKE_API);
-			final var healthCheck = requestParameters.get(Constants.HEALTH_CHECK);
-			final var isSync = requestParameters.get(Constants.IS_SYNC);
-			var provenance = requestParameters.get(Constants.PROVENANCE);
-			final var mtlsStrategy = requestParameters.get(Constants.MTLS_STRATEGY);
-			final var groupInteractionId = requestParameters.get(Constants.GROUP_INTERACTION_ID);
-			final var masterInteractionId = requestParameters.get(Constants.MASTER_INTERACTION_ID);
-			final var sourceType = requestParameters.get(Constants.SOURCE_TYPE);
-			final var requestUriToBeOverriden = requestParameters.get(Constants.REQUEST_URI_TO_BE_OVERRIDDEN);
-			final var coRrelationId = requestParameters.get(Constants.CORRELATION_ID);
-			final var requestUri = requestParameters.get(Constants.REQUEST_URI);
-
-			if (null == interactionId) {
-				if (StringUtils.isNotEmpty(requestParameters.get(Constants.CORRELATION_ID))) {
-					interactionId = requestParameters.get(Constants.CORRELATION_ID);
-				}
-			}
-			LOG.info("Bundle processing start at {} for interaction id {}.",interactionId);
-			final var dslContext = MirthJooqConfig.dsl();
-			final var jooqCfg = dslContext.configuration();
-			Map<String, Object> payloadWithDisposition = null;
-			try {
-				validateJson(payload, interactionId);
-				validateBundleProfileUrl(payload, interactionId);
-				if (null == requestParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE)) {
-					dataLakeApiContentType = MediaType.APPLICATION_JSON_VALUE;
-				}
-				Map<String, Object> immediateResult = validate(requestParameters, payload,
-						interactionId, provenance, sourceType);
-				final var result = Map.of("OperationOutcome", immediateResult);
-				if (StringUtils.isNotEmpty(requestUri) && requestUri.equals("/Bundle/$validate")) {
-					return result;
-				}
-				if ("true".equals(healthCheck)) {
-					LOG.info("%s is true, skipping Scoring Engine submission."
-							.formatted(Constants.HEALTH_CHECK_HEADER));
-					return result; // Return without proceeding to scoring engine submission
-				}
-				if (!SourceType.CSV.name().equals(sourceType)) {
-					addObservabilityHeadersToResponse(requestParameters, headerParameters,responseParameters);
-				}
-				payloadWithDisposition = registerBundleInteraction(jooqCfg, requestParameters,
-						headerParameters, payload, result, interactionId, groupInteractionId,
-						masterInteractionId, sourceType, requestUriToBeOverriden,
-						coRrelationId);
-				if (isActionDiscard(payloadWithDisposition)) {
-					return payloadWithDisposition;
-				}
-				if (null == payloadWithDisposition) {
-					LOG.warn(
-							"FHIRService:: ERROR:: Disposition payload is not available.Send Bundle payload to scoring engine for interaction id {}.",
-							interactionId);
-					sendToScoringEngine(jooqCfg, requestParameters, customDataLakeApi, dataLakeApiContentType,
-
-							tenantId, payload,
-							provenance, null,
-							mtlsStrategy,
-							interactionId, groupInteractionId, masterInteractionId,
-							sourceType, requestUriToBeOverriden, coRrelationId);
-					Instant end = Instant.now();
-					Duration timeElapsed = Duration.between(start, end);
-					LOG.info("Bundle processing end for interaction id: {} Time Taken : {}  milliseconds",
-							interactionId, timeElapsed.toMillis());
-					return result;
-				} else {
-					LOG.info(
-							"FHIRService:: Received Disposition payload.Send Disposition payload to scoring engine for interaction id {}.",
-							interactionId);
-					sendToScoringEngine(jooqCfg, requestParameters, customDataLakeApi, dataLakeApiContentType,
-
-							tenantId, payload,
-							provenance, payloadWithDisposition,
-							mtlsStrategy, interactionId, groupInteractionId,
-							masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
-					Instant end = Instant.now();
-					Duration timeElapsed = Duration.between(start, end);
-					LOG.info("Bundle processing end for interaction id: {} Time Taken : {}  milliseconds",
-							interactionId, timeElapsed.toMillis());
-					return payloadWithDisposition;
-				}
-			} catch (JsonValidationException ex) {
-				payloadWithDisposition = registerBundleInteraction(jooqCfg, requestParameters,
-						headerParameters, payload, buildOperationOutcome(ex, interactionId),
-						interactionId, groupInteractionId, masterInteractionId, sourceType,
-						requestUriToBeOverriden, coRrelationId);
-			}
-			Instant end = Instant.now();
-			Duration timeElapsed = Duration.between(start, end);
-			LOG.info("Bundle processing end for interaction id: {} Time Taken : {}  milliseconds",
-					interactionId, timeElapsed.toMillis());
-			return payloadWithDisposition;
-		} finally {
-			span.end();
+	Span span = tracer.spanBuilder("FHIRService.processBundle").startSpan();
+	try {
+		final var start = Instant.now();
+		var interactionId = requestParameters.get(Constants.INTERACTION_ID);
+		if (null == interactionId) {
+			interactionId = UUID.randomUUID().toString();
 		}
+		LOG.info("Bundle processing start at {} for interaction id {}.", interactionId); 
+
+		var dataLakeApiContentType = requestParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE);
+		LOG.info("Retrieved dataLakeApiContentType: {}", dataLakeApiContentType); //TODO-to be removed
+		
+		final var tenantId = requestParameters.get(Constants.TENANT_ID);
+		LOG.info("Retrieved tenantId: {}", tenantId); //TODO-to be removed
+		
+		var customDataLakeApi = requestParameters.get(Constants.CUSTOM_DATA_LAKE_API);
+		LOG.info("Retrieved customDataLakeApi: {}", customDataLakeApi); //TODO-to be removed
+		
+		final var healthCheck = requestParameters.get(Constants.HEALTH_CHECK);
+		LOG.info("Retrieved healthCheck: {}", healthCheck); //TODO-to be removed
+		
+		final var isSync = requestParameters.get(Constants.IS_SYNC);
+		LOG.info("Retrieved isSync: {}", isSync); //TODO-to be removed
+		
+		var provenance = requestParameters.get(Constants.PROVENANCE);
+		LOG.info("Retrieved provenance: {}", provenance); //TODO-to be removed
+		
+		final var mtlsStrategy = requestParameters.get(Constants.MTLS_STRATEGY);
+		LOG.info("Retrieved mtlsStrategy: {}", mtlsStrategy); //TODO-to be removed
+		
+		final var groupInteractionId = requestParameters.get(Constants.GROUP_INTERACTION_ID);
+		LOG.info("Retrieved groupInteractionId: {}", groupInteractionId); //TODO-to be removed
+		
+		final var masterInteractionId = requestParameters.get(Constants.MASTER_INTERACTION_ID);
+		LOG.info("Retrieved masterInteractionId: {}", masterInteractionId); //TODO-to be removed
+		
+		final var sourceType = requestParameters.get(Constants.SOURCE_TYPE);
+		LOG.info("Retrieved sourceType: {}", sourceType); //TODO-to be removed
+		
+		final var requestUriToBeOverriden = requestParameters.get(Constants.REQUEST_URI_TO_BE_OVERRIDDEN);
+		LOG.info("Retrieved requestUriToBeOverriden: {}", requestUriToBeOverriden); //TODO-to be removed
+		
+		final var coRrelationId = requestParameters.get(Constants.CORRELATION_ID);
+		LOG.info("Retrieved coRrelationId: {}", coRrelationId); //TODO-to be removed
+		
+		final var requestUri = requestParameters.get(Constants.REQUEST_URI);
+		LOG.info("Retrieved requestUri: {}", requestUri); //TODO-to be removed
+
+		if (null == interactionId) {
+			if (StringUtils.isNotEmpty(requestParameters.get(Constants.CORRELATION_ID))) {
+				interactionId = requestParameters.get(Constants.CORRELATION_ID);
+				LOG.info("Updated interactionId from correlationId: {}", interactionId); //TODO-to be removed
+			}
+		}
+
+		final var dslContext = MirthJooqConfig.dsl();
+		LOG.info("Initialized dslContext"); //TODO-to be removed
+		final var jooqCfg = dslContext.configuration();
+		LOG.info("Configured jooqCfg"); //TODO-to be removed
+
+		Map<String, Object> payloadWithDisposition = null;
+		try {
+			validateJson(payload, interactionId);
+			LOG.info("JSON validated"); //TODO-to be removed
+			validateBundleProfileUrl(payload, interactionId);
+			LOG.info("Bundle profile URL validated"); //TODO-to be removed
+
+			if (null == requestParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE)) {
+				dataLakeApiContentType = MediaType.APPLICATION_JSON_VALUE;
+				LOG.info("Defaulting dataLakeApiContentType to JSON"); //TODO-to be removed
+			}
+			
+			Map<String, Object> immediateResult = validate(requestParameters, payload, interactionId, provenance, sourceType);
+			LOG.info("Validation result: {}", immediateResult); //TODO-to be removed
+
+			final var result = Map.of("OperationOutcome", immediateResult);
+			LOG.info("Final validation result wrapped in OperationOutcome"); //TODO-to be removed
+
+			if (StringUtils.isNotEmpty(requestUri) && requestUri.equals("/Bundle/$validate")) {
+				LOG.info("Returning validation result for /Bundle/$validate"); //TODO-to be removed
+				return result;
+			}
+
+			if ("true".equals(healthCheck)) {
+				LOG.info("Health check enabled, skipping scoring engine submission"); //TODO-to be removed
+				return result;
+			}
+
+			payloadWithDisposition = registerBundleInteraction(jooqCfg, requestParameters, headerParameters, payload, result, interactionId, groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
+			LOG.info("Payload with disposition registered: {}", payloadWithDisposition); //TODO-to be removed
+
+			if (isActionDiscard(payloadWithDisposition)) {
+				LOG.info("Action discard detected, returning payloadWithDisposition"); //TODO-to be removed
+				return payloadWithDisposition;
+			}
+			
+		} catch (JsonValidationException ex) {
+			payloadWithDisposition = registerBundleInteraction(jooqCfg, requestParameters, headerParameters, payload, buildOperationOutcome(ex, interactionId), interactionId, groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
+			LOG.info("Exception occurred: {}", ex.getMessage()); //TODO-to be removed
+		}
+
+		Instant end = Instant.now();
+		Duration timeElapsed = Duration.between(start, end);
+		LOG.info("Bundle processing end for interaction id: {} Time Taken: {} milliseconds", interactionId, timeElapsed.toMillis()); //TODO-to be removed
+		return payloadWithDisposition;
+	} finally {
+		span.end();
+		LOG.info("Span ended"); //TODO-to be removed
 	}
+}
 
 	@SuppressWarnings("unchecked")
 	public static boolean isActionDiscard(Map<String, Object> payloadWithDisposition) {
@@ -473,8 +474,7 @@ public class FHIRService {
 			LOG.info("FHIRService  - Validate -BEGIN for interactionId: {} ", interactionId);
 			final var igPackages = appConfig.getIgPackages();
 			final var igVersion = appConfig.getIgVersion();
-			final var engine = new OrchestrationEngine();
-			
+		
 			final var sessionBuilder = engine.session()
 					.withSessionId(UUID.randomUUID().toString())
 					.onDevice(Device.createDefault())

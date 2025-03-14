@@ -9,10 +9,10 @@ ig-packages:
         profile-base-url: http://shinny.org/us/ny/hrsn
         package-path: D:/techbyDesign/ig-packages/shin-ny-ig/shinny/v1.3.0
         ig-version: 1.3.0
-      test-shinny-v1-3-0:
-        profile-base-url: http://test.shinny.org/us/ny/hrsn
-        package-path: D:/techbyDesign/ig-packages/shin-ny-ig/test-shinny/v1.3.0
-        ig-version: 1.3.0
+      # test-shinny-v1-3-0:
+      #   profile-base-url: http://test.shinny.org/us/ny/hrsn
+      #   package-path: D:/techbyDesign/ig-packages/shin-ny-ig/test-shinny/v1.3.0
+      #   ig-version: 1.3.0
     base-packages:
     # Base packages for external dependencies 
       us-core: ig-packages/fhir-v4/us-core/stu-7.0.0
