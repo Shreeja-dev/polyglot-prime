@@ -6,20 +6,6 @@ This guide explains how to set up global scripts in a local Mirth Connect instal
 
 1. Import `mirthconnectintegration/global/globalscripts.xml` in **Mirth Connect Administrator** → **Channels** → **Edit Global Scripts** → **Import Scripts**.
 
-## Step 2: Configure System Environment Variables
-
-1. All properties defined in `application.yml` should be set as **system environment variables**.
-2. These variables should then be referenced in global scripts.
-
-### Step 2.1: Add Environment Variables
-
-- Add any new environment variables to `mirthconnectintegration/global/setEnv.bat`.
-- Execute `setEnv.bat` to apply the variables to the system.
-
-### Step 2.2: Update Application Configuration
-
-- Update the newly added variables into `Packages.org.techbd.service.http.hub.prime.AppConfig`.
-- Ensure that `AppConfig` is correctly populated in `update in deploy script`.
 
 ## Additional Updates
 

@@ -1,370 +1,195 @@
-// This script executes once for each deploy or redeploy task
-// You only have access to the globalMap here to persist data
-
-// Function to load AppConfig dynamically from environment variables
-var File = Packages.java.io.File;
-var FileOutputStream = Packages.java.io.FileOutputStream;
-var FileInputStream = Packages.java.io.FileInputStream;
-var ZipFile = Packages.java.util.zip.ZipFile;
-var ZipEntry = Packages.java.util.zip.ZipEntry;
+// Modify the message variable below to pre process data
+// This script applies across all channels
 var BufferedOutputStream = Packages.java.io.BufferedOutputStream;
 var ObjectMapper = Packages.com.fasterxml.jackson.databind.ObjectMapper;
 var JavaTimeModule = Packages.com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-var mapper = new ObjectMapper();
-mapper.registerModule(new JavaTimeModule());
+var FHIRUtil = Packages.org.techbd.util.fhir.FHIRUtil;
 
-function convertMapToJson(map) {
-    return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(map);
-}
-function extractZipFile(zipFilePath, outputFolderPath,zipFileInteractionId) {
-    logger.debug("extractZipFile BEGIN for interactionId "+zipFileInteractionId);
-    var zipFile = new File(zipFilePath);
-    var outputFolder = new File(outputFolderPath);
-
-    // Ensure output folder exists
-    if (!outputFolder.exists()) {
-        logger.info("Output folder does not exist. Creating it for interactionId "+zipFileInteractionId);
-        outputFolder.mkdirs();
-        logger.info("Output folder created for interactionId:  "+zipFileInteractionId +" Output File Path =" + outputFolderPath);
-    }
-    outputFolder.setWritable(true);
-    if (!zipFile.exists() || zipFile.length() === 0) {
-        logger.error("The ZIP file does not exist or is empty for interactionId : "+zipFileInteractionId);
-        throw new Error("ZIP file is missing or empty.");
-    }
-    logger.info("Size of the uploaded file: " + zipFile.length() + " bytes. for interactionId : "+zipFileInteractionId);
-    var extractionDone = false;
-
-    try {
-        // Use ZipFile for handling extraction
-        var javaZipFile = new ZipFile(zipFile);
-        var entries = javaZipFile.entries();
-
-        // Check if entries are present
-        var entryCount = 0;
-        while (entries.hasMoreElements()) {
-            entries.nextElement();
-            entryCount++;
-        }
-
-        if (entryCount === 0) {
-            javaZipFile.close();
-            logger.error("ZIP file contains no entries for interactionId :"+zipFileInteractionId);
-            throw new Error("ZIP file contains no entries.");
-        }
-
-        // Reset the entries enumeration to start extraction
-        entries = javaZipFile.entries();
-        logger.info("Starting extraction process for interactionId :"+zipFileInteractionId);
-
-        // Loop through entries and extract them
-        while (entries.hasMoreElements()) {
-            var entry = entries.nextElement();
-            // Handle directories
-            if (entry.isDirectory()) {
-                var newDir = new File(outputFolderPath, entry.getName());
-                if (!newDir.exists()) {
-                    newDir.mkdirs();
-                }
-            } else {
-                // Handle files
-                var newFile = new File(outputFolderPath, entry.getName());
-                var parentDir = newFile.getParentFile();
-                if (!parentDir.exists()) {
-                    parentDir.mkdirs();
-                }
-
-                // Extract file content
-                var inputStream = javaZipFile.getInputStream(entry);
-                var buffer = new java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 4096);
-                var bufferedOutputStream = new BufferedOutputStream(new FileOutputStream(newFile));
-
-                var bytesRead;
-                while ((bytesRead = inputStream.read(buffer)) !== -1) {
-                    bufferedOutputStream.write(buffer, 0, bytesRead);
-                }
-
-                bufferedOutputStream.close();
-                inputStream.close();
-            }
-        }
-
-        // Mark extraction as complete
-        extractionDone = true;
-        javaZipFile.close();
-        logger.info("extractZipFile END - All ZIP entries have been extracted successfully for interaction Id"+zipFileInteractionId);
-    } catch (e) {
-        // Log only actual errors and not expected scenarios (like no entries in the ZIP)
-        if (e.message !== "ZIP file contains no entries.") {
-            logger.error("Error during ZIP file extraction: for interactionId : "+zipFileInteractionId + " Message is " + e.message);
-        }
-        throw e;
-    }
-
-    // Prevent second logging after extraction
-    if (!extractionDone) {
-        logger.error("Extraction failed or no entries found for interactionId : "+zipFileInteractionId);
-    }
-}
-function copyFileToFolder(sourcePath, destinationFolderPath,zipFileInteractionId) {
-    logger.debug("CopyFileToFolder BEGIN for interactionId "+zipFileInteractionId);
-    var Files = Packages.java.nio.file.Files;
-    var Paths = Packages.java.nio.file.Paths;
-    var StandardCopyOption = Packages.java.nio.file.StandardCopyOption;
-
-    try {
-        var source = Paths.get(sourcePath);
-        var destinationFolder = Paths.get(destinationFolderPath);
-
-        // Ensure destination folder exists
-        if (!Files.exists(destinationFolder)) {
-            Files.createDirectories(destinationFolder); // Create the directory if it doesn't exist
-        }
-
-        // Extract filename from sourcePath
-        var fileName = source.getFileName();
-        var destinationPath = destinationFolder.resolve(fileName); // Append filename to folder path
-
-        // Copy file to the folder
-        Files.copy(source, destinationPath, StandardCopyOption.REPLACE_EXISTING);
-	   logger.debug("CopyFileToFolder END for interactionId "+zipFileInteractionId);
-        return "File copied successfully to: " + destinationPath.toString();
-    } catch (e) {
-    	   logger.error("Error while copying for interactionId "+zipFileInteractionId);
-        return "Error copying file: " + e.message;
-    }
+/*************************************GLOBAL OBJECTS CREATION  -BEGIN ***************************************************************
+ * This block is responsible for initializing and storing singleton-like Java objects  
+ * in `globalMap`. Objects that need to be instantiated only once for the application's  
+ * lifecycle should be initialized here.  
+ *
+ * **Purpose & Best Practices:**
+ * - Ensures efficient memory utilization and performance optimization.
+ * - Reduces redundant object creation by storing instances in `globalMap`.
+ * - Objects stored here should be read from `globalMap` within **preprocessors** or **transformers**  
+ *   instead of re-instantiating them.
+ *
+ * **Objects Initialized:**
+ * 1. **appConfig** (`org.techbd.config.ConfigLoader`):
+ *    - Loads application configuration using `ConfigLoader`.
+ *    - Loads all properties from application.yml and the properties in specific environment yml
+ *
+ * 2. **fhirService** (`org.techbd.service.fhir.FHIRService`):
+ *    - Core FHIR service responsible for processing FHIR-related operations.
+ *    - Uses `appConfig` for configuration.
+ *    - Uses `OrchestrationEngine` (`org.techbd.service.fhir.engine.OrchestrationEngine`)  
+ *      for processing FHIR requests.
+ *    - Stored in `globalMap` to prevent redundant instantiations.
+ *    - Responsible for loading IG packages and resources
+ *
+ * **Usage:**
+ * - Preprocessors and transformers should **retrieve** these objects from `globalMap`  
+ *   instead of creating new instances.
+ * - To add a new singleton-like Java object, initialize it **once** and store it in `globalMap`.  
+ *
+ * **Example Retrieval in a Transformer:**
+ * ```javascript
+ * var fhirService = globalMap.get("fhirService");
+ * fhirService.processFHIRData(someData);
+ * ```
+ */
+if (!globalMap.containsKey("appConfig")) {
+    var confLoader = new Packages.org.techbd.config.ConfigLoader();
+    var appConfig = confLoader.loadConfig("dev"); // TODO: Read env from an environment variable
+    
+    globalMap.put("appConfig", appConfig);
+    FHIRUtil.initialize(appConfig);
 }
 
-
-function getCsvFilesFromDirectory(folderPath,zipFileInteractionId) {
-    logger.debug("getCsvFilesFromDirectory BEGIN for interactionId "+zipFileInteractionId);
-    var File = Packages.java.io.File;
-    var Arrays = Packages.java.util.Arrays;
-    var ArrayList = Packages.java.util.ArrayList;
-
-    var folder = new File(folderPath);
-    var fileList = new ArrayList();
-
-    if (folder.exists() && folder.isDirectory()) {
-        var files = folder.listFiles();
-        if (files !== null) {
-            for (var i = 0; i < files.length; i++) {
-                if (files[i].isFile() && files[i].getName().toLowerCase().endsWith(".csv")) {
-                    fileList.add(files[i].getAbsolutePath());
-                }
-            }
-        }
-    }
-    logger.debug("getCsvFilesFromDirectory END for interactionId "+zipFileInteractionId);
-    return fileList;
-}
-function getUploadedFileName(connectorMessage,zipFileInteractionId) {
-    var rawData = connectorMessage.getRawData();
-    var filenameMatch = rawData.match(/filename="([^"]+)"/);
-    var uploadedFileName = "unknown.zip";
-    if (filenameMatch && filenameMatch[1]) {
-        uploadedFileName = filenameMatch[1];
-    }
-    return uploadedFileName;
+if (!globalMap.containsKey("fhirService")) {
+    var fhirService = new Packages.org.techbd.service.fhir.FHIRService();
+    var orchestrationEngine = new Packages.org.techbd.service.fhir.engine.OrchestrationEngine();
+    fhirService.setAppConfig(appConfig);
+    fhirService.setEngine(orchestrationEngine);
+    globalMap.put("fhirService", fhirService);
 }
 
-function getUploadedFileContent(connectorMessage,zipFileInteractionId) {
-    try {
-        var rawData = connectorMessage.getRawData();
-        if (rawData) {
-            return rawData.getBytes("ISO-8859-1");
-        } else {
-            logger.error("Raw data is undefined or null.");
-            return null;
-        }
-    } catch (e) {
-        logger.error("Error extracting file content: " + e.message);
-        return null;
-    }
+if (!globalMap.containsKey("mapper")) {
+    var mapper = new ObjectMapper();
+    mapper.registerModule(new JavaTimeModule());
+    globalMap.put("mapper", mapper);
 }
 
-function getRequestParameters(zipFileInteractionId) {
+/********************************************GLOBAL OBJECTS CREATION  -END ******************************************************/
+
+/*
+ * This global function is used to build a map of request parameters.  
+ * It is called in the preprocessor for every message to populate necessary metadata  
+ * required for processing the FHIR request.
+ *
+ * The function ensures that required request parameters are set and validated  
+ * before proceeding with further processing.
+ *
+ * **Parameters:**
+ * @param {string} interactionId - A unique identifier for the interaction.
+ *
+ * **Request Parameters Included:**
+ * - `REQUEST_URI`: The request URI (e.g., `/Bundle/$validate`), determines validation logic.
+ * - `INTERACTION_ID`: A unique identifier for tracking the interaction.
+ * - `ORIGIN`: The source of the request (e.g., HTTP).
+ * - `SOURCE_TYPE`: Specifies the type of data source (e.g., FHIR).
+ * - `OBSERVABILITY_METRIC_INTERACTION_START_TIME`: A placeholder timestamp (to be replaced dynamically).
+ *
+ * **Additional Parameters to Consider:**
+ * - `customDataLakeApi`: The custom Data Lake API endpoint.
+ * - `dataLakeApiContentType`: The content type for Data Lake API requests.
+ * - `healthCheck`: A flag indicating whether this is a health check request.
+ * - `isSync`: Boolean flag to specify if the request is synchronous.
+ * - `provenance`: The provenance information related to the request.
+ * - `mtlsStrategy`: The mTLS (mutual TLS) strategy for secure communication.
+ * - `groupInteractionId`: A unique identifier for the group-level interaction for csv processing.
+ * - `masterInteractionId`: A unique identifier for the master interaction for csv processing.
+ * - `requestUriToBeOverridden`: The request URI that should be overridden for CCD processing.
+ * - `correlationId`: The correlation ID used for tracking requests across services for CCD processing.
+ *
+ * **Note:** 
+ * - This function must be updated whenever new request parameters are introduced.
+ * - Ensure that actual values are read from headers or maps where applicable.
+ *
+ * @returns {java.util.HashMap} A map containing request parameters.
+ */
+function getRequestParameters(interactionId) {
     var requestParameters = new Packages.java.util.HashMap();
-    var requestUri = "/flatfile/csv/Bundle/$validate"; //TODO - READ FROM CHANNEL MAP /GLOBAL MAP /REQUEST HEADERS
-    var origin = "HTTP"; //TODO - READ FROM CHANNEL MAP /GLOBAL MAP /REQUEST HEADERS
 
-    // Directly reference constants using the fully qualified name
-    requestParameters.put(Packages.org.techbd.util.Constants.REQUEST_URI, requestUri);
-    requestParameters.put(Packages.org.techbd.util.Constants.INTERACTION_ID, zipFileInteractionId);
-    requestParameters.put(Packages.org.techbd.util.Constants.ORIGIN, origin);
+    var requestUri = "/Bundle/$validate"; // TODO: Replace with actual logic to fetch from headers or maps
+    var origin = "HTTP"; // TODO: Replace with actual logic to fetch from headers or maps
+
+    if (requestUri != null) {
+        requestParameters.put(Packages.org.techbd.config.Constants.REQUEST_URI, requestUri);
+    }
+    if (interactionId != null) {
+        requestParameters.put(Packages.org.techbd.config.Constants.INTERACTION_ID, interactionId);
+    }
+    if (origin != null) {
+        requestParameters.put(Packages.org.techbd.config.Constants.ORIGIN, origin);
+    }
+
+    requestParameters.put(Packages.org.techbd.config.Constants.SOURCE_TYPE, "FHIR"); // Placeholder, update as needed
+    requestParameters.put(
+        Packages.org.techbd.config.Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, 
+        "2024-01-24T10:15:30Z"
+    ); // TODO: Replace with dynamic timestamp
 
     return requestParameters;
 }
-
-
-function getHeaderParameters(tenantId) {
+/*
+ * This global function is called in the preprocessor for every incoming message.
+ * It retrieves and adds necessary header parameters to a HashMap.
+ * 
+ * - Checks for required header parameters (e.g., User-Agent, Tenant ID).
+ * - Ensures any new header parameter required by a channel is added here.
+ * - Performs null checks before adding parameters to add only the ones available in request.
+ *
+ * **Note:** 
+ * - This function should be updated whenever a new header parameter is introduced.
+ *
+ * @returns {java.util.HashMap} A map containing header parameters.
+ */
+function getHeaderParameters() {
     var headerParameters = new Packages.java.util.HashMap();
-    var userAgent = "testuseragent"; //TODO - READ FROM CHANNEL MAP /GLOBAL MAP /REQUEST HEADERS
-    headerParameters.put(Packages.org.techbd.util.Constants.USER_AGENT, userAgent);
-    headerParameters.put(Packages.org.techbd.util.Constants.TENANT_ID, tenantId);
-    return headerParameters;
-}
-function extractFileContent(zipFileInteractionId, connectorMessage) {
-    logger.debug("extractFileContent BEGIN for interactionId " + zipFileInteractionId);
-    try {
-        var rawPayload = connectorMessage.getRawData();
-        var boundary = rawPayload.split("\r\n")[0]; // Get the boundary string from the first line
-
-        var parts = rawPayload.split(boundary);
-
-        if (parts.length >= 2) {
-            var partContent = parts[1].trim();
-            var headerBodySeparator = "\r\n\r\n";
-            var headerEndIndex = partContent.indexOf(headerBodySeparator);
-
-            if (headerEndIndex !== -1) {
-                var binaryData = partContent.substring(headerEndIndex + headerBodySeparator.length);
-
-                if (binaryData.endsWith("--")) {
-                    binaryData = binaryData.substring(0, binaryData.length - 2).trim();
-                }
-
-                // Convert binaryData string to Java byte array using Java packages
-                var byteArray = binaryData.getBytes("UTF-8");
-
-                logger.debug("extractFileContent END for interactionId " + zipFileInteractionId);
-                return byteArray;
-            } else {
-                logger.error("Header separator not found in the payload." + zipFileInteractionId);
-            }
-        } else {
-            logger.error("Payload does not contain the expected parts." + zipFileInteractionId);
-        }
-    } catch (e) {
-        logger.error("Error in extractFileContent function: " + zipFileInteractionId + " error " + e);
+    var userAgent = "testuseragent"; // TODO-Placeholder, replace with actual logic to read from maps or headers
+    var tenantId = "test123"; // TODO-Placeholder, replace with actual logic to read from maps or headers
+    if (userAgent != null) {
+        headerParameters.put(Packages.org.techbd.config.Constants.USER_AGENT, userAgent);
     }
-    return null;
-}
-function uploadFileToInboundFolder(uploadFolderPath,zipFileInteractionId,connectorMessage) {
-	
-	try {
-	    logger.debug("uploadFileToInboundFolder BEGIN for interactionId "+zipFileInteractionId);
-	    var uploadedFileName = getUploadedFileName(connectorMessage);
-	    logger.info("uploadedFileName"+uploadedFileName);
-	    var uploadedFileFullPath  = uploadFolderPath+uploadedFileName;
-	    // Ensure the upload folder exists and grant write permission if it does not
-	    var uploadFolder = new File(uploadFolderPath);
-	    if (!uploadFolder.exists()) {
-	        uploadFolder.mkdirs();
-	    }
-	    uploadFolder.setWritable(true);
-	    // Step 1: Save the Uploaded File
-	    var binaryContent = connectorMessage.getRawData().getBytes("ISO-8859-1");
-	    if (!binaryContent || binaryContent.length === 0) {
-	        logger.error("No valid ZIP file found in the uploaded data for interaction id "+zipFileInteractionId);
-	        throw new Error("Failed to extract ZIP file from input data.");
-	    }
-	    logger.debug("Starting to save uploaded ZIP file for interaction Id "+zipFileInteractionId);
-	    var uploadedFile = new File(uploadedFileFullPath);
-	    var fileOutputStream = new FileOutputStream(uploadedFile);
-	    fileOutputStream.write(binaryContent);
-	    fileOutputStream.close();
-	    logger.debug("uploadFileToInboundFolder END for interactionId"+ zipFileInteractionId+"Successfully saved uploaded file to: " + uploadedFileFullPath);
-		return uploadedFileFullPath;
-	} catch (e) {
-	    logger.error("Error during ZIP file processing for interactionId"+zipFileInteractionId + e.message);
-	    throw e;
-	}
-}
-function loadAppConfig() {
-    var AppConfig = Packages.org.techbd.service.http.hub.prime.AppConfig;
-    var CsvValidation = Packages.org.techbd.service.http.hub.prime.AppConfig.CsvValidation;
-    var Validation = Packages.org.techbd.service.http.hub.prime.AppConfig.CsvValidation.Validation;
-    var DefaultDataLakeApiAuthn = Packages.org.techbd.service.http.hub.prime.AppConfig.DefaultDataLakeApiAuthn;
-    var MTlsResources = Packages.org.techbd.service.http.hub.prime.AppConfig.MTlsResources;
-    var MTlsAwsSecrets = Packages.org.techbd.service.http.hub.prime.AppConfig.MTlsAwsSecrets;
-    var PostStdinPayloadToNyecDataLakeExternal = Packages.org.techbd.service.http.hub.prime.AppConfig.PostStdinPayloadToNyecDataLakeExternal;
+    if (tenantId != null) {
+        headerParameters.put(Packages.org.techbd.config.Constants.TENANT_ID, tenantId);
+    }
+    return headerParameters;
+} 
 
-    var config = new AppConfig();
-
-    // Fetch Environment Variables
-    config.setVersion(java.lang.System.getenv("TECHBD_VERSION"));
-    config.setFhirVersion(java.lang.System.getenv("TECHBD_FHIR_VERSION"));
-    config.setIgVersion(java.lang.System.getenv("TECHBD_IG_VERSION"));
-    config.setBaseFHIRURL(java.lang.System.getenv("TECHBD_BASE_FHIR_URL"));
-    config.setDefaultDatalakeApiUrl(java.lang.System.getenv("TECHBD_DEFAULT_DATALAKE_API_URL"));
-    config.setOperationOutcomeHelpUrl(java.lang.System.getenv("TECHBD_OPERATION_OUTCOME_HELP_URL"));
-
-    // Structure Definitions URLs
-    var structureDefinitionsUrls = new java.util.HashMap();
-    var keys = ["BUNDLE", "PATIENT", "CONSENT", "ENCOUNTER", "ORGANIZATION", "OBSERVATION", "QUESTIONNAIRE", "PRACTITIONER", "QUESTIONNAIRERESPONSE", "OBSERVATION_SEXUAL_ORIENTATION"];
-    keys.forEach(function(key) {
-        var envVar = "TECHBD_STRUCTURE_DEFINITIONS_URLS_" + key;
-        structureDefinitionsUrls.put(key, java.lang.System.getenv(envVar));
-    });
-    config.setStructureDefinitionsUrls(structureDefinitionsUrls);
-
-    // CSV Validation
-    config.setCsv(new CsvValidation(new Validation(
-        java.lang.System.getenv("TECHBD_CSV_PYTHON_SCRIPT_PATH"),
-        java.lang.System.getenv("TECHBD_CSV_PYTHON_EXECUTABLE"),
-        java.lang.System.getenv("TECHBD_CSV_PACKAGE_PATH"),
-        java.lang.System.getenv("TECHBD_CSV_OUTPUT_PATH"),
-        java.lang.System.getenv("TECHBD_CSV_INBOUND_PATH"),
-        java.lang.System.getenv("TECHBD_CSV_INGRESS_PATH")
-    )));
-
-    // Default Data Lake API Auth
-    var timeoutValue = parseInt(java.lang.System.getenv("TECHBD_POST_STDIN_PAYLOAD_TO_NYEC_DATALAKE_EXTERNAL_TIMEOUT")) || 180;
-    config.setDefaultDataLakeApiAuthn(new DefaultDataLakeApiAuthn(
-        java.lang.System.getenv("TECHBD_MTLS_STRATEGY"),
-        new MTlsAwsSecrets(
-            java.lang.System.getenv("TECHBD_MTLS_KEY_SECRET_NAME"),
-            java.lang.System.getenv("TECHBD_MTLS_CERT_SECRET_NAME")
-        ),
-        new PostStdinPayloadToNyecDataLakeExternal(
-            java.lang.System.getenv("TECHBD_POST_STDIN_PAYLOAD_TO_NYEC_DATALAKE_EXTERNAL_CMD"),
-            timeoutValue
-        ),
-        new MTlsResources(
-            java.lang.System.getenv("TECHBD_MTLS_KEY_RESOURCE_NAME"),
-            java.lang.System.getenv("TECHBD_MTLS_CERT_RESOURCE_NAME")
-        )
-    ));
-
-    // IG Packages
-    var igPackages = new java.util.HashMap();
-    ["SHIN_NY", "US_CORE", "SDOH", "UV_SDC"].forEach(function(key) {
-        igPackages.put(key, java.lang.System.getenv("TECHBD_IG_PACKAGES_FHIR_V4_" + key));
-    });
-    config.setIgPackages(igPackages);
-
-    return config;
+/*
+* This function invokes the core Java library for FHIR processing.
+* Based on the request URI:
+* 
+* - If the request URI is "/Bundle/$validate", it performs bundle validation 
+*   against the SHINNY Implementation Guide (IG) using the profile URL in 
+*   the request payload.
+* - If the request URI is "/Bundle/$validate", it validates the bundle and 
+*   sends both the bundle and the OperationOutcome response to the NYEC API.
+*/
+function convertMapToJson(map) {
+   return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(map);
 }
 
-// Store AppConfig in globalMap
-globalMap.put("appConfig", loadAppConfig());
+globalMap.put("convertMapToJson", convertMapToJson);
+globalMap.put("processFHIRBundle", function(tenantId, channelMap, connectorMessage, responseMap) {
+    var fhirService = globalMap.get("fhirService");
+    var convertMapToJson = globalMap.get("convertMapToJson");
 
-// Log to confirm setup
-logger.info("AppConfig has been loaded and stored in globalMap.");
+    if (!fhirService || !convertMapToJson) {
+        logger.error("Missing fhirService or convertMapToJson in globalMap.");
+        return;
+    }
 
-globalMap.put("validateCsv", function validateCsv(channelName, connectorMessage, channelMap,tenantId,zipFileInteractionId) {
-    var csvService = new Packages.org.techbd.service.CsvService();
-    var appConfig = globalMap.get("appConfig");
-    var inboundFolder = appConfig.getCsv().validation().inboundPath();    
-    var ingressFolder = appConfig.getCsv().validation().ingessHomePath() + zipFileInteractionId + "/ingress";
-    var pythonPackageFullPath = appConfig.getCsv().validation().packagePath();
-    var pythonScriptFullPath = appConfig.getCsv().validation().pythonScriptPath();
-    var uploadedFileFullPath = uploadFileToInboundFolder(inboundFolder, zipFileInteractionId,connectorMessage);
-    extractZipFile(uploadedFileFullPath, ingressFolder,zipFileInteractionId);
-    var csvFiles = getCsvFilesFromDirectory(ingressFolder,zipFileInteractionId);
-    copyFileToFolder(pythonPackageFullPath, ingressFolder,zipFileInteractionId);
-    copyFileToFolder(pythonScriptFullPath, ingressFolder,zipFileInteractionId);
-    var requestParameters = getRequestParameters(zipFileInteractionId);
-    var headerParameters = getHeaderParameters(tenantId);
-    var originalFileName = getUploadedFileName(connectorMessage,zipFileInteractionId);
-    var fileContent = extractFileContent(zipFileInteractionId, connectorMessage);
-    csvService.setRequestParameters(requestParameters);
-    csvService.setHeaderParameters(headerParameters);
-    csvService.setAppConfig(appConfig);
-    csvService.setCsvFiles(csvFiles);
-    var validationResults = csvService.validateCsvFile(fileContent,originalFileName);
-    channelMap.put("csvValidationResults",validationResults);
+    var requestParameters = channelMap.get("requestParameters");
+    var headerParameters = channelMap.get("headerParameters");
+    var responseParameters = new Packages.java.util.HashMap();
+logger.info("before");
+logger.info("data" +connectorMessage.getRawData());
+    var bundleJson = JSON.parse(connectorMessage.getRawData());
+logger.info("after");
+    var validationResults = fhirService.processBundle(
+        connectorMessage.getRawData(), 
+        requestParameters, 
+        headerParameters, 
+        responseParameters
+    );
+    logger.info("received validation results");
+    return convertMapToJson(validationResults);
 });
 
-return;
+globalMap.put("getRequestParameters", getRequestParameters);
+globalMap.put("getHeaderParameters", getHeaderParameters);
