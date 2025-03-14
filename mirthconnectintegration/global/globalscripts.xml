@@ -124,7 +124,7 @@ if (!globalMap.containsKey(&quot;mapper&quot;)) {
 function getRequestParameters(interactionId) {
     var requestParameters = new Packages.java.util.HashMap();
 
-    var requestUri = &quot;/Bundle/$validate&quot;; // TODO: Replace with actual logic to fetch from headers or maps
+    var requestUri = &quot;/Bundle&quot;;// TODO: Replace with actual logic to fetch from headers or maps
     var origin = &quot;HTTP&quot;; // TODO: Replace with actual logic to fetch from headers or maps
 
     if (requestUri != null) {
@@ -182,6 +182,7 @@ function getHeaderParameters() {
 *   sends both the bundle and the OperationOutcome response to the NYEC API.
 */
 function convertMapToJson(map) {
+   var mapper = globalMap.get(&quot;mapper&quot;);	
    return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(map);
 }
 
@@ -226,7 +227,7 @@ var getHeaderParameters = globalMap.get(&quot;getHeaderParameters&quot;);
 channelMap.put(&quot;interactionId&quot;, interactionId);
 channelMap.put(&quot;requestParameters&quot;, getRequestParameters(interactionId));
 channelMap.put(&quot;headerParameters&quot;, getHeaderParameters());
-logger.info(&quot;preprocessor script ended&quot;);
+
 return;
 </string>
   </entry>

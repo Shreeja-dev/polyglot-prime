@@ -7,5 +7,5 @@ var getHeaderParameters = globalMap.get("getHeaderParameters");
 channelMap.put("interactionId", interactionId);
 channelMap.put("requestParameters", getRequestParameters(interactionId));
 channelMap.put("headerParameters", getHeaderParameters());
-logger.info("preprocessor script ended");
+
 return;
