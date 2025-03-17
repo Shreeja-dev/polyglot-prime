@@ -173,3 +173,4 @@ management:
         stream-name: ${TECHBD_OPEN_OBSERVE_STREAM_NAME}-traces
         service: 
           name: default
+          

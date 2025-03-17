@@ -212,7 +212,6 @@ public class FHIRService {
 			}
 
 			payloadWithDisposition = registerBundleInteraction(jooqCfg, requestParameters, headerParameters, payload, result, interactionId, groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
-			LOG.info("Payload with disposition registered: {}", payloadWithDisposition); //TODO-to be removed
 
 			if (isActionDiscard(payloadWithDisposition)) {
 				LOG.info("Action discard detected, returning payloadWithDisposition"); //TODO-to be removed
@@ -385,7 +384,7 @@ public class FHIRService {
 				prepareRequest(rihr, rre, provenance, requestParameters, interactionId, groupInteractionId,
 						masterInteractionId, sourceType, requestUriToBeOverriden);
 				final var start = Instant.now();
-				rihr.execute(jooqCfg);
+				int i = rihr.execute(jooqCfg);
 				final var end = Instant.now();
 				LOG.info(
 						"FHIRMapService  - Time taken : {} milliseconds for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
@@ -403,6 +402,7 @@ public class FHIRService {
 								+ rihr.getName() + " error",
 						rre.interactionId().toString(),
 						rre.tenant(), e);
+						e.printStackTrace();
 			}
 			return null;
 		} finally
@@ -421,7 +421,7 @@ public class FHIRService {
 		rihr.setGroupHubInteractionId(groupInteractionId);
 		rihr.setSourceHubInteractionId(masterInteractionId);
 		rihr.setNature((JsonNode) Configuration.objectMapper.valueToTree(
-				Map.of("nature", RequestResponseEncountered.class.getName(),
+				Map.of("nature", "org.techbd.service.http.Interactions$RequestResponseEncountered",
 						"tenant_id",
 						rre.tenant() != null ? (rre.tenant().tenantId() != null
 								? rre.tenant().tenantId()

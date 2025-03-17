@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.techbd.config.AppConfig;
 import org.techbd.config.ConfigLoader;
@@ -37,14 +36,13 @@ public class FhirServiceIntegrationTest {
     }
 
     @Test
-    // @Disabled
-    void testProcessBundle() throws Exception {
+    public void testProcessBundle() throws Exception {
         String interactionId = UUID.randomUUID().toString();
         Map<String, String> requestParameters = getRequestParameters(interactionId);
         Map<String, String> headerParameters = getHeaderParameters();
         Map<String, Object> responseParameters = new HashMap<>();
         String bundleJson = Files.readString(Path.of(
-                "src/test/resources/org/techbd/fhir/AHCHRSNScreeningResponseExample1.3.0.json"));
+                "src/test/resources/org/techbd/fhir/AHCHRSNQuestionnaireResponseExample1.2.3.json"));
         Object validationResults = fhirService.processBundle(bundleJson, requestParameters, headerParameters,
                 responseParameters);
         assertNotNull(validationResults);

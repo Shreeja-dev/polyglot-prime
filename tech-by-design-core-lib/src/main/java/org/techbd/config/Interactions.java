@@ -76,11 +76,11 @@ public class Interactions {
                     UUID.randomUUID(),
                     new Tenant(requestParameters),
                     requestParameters.getOrDefault("method", "GET"),
-                    requestParameters.getOrDefault("requestUrl", ""),
+                    requestParameters.getOrDefault(Constants.REQUEST_URI, ""),
                     requestParameters.getOrDefault("absoluteUrl", ""),
-                    requestParameters.getOrDefault("requestUri", ""),
+                    requestParameters.getOrDefault(Constants.REQUEST_URI, ""),
                     requestParameters.getOrDefault("clientIpAddress", "unknown"),
-                    requestParameters.getOrDefault("header-User-Agent", "unknown"),
+                    requestParameters.getOrDefault(Constants.USER_AGENT, "unknown"),
                     Instant.now(),
                     requestParameters.entrySet().stream()
                             .filter(e -> e.getKey().startsWith("header-"))
@@ -99,12 +99,12 @@ public class Interactions {
             this(
                 requestId,
                 new Tenant(requestParameters),
-                requestParameters.getOrDefault("method", "GET"),
-                requestParameters.getOrDefault("requestUrl", ""),
+                requestParameters.getOrDefault("method", "POST"),
+                requestParameters.getOrDefault(Constants.REQUEST_URI, ""),
                 requestParameters.getOrDefault("absoluteUrl", ""),
-                requestParameters.getOrDefault("requestUri", ""),
+                requestParameters.getOrDefault(Constants.REQUEST_URI, ""),
                 requestParameters.getOrDefault("clientIpAddress", "unknown"),
-                requestParameters.getOrDefault("header-User-Agent", "unknown"),
+                requestParameters.getOrDefault(Constants.USER_AGENT, "unknown"),
                 Instant.now(),
                 requestParameters.entrySet().stream()
                         .filter(e -> e.getKey().startsWith("header-"))
@@ -142,7 +142,7 @@ public class Interactions {
     }
 
     public record ResponseEncountered(
-            UUID requestId, int status, Instant encounteredAt, List<Header> headers, byte[] responseBody) {
+            UUID requestId, int status, Instant encounteredAt, List<Header> headers, @JsonSerialize(using = ByteArrayToStringOrJsonSerializer.class) byte[] responseBody) {
 
         public ResponseEncountered(Map<String, String> responseParameters, RequestEncountered requestEncountered, byte[] responseBody) {
             this(

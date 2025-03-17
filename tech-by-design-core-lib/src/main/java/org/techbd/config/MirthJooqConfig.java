@@ -29,8 +29,18 @@ public class MirthJooqConfig {
             dataSource.setJdbcUrl(DB_URL);
             dataSource.setUsername(DB_USER);
             dataSource.setPassword(DB_PASSWORD);
-            dataSource.setMaximumPoolSize(10);
+            dataSource.setMaximumPoolSize(20);
+            dataSource.setMinimumIdle(5);
             dataSource.setDriverClassName("org.postgresql.Driver");
+            
+            // Connection timeout settings
+            dataSource.setConnectionTimeout(10000); // 10 seconds
+            dataSource.setIdleTimeout(300000); // 5 minutes
+            dataSource.setMaxLifetime(600000); // 10 minutes
+            
+            // Enable connection testing
+            dataSource.setConnectionTestQuery("SELECT 1");
+            dataSource.setValidationTimeout(5000); // 5 seconds
         }
 
         var jooqConfiguration = new DefaultConfiguration();
