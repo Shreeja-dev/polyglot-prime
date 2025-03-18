@@ -22,29 +22,29 @@
         <respondAfterProcessing>true</respondAfterProcessing>
         <processBatch>false</processBatch>
         <firstResponse>false</firstResponse>
-        <processingThreads>0</processingThreads>
+        <processingThreads>1</processingThreads>
         <resourceIds class="linked-hash-map">
           <entry>
             <string>Default Resource</string>
             <string>[Default Resource]</string>
           </entry>
         </resourceIds>
-        <queueBufferSize>0</queueBufferSize>
+        <queueBufferSize>1000</queueBufferSize>
       </sourceConnectorProperties>
       <xmlBody>false</xmlBody>
       <parseMultipart>false</parseMultipart>
       <includeMetadata>false</includeMetadata>
       <binaryMimeTypes></binaryMimeTypes>
       <binaryMimeTypesRegex>false</binaryMimeTypesRegex>
-      <responseContentType></responseContentType>
+      <responseContentType>application/json</responseContentType>
       <responseDataTypeBinary>false</responseDataTypeBinary>
-      <responseStatusCode></responseStatusCode>
+      <responseStatusCode>200</responseStatusCode>
       <responseHeaders class="linked-hash-map"/>
       <responseHeadersVariable></responseHeadersVariable>
       <useResponseHeadersVariable>false</useResponseHeadersVariable>
       <charset>DEFAULT_ENCODING</charset>
-      <contextPath></contextPath>
-      <timeout></timeout>
+      <contextPath>/Bundle/</contextPath>
+      <timeout>10000</timeout>
       <staticResources/>
     </properties>
     <transformer version="4.5.0">
