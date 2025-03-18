@@ -1,4 +1,4 @@
-defaultDatalakeApiUrl: https://test.com/dev/HRSNBundle
+defaultDatalakeApiUrl: https://uzrlhp39e0.execute-api.us-east-1.amazonaws.com/dev/HRSNBundle
 csv:
     validation:
         pythonScriptPath: ../support/specifications/flat-file/validate-nyher-fhir-ig-equivalent.py

@@ -2,13 +2,9 @@ package org.techbd.service.fhir;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.rmi.UnexpectedException;
 import java.security.Security;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -42,8 +37,6 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import org.techbd.config.AppConfig;
 import org.techbd.config.AppConfig.DefaultDataLakeApiAuthn;
 import org.techbd.config.AppConfig.MTlsAwsSecrets;
-import org.techbd.config.AppConfig.MTlsResources;
-import org.techbd.config.AppConfig.PostStdinPayloadToNyecDataLakeExternal;
 import org.techbd.config.Configuration;
 import org.techbd.config.Constants;
 import org.techbd.config.Interactions;
@@ -135,7 +128,10 @@ public class FHIRService {
 		var dataLakeApiContentType = requestParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE);
 		LOG.info("Retrieved dataLakeApiContentType: {}", dataLakeApiContentType); //TODO-to be removed
 		
-		final var tenantId = requestParameters.get(Constants.TENANT_ID);
+		var tenantId = headerParameters.get(Constants.TENANT_ID);
+		if (tenantId == null) {
+			tenantId ="test";
+		}
 		LOG.info("Retrieved tenantId: {}", tenantId); //TODO-to be removed
 		
 		var customDataLakeApi = requestParameters.get(Constants.CUSTOM_DATA_LAKE_API);
@@ -212,12 +208,44 @@ public class FHIRService {
 			}
 
 			payloadWithDisposition = registerBundleInteraction(jooqCfg, requestParameters, headerParameters, payload, result, interactionId, groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
+			LOG.info("Payload with disposition registered: {}", payloadWithDisposition); //TODO-to be removed
 
 			if (isActionDiscard(payloadWithDisposition)) {
 				LOG.info("Action discard detected, returning payloadWithDisposition"); //TODO-to be removed
 				return payloadWithDisposition;
 			}
-			
+			if (null == payloadWithDisposition) {
+				LOG.warn(
+						"FHIRService:: ERROR:: Disposition payload is not available.Send Bundle payload to scoring engine for interaction id {}.",
+						getBundleInteractionId(requestParameters, coRrelationId));
+				sendToScoringEngine(jooqCfg, requestParameters, customDataLakeApi, dataLakeApiContentType,
+						 
+													tenantId, payload,
+						provenance, null, 
+													 mtlsStrategy,
+						interactionId, groupInteractionId, masterInteractionId,
+						sourceType, requestUriToBeOverriden, coRrelationId);
+				Instant end = Instant.now();
+				Duration timeElapsed = Duration.between(start, end);
+				LOG.info("Bundle processing end for interaction id: {} Time Taken : {}  milliseconds",
+						interactionId, timeElapsed.toMillis());
+				return result;
+			} else {
+				LOG.info(
+						"FHIRService:: Received Disposition payload.Send Disposition payload to scoring engine for interaction id {}.",
+						interactionId);
+				sendToScoringEngine(jooqCfg, requestParameters, customDataLakeApi, dataLakeApiContentType,
+						 
+													tenantId, payload,
+						provenance, payloadWithDisposition, 
+						mtlsStrategy, interactionId, groupInteractionId,
+						masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
+				Instant end = Instant.now();
+				Duration timeElapsed = Duration.between(start, end);
+				LOG.info("Bundle processing end for interaction id: {} Time Taken : {}  milliseconds",
+						interactionId, timeElapsed.toMillis());
+				return payloadWithDisposition;
+			}
 		} catch (JsonValidationException ex) {
 			payloadWithDisposition = registerBundleInteraction(jooqCfg, requestParameters, headerParameters, payload, buildOperationOutcome(ex, interactionId), interactionId, groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
 			LOG.info("Exception occurred: {}", ex.getMessage()); //TODO-to be removed
@@ -637,22 +665,6 @@ public class FHIRService {
 					requestURI,
 					payload,
 					groupInteractionId, masterInteractionId, sourceType);
-			case POST_STDOUT_PAYLOAD_TO_NYEC_DATA_LAKE_EXTERNAL ->
-				handlePostStdoutPayload(interactionId, tenantId, jooqCfg, dataLakeApiBaseURL,
-						bundlePayloadWithDisposition,
-
-						payload, provenance, requestParameters,
-						defaultDatalakeApiAuthn.postStdinPayloadToNyecDataLakeExternal(),
-						groupInteractionId, masterInteractionId, sourceType,
-						requestUriToBeOverriden);
-			case MTLS_RESOURCES ->
-				handleMtlsResources(interactionId, tenantId, jooqCfg,
-						bundlePayloadWithDisposition,
-
-						payload, provenance, requestParameters,
-						dataLakeApiContentType, dataLakeApiBaseURL,
-						defaultDatalakeApiAuthn.mTlsResources(), groupInteractionId,
-						masterInteractionId, sourceType, requestUriToBeOverriden);
 			default ->
 				handleNoMtls(mTlsStrategy, interactionId, tenantId, dataLakeApiBaseURL, jooqCfg,
 				requestParameters,
@@ -660,131 +672,6 @@ public class FHIRService {
 						provenance,
 						groupInteractionId,
 						masterInteractionId, sourceType, requestUriToBeOverriden);
-		}
-	}
-
-	private void handleMtlsResources(String interactionId, String tenantId, org.jooq.Configuration jooqCfg,
-			Map<String, Object> bundlePayloadWithDisposition,
-			String payload, String provenance, Map<String,String> requestParameters, String dataLakeApiContentType,
-			String dataLakeApiBaseURL,
-			MTlsResources mTlsResources, String groupInteractionId, String masterInteractionId,
-			String sourceType, String requestUriToBeOverriden) {
-		LOG.info("FHIRService:: handleMtlsResources BEGIN for interaction id: {} tenantid :{} scoring",
-				interactionId,
-				tenantId);
-		final var requestURI = StringUtils.isNotEmpty(requestUriToBeOverriden) ? requestUriToBeOverriden
-				: requestParameters.get(Constants.REQUEST_URI);
-
-		try {
-			registerStateForward(jooqCfg, provenance, getBundleInteractionId(requestParameters, interactionId),
-					requestURI, tenantId,
-					Optional.ofNullable(bundlePayloadWithDisposition)
-							.orElse(new HashMap<>()),
-					null,
-					payload, groupInteractionId,
-					masterInteractionId, sourceType);
-
-			if (null == mTlsResources.mTlsKeyResourceName()) {
-				LOG.error(
-						"ERROR:: FHIRService:: handleMtlsResources Key location  `mTlsKeyResourceName` is not configured in application.yml for interaction id : {}  tenant id :{} ",
-						interactionId, tenantId);
-				throw new IllegalArgumentException(
-						"Client key location `mTlsKeyResourceName` is not configured in application.yml");
-			}
-			if (null == mTlsResources.mTlsCertResourceName()) {
-				LOG.error(
-						"ERROR:: FHIRService:: handleMtlsResources Client certificate location `mTlsCertResourceName` not configured in application.yml  for interaction id : {} tenant id : {}",
-						interactionId, tenantId);
-				throw new IllegalArgumentException(
-						"Client certificate location `mTlsCertResourceName` not configured in application.yml");
-			}
-			String myClientKey = Files
-					.readString(Paths.get(mTlsResources.mTlsKeyResourceName()));
-			if (null == myClientKey) {
-				LOG.error(
-						"ERROR:: FHIRService:: handleMtlsResources Key not provided.Copy the key to file in location :{} for interaction id :{} tenant id :{} ",
-						mTlsResources.mTlsKeyResourceName(), interactionId, tenantId);
-				throw new IllegalArgumentException(
-						"Client key not provided.Copy the key to file in location : "
-								+ mTlsResources.mTlsKeyResourceName());
-			}
-			LOG.debug(
-					"FHIRService:: handleMtlsResources Client key fetched successfully for interaction id: {} tenantid :{} ",
-					interactionId,
-					tenantId);
-			String myClientCert = Files.readString(Paths.get(mTlsResources.mTlsCertResourceName()));
-			if (null == myClientCert) {
-				LOG.error(
-						"ERROR:: FHIRService:: handleMtlsResources Client certificate not provided.Copy the certificate to file in location :{}  for interaction id : {}  tenantId :{}",
-						mTlsResources.mTlsCertResourceName(), interactionId, tenantId);
-				throw new IllegalArgumentException(
-						"Client certificate not provided.Copy the certificate to file in location : "
-								+ mTlsResources.mTlsCertResourceName());
-			}
-			LOG.debug(
-					"FHIRService:: handleMtlsResources Client cert fetched successfully for interaction id: {} tenantid :{} ",
-					interactionId,
-					tenantId);
-			LOG.debug("FHIRService:: handleMtlsResources Get SSL Context -BEGIN for interaction id: {} tenantid:{}",
-					interactionId, tenantId);
-
-			final var sslContext = SslContextBuilder.forClient()
-					.keyManager(new ByteArrayInputStream(myClientCert.getBytes()),
-							new ByteArrayInputStream(myClientKey.getBytes()))
-					.build();
-			LOG.debug("FHIRService:: handleMtlsResources Get SSL Context -END for interaction id: {} tenantId:{}",
-					interactionId, tenantId);
-			LOG.debug("FHIRService:: handleMtlsResources Create HttpClient for interaction id: {} tenantID:{}",
-					interactionId, tenantId);
-			HttpClient httpClient = HttpClient.create()
-					.secure(sslSpec -> sslSpec.sslContext(sslContext));
-
-			LOG.debug("FHIRService:: Create ReactorClientHttpConnector for interaction id: {} tenantId:{}",
-					interactionId, tenantId);
-			ReactorClientHttpConnector connector = new ReactorClientHttpConnector(httpClient);
-			LOG.debug(
-					"FHIRService:: Build WebClient with MTLS Enabled ReactorClientHttpConnector -BEGIN with scoring Engine API URL : {} for interactionID :{} tenant Id:{} ",
-					dataLakeApiBaseURL, interactionId, tenantId);
-			var webClient = WebClient.builder()
-					.baseUrl(dataLakeApiBaseURL)
-					.defaultHeader("Content-Type", dataLakeApiContentType)
-					.clientConnector(connector)
-					.build();
-			LOG.debug(
-					"FHIRService:: Build WebClient with MTLS Enabled ReactorClientHttpConnector -END with scoring Engine API URL : {} for interactionID :{} tenant Id:{} ",
-					dataLakeApiBaseURL, interactionId, tenantId);
-			LOG.debug(
-					"FHIRService:: handleMtlsResources Build WebClient with MTLS Enabled ReactorClientHttpConnector -BEGIN \n"
-							+
-							"with scoring Engine API URL: {} \n" +
-							"dataLakeApiContentType: {} \n" +
-							"bundlePayloadWithDisposition: {} \n" +
-							"for interactionID: {} \n" +
-							"tenant Id: {}",
-					dataLakeApiBaseURL,
-					dataLakeApiContentType,
-					bundlePayloadWithDisposition == null ? "Payload is null"
-							: "Payload is not null",
-					interactionId,
-					tenantId);
-			sendPostRequest(webClient, tenantId, bundlePayloadWithDisposition, payload,
-					dataLakeApiContentType, interactionId,
-					jooqCfg, provenance, requestParameters.get(Constants.REQUEST_URI), dataLakeApiBaseURL,
-					groupInteractionId, masterInteractionId, sourceType);
-			LOG.debug(
-					"FHIRService:: handleMtlsResources Build WebClient with MTLS Enabled ReactorClientHttpConnector -END for interaction Id :{}",
-					interactionId);
-			LOG.info("FHIRService:: handleMtlsResources END for interaction id: {} tenantid :{} ",
-					interactionId,
-					tenantId);
-		} catch (Exception ex) {
-			LOG.error(
-					"ERROR:: handleMtlsResources Exception while posting to scoring engine with MTLS enabled for interactionId : {}",
-					interactionId, ex);
-			registerStateFailed(jooqCfg, interactionId,
-					requestURI, tenantId, ex.getMessage(), provenance,
-					groupInteractionId, masterInteractionId, sourceType);
-
 		}
 	}
 
@@ -941,160 +828,6 @@ public class FHIRService {
 		LOG.info("FHIRService :: handleAwsSecrets -END for interactionId : {}",
 				interactionId);
 	}
-
-	private void handlePostStdoutPayload(String interactionId, String tenantId, org.jooq.Configuration jooqCfg,
-			String dataLakeApiBaseURL,
-			Map<String, Object> bundlePayloadWithDisposition,
-
-			String payload, String provenance,
-			Map<String,String> requestParameters,
-			PostStdinPayloadToNyecDataLakeExternal postStdinPayloadToNyecDataLakeExternal,
-			String groupInteractionId, String masterInteractionId, String sourceType,
-			String requestUriToBeOverriden) {
-		LOG.info("Proceed with posting payload via external process BEGIN forinteractionId : {}",
-				interactionId);
-		final var requestURI = StringUtils.isNotEmpty(requestUriToBeOverriden) ? requestUriToBeOverriden
-				: requestParameters.get(Constants.REQUEST_URI);
-
-		try {
-			registerStateForward(jooqCfg, provenance, getBundleInteractionId(requestParameters, interactionId),
-					requestURI, tenantId,
-					Optional.ofNullable(bundlePayloadWithDisposition)
-							.orElse(new HashMap<>()),
-					null,
-					payload, groupInteractionId,
-					masterInteractionId, sourceType);
-			var postToNyecExternalResponse = postStdinPayloadToNyecDataLakeExternal(dataLakeApiBaseURL,
-					tenantId, interactionId,
-					bundlePayloadWithDisposition,
-					postStdinPayloadToNyecDataLakeExternal);
-
-			LOG.info("Create payload from postToNyecExternalResponse- BEGIN for interactionId : {}",
-					interactionId);
-			var payloadJson = Map.of("completed",
-					postToNyecExternalResponse.completed(),
-					"processOutput", postToNyecExternalResponse.processOutput(),
-					"errorOutput", postToNyecExternalResponse.errorOutput());
-			String responsePayload = Configuration.objectMapper
-					.writeValueAsString(payloadJson);
-			LOG.info("Create payload from postToNyecExternalResponse- END forinteractionId : {}",
-					interactionId);
-			if (postToNyecExternalResponse.completed() && null != postToNyecExternalResponse.processOutput()
-					&& postToNyecExternalResponse.processOutput()
-							.contains("{\"status\": \"Success\"")) {
-				registerStateComplete(jooqCfg, interactionId,
-						requestURI, tenantId, responsePayload,
-						provenance, groupInteractionId, masterInteractionId, sourceType);
-			} else {
-				registerStateFailed(jooqCfg, interactionId,
-						requestURI, tenantId, responsePayload,
-						provenance, groupInteractionId, masterInteractionId, sourceType);
-			}
-		} catch (Exception ex) {
-			LOG.error("Exception while postStdinPayloadToNyecDataLakeExternal forinteractionId : {}",
-					interactionId, ex);
-			registerStateFailed(jooqCfg, interactionId,
-					requestURI, tenantId, ex.getMessage(), provenance,
-					groupInteractionId, masterInteractionId, sourceType);
-		}
-		LOG.info("Proceed with posting payload via external process END for interactionId : {}",
-				interactionId);
-	}
-
-	private PostToNyecExternalResponse postStdinPayloadToNyecDataLakeExternal(String dataLakeApiBaseURL,
-			String tenantId,
-			String interactionId,
-			Map<String, Object> bundlePayloadWithDisposition,
-			PostStdinPayloadToNyecDataLakeExternal postStdinPayloadToNyecDataLakeExternal)
-			throws Exception {
-		boolean completed = false;
-		String processOutput = "";
-		String errorOutput = "";
-		LOG.info("FHIRService :: postStdinPayloadToNyecDataLakeExternal BEGIN for interaction id : {} tenantID :{}",
-				interactionId, tenantId);
-		final var bashScriptPath = postStdinPayloadToNyecDataLakeExternal.cmd();
-		if (null == bashScriptPath) {
-			throw new IllegalArgumentException(
-					"Bash Script path not configured for the environment.Configure this in application.yml.");
-		}
-		LOG.debug(
-				"FHIRService :: postStdinPayloadToNyecDataLakeExternal Fetched Bash Script Path :{} for interaction id : {} tenantID :{}",
-				bashScriptPath, interactionId, tenantId);
-		LOG.debug(
-				"FHIRService :: postStdinPayloadToNyecDataLakeExternal Prepare ProcessBuilder to run the bash script for interaction id : {} tenantID :{}",
-				interactionId, tenantId);
-		final var processBuilder = new ProcessBuilder(bashScriptPath, tenantId, dataLakeApiBaseURL)
-				.redirectErrorStream(true);
-		LOG.debug(
-				"FHIRService :: postStdinPayloadToNyecDataLakeExternal Start the process  for interaction id : {} tenantID :{}",
-				interactionId, tenantId);
-		final var process = processBuilder.start();
-		LOG.debug(
-				"FHIRService :: postStdinPayloadToNyecDataLakeExternal DEBUG: Capture any output from stdout or stderr immediately after starting\r\n"
-						+ //
-						"        // the process  for interaction id : {} tenantID :{}",
-				interactionId, tenantId);
-		try (var errorStream = process.getErrorStream();
-				var inputStream = process.getInputStream()) {
-
-			// DEBUG: Print any errors encountered
-			errorOutput = new String(errorStream.readAllBytes(), StandardCharsets.UTF_8);
-			if (!errorOutput.isBlank()) {
-				LOG.error(
-						"FHIRService :: postStdinPayloadToNyecDataLakeExternal Error Stream Output before sending payload:{}  for interaction id : {} tenantID :{}",
-						errorOutput, interactionId, tenantId);
-				throw new UnexpectedException(
-						"Error Stream Output before sending payload:\n" + errorOutput);
-			}
-			LOG.debug(
-					"FHIRService :: postStdinPayloadToNyecDataLakeExternal Convert Payload map to String BEGIN for interaction id : {} tenantID :{}",
-					interactionId, tenantId);
-
-			LOG.debug(
-					"FHIRService :: postStdinPayloadToNyecDataLakeExternal Pass the payload map to String END for interaction id : {} tenantID :{}",
-					interactionId, tenantId);
-			String payload = Configuration.objectMapper.writeValueAsString(bundlePayloadWithDisposition);
-			LOG.debug(
-					"FHIRService :: postStdinPayloadToNyecDataLakeExternal Pass the payload via STDIN -BEGIN for interaction id : {} tenantID :{}",
-					interactionId, tenantId);
-			try (OutputStream outputStream = process.getOutputStream()) {
-				outputStream.write(payload.getBytes(StandardCharsets.UTF_8));
-				outputStream.flush();
-				LOG.debug(
-						"FHIRService :: postStdinPayloadToNyecDataLakeExternal Payload send successfully to STDIN -END for interaction id : {} tenantID :{}",
-						interactionId, tenantId);
-			} catch (IOException e) {
-				LOG.debug(
-						"FHIRService :: postStdinPayloadToNyecDataLakeExternal Failed to write payload to process STDIN due to error :{}  begin for interaction id : {} tenantID :{}",
-						e.getMessage(), interactionId, tenantId);
-				throw e;
-			}
-			final int timeout = Integer.valueOf(postStdinPayloadToNyecDataLakeExternal.timeout());
-			LOG.debug(
-					"FHIRService :: postStdinPayloadToNyecDataLakeExternal Wait for the process to complete with a timeout :{}  begin for interaction id : {} tenantID :{}",
-					timeout, interactionId, tenantId);
-			completed = process.waitFor(timeout, TimeUnit.SECONDS);
-			LOG.debug(
-					"FHIRService :: postStdinPayloadToNyecDataLakeExternal Wait elapsed ...Fetch response  begin for interaction id : {} tenantID :{}",
-					interactionId, tenantId);
-
-			processOutput = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-			LOG.debug(
-					"FHIRService :: postStdinPayloadToNyecDataLakeExternal Standard Output received:{} for interaction id : {} tenantID :{}",
-					processOutput, interactionId, tenantId);
-			errorOutput = new String(errorStream.readAllBytes(), StandardCharsets.UTF_8);
-			if (!errorOutput.isBlank()) {
-				LOG.debug(
-						"FHIRService :: postStdinPayloadToNyecDataLakeExternal Error Stream Output after execution: {} for interaction id : {} tenantID :{}",
-						errorOutput, interactionId, tenantId);
-			}
-		}
-
-		LOG.info("FHIRService :: postStdinPayloadToNyecDataLakeExternal END for interaction id : {} tenantID :{}",
-				interactionId, tenantId);
-		return new PostToNyecExternalResponse(completed, processOutput, errorOutput);
-	}
-
 	private WebClient createWebClient(String scoringEngineApiURL,
 			org.jooq.Configuration jooqCfg,
 			Map<String,String> requestParameters,
