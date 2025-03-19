@@ -1,4 +1,7 @@
-// TODO -Check and add validations for mandatory request and header parameters check
+var logInfo = globalMap.get("logInfo");
+var logError = globalMap.get("logError");
+var logDebug = globalMap.get("logDebug");
+var logError = globalMap.get("logError");
 var processFHIRBundle = globalMap.get("processFHIRBundle");
 if (processFHIRBundle) {
     var tenantId = $('headers').getHeader('X-TechBD-Tenant-ID');
@@ -6,5 +9,5 @@ if (processFHIRBundle) {
     var validationResults = processFHIRBundle(tenantId, channelMap, connectorMessage, responseMap);
     responseMap.put("resultJSON",validationResults);
 } else {
-    logger.error("processFHIRBundle function not found in globalMap.");
+    logError("processFHIRBundle function not found in globalMap.",channelMap);
 }
