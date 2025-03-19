@@ -95,7 +95,7 @@ public class Interactions {
                 );
             }
 
-        public RequestEncountered(Map<String, String> requestParameters, byte[] body, UUID requestId) {
+        public RequestEncountered(Map<String, String> requestParameters, byte[] body, UUID requestId,List<Header> headers) {
             this(
                 requestId,
                 new Tenant(requestParameters),
@@ -106,10 +106,7 @@ public class Interactions {
                 requestParameters.getOrDefault("clientIpAddress", "unknown"),
                 requestParameters.getOrDefault(Constants.USER_AGENT, "unknown"),
                 Instant.now(),
-                requestParameters.entrySet().stream()
-                        .filter(e -> e.getKey().startsWith("header-"))
-                        .map(e -> new Header(e.getKey().replace("header-", ""), e.getValue()))
-                        .collect(Collectors.toList()),
+                headers,
                 new HashMap<>(), // Parameters map (can be extended)
                 requestParameters.getOrDefault("contentType", "application/json"),
                 requestParameters.getOrDefault("queryString", ""),
@@ -144,15 +141,12 @@ public class Interactions {
     public record ResponseEncountered(
             UUID requestId, int status, Instant encounteredAt, List<Header> headers, @JsonSerialize(using = ByteArrayToStringOrJsonSerializer.class) byte[] responseBody) {
 
-        public ResponseEncountered(Map<String, String> responseParameters, RequestEncountered requestEncountered, byte[] responseBody) {
+        public ResponseEncountered(Map<String, String> responseParameters, RequestEncountered requestEncountered, byte[] responseBody,List<Header> headers) {
             this(
                 requestEncountered.requestId(),
                 Integer.parseInt(responseParameters.getOrDefault("status", "200")),
                 Instant.now(),
-                responseParameters.entrySet().stream()
-                        .filter(e -> e.getKey().startsWith("header-"))
-                        .map(e -> new Header(e.getKey().replace("header-", ""), e.getValue()))
-                        .collect(Collectors.toList()),
+                headers,
                 responseBody
             );
         }

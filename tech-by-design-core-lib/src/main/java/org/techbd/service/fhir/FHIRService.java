@@ -197,7 +197,7 @@ public class FHIRService {
 				return result;
 			}
 
-			payloadWithDisposition = registerBundleInteraction(jooqCfg, requestParameters, headerParameters, payload, result, interactionId, groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
+			payloadWithDisposition = registerBundleInteraction(jooqCfg,headerParameters, requestParameters, headerParameters, payload, result, interactionId, groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
 			LOG.info("Payload with disposition registered: {}", payloadWithDisposition); //TODO-to be removed
 
 			if (isActionDiscard(payloadWithDisposition)) {
@@ -237,7 +237,7 @@ public class FHIRService {
 				return payloadWithDisposition;
 			}
 		} catch (JsonValidationException ex) {
-			payloadWithDisposition = registerBundleInteraction(jooqCfg, requestParameters, headerParameters, payload, buildOperationOutcome(ex, interactionId), interactionId, groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
+			payloadWithDisposition = registerBundleInteraction(jooqCfg,headerParameters, requestParameters, headerParameters, payload, buildOperationOutcome(ex, interactionId), interactionId, groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
 			LOG.info("Exception occurred: {}", ex.getMessage()); //TODO-to be removed
 		}
 
@@ -355,7 +355,7 @@ public class FHIRService {
 		}
 	}
 
-	private Map<String, Object> registerBundleInteraction(org.jooq.Configuration jooqCfg,
+	private Map<String, Object> registerBundleInteraction(org.jooq.Configuration jooqCfg,Map<String,String> headerParameters,
             Map<String, String> requestParameters, Map<String, String> responseParameters,
 			String payload, Map<String, Map<String, Object>> validationResult, String interactionId,
 			String groupInteractionId, String masterInteractionId, String sourceType,
@@ -369,19 +369,19 @@ public class FHIRService {
 			if (StringUtils.isNotEmpty(coRrelationId)) {
 				requestEncountered = new Interactions.RequestEncountered(requestParameters,
 						payload.getBytes(),
-						UUID.fromString(coRrelationId));
+						UUID.fromString(coRrelationId),FHIRUtil.createRequestHeaders(headerParameters, requestParameters));
 			} else if (null != interactionId) {
 				// If its a converted CSV payload ,it will already have an interaction id.hence
 				// do not create new interactionId
 				requestEncountered = new Interactions.RequestEncountered(requestParameters,
 						payload.getBytes(),
-						UUID.fromString(interactionId));
+						UUID.fromString(interactionId),FHIRUtil.createRequestHeaders(headerParameters, requestParameters));
 			} else if (null != getBundleInteractionId(requestParameters, coRrelationId)) {
 				// If its a converted HL7 payload ,it will already have an interaction id.hence
 				// do not create new interactionId
 				requestEncountered = new Interactions.RequestEncountered(requestParameters,
 						payload.getBytes(),
-						UUID.fromString(getBundleInteractionId(requestParameters, coRrelationId)));
+						UUID.fromString(getBundleInteractionId(requestParameters, coRrelationId)),FHIRUtil.createRequestHeaders(headerParameters, requestParameters));
 			} else {
 				requestEncountered = new Interactions.RequestEncountered(requestParameters,
 						payload.getBytes());
@@ -391,7 +391,7 @@ public class FHIRService {
 			final var rre = new Interactions.RequestResponseEncountered(requestEncountered, 
 					new Interactions.ResponseEncountered(responseParameters, requestEncountered,
 							Configuration.objectMapper
-									.writeValueAsBytes(validationResult)));
+									.writeValueAsBytes(validationResult),FHIRUtil.createResponseHeaders(headerParameters, requestParameters)));
                                     
 			interactions.addHistory(rre);
 			setActiveInteraction(requestParameters, rre);

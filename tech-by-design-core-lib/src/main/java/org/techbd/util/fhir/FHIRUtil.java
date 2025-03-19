@@ -1,14 +1,19 @@
 package org.techbd.util.fhir;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
 import org.techbd.config.AppConfig;
 import org.techbd.config.AppConfig.FhirV4Config;
-
+import org.techbd.config.Constants;
+import org.techbd.config.Interactions.Header;
 public class FHIRUtil {
 
     private static AppConfig appConfig;
@@ -67,5 +72,52 @@ public class FHIRUtil {
                         " in header 'X-TechBD-Base-FHIR-URL' . Supported  SHIN-NY IG URLs: " + supportedUrls);
             }
         }
+    }
+
+     public static List<Header> createResponseHeaders(Map<String, String> headerParameters, Map<String, String> requestParameters) {
+        final var startTime = Instant.parse(requestParameters.get(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME));
+        final var finishTime = Instant.now();
+        final Duration duration = Duration.between(startTime, finishTime);
+
+        // Convert time metrics to string
+        final String startTimeText = startTime.toString();
+        final String finishTimeText = finishTime.toString();
+        final String durationMsText = String.valueOf(duration.toMillis());
+        final String durationNsText = String.valueOf(duration.toNanos());
+
+        // Add observability headers
+        headerParameters.put("X-Observability-Metric-Interaction-Start-Time", startTimeText);
+        headerParameters.put("X-Observability-Metric-Interaction-Finish-Time", finishTimeText);
+        headerParameters.put("X-Observability-Metric-Interaction-Duration-Millisecs", durationMsText);
+        headerParameters.put("X-Observability-Metric-Interaction-Duration-Nanosecs", durationNsText);
+
+        // Convert Map to List<Header>
+        return headerParameters.entrySet().stream()
+                .map(entry -> new Header(entry.getKey(), entry.getValue()))
+                .collect(Collectors.toList());
+    }
+
+        /**
+     * Creates a list of Header records by merging values from both headerParameters and requestParameters.
+     * If a key appears in both maps, the value from requestParameters will overwrite the value from headerParameters.
+     *
+     * @param headerParameters a Map containing header parameters (e.g. from client headers)
+     * @param requestParameters a Map containing request parameters (e.g. from the sourceMap)
+     * @return a List of Header records containing the merged headers.
+     */
+    public static List<Header> createRequestHeaders(Map<String, String> headerParameters, Map<String, String> requestParameters) {
+        // Merge headerParameters and requestParameters into a single map.
+        Map<String, String> mergedMap = new HashMap<>();
+        if (headerParameters != null) {
+            mergedMap.putAll(headerParameters);
+        }
+        if (requestParameters != null) {
+            mergedMap.putAll(requestParameters);
+        }
+
+        // Convert the merged map into a List of Header records.
+        return mergedMap.entrySet().stream()
+                .map(entry -> new Header(entry.getKey(), entry.getValue()))
+                .collect(Collectors.toList());
     }
 }
