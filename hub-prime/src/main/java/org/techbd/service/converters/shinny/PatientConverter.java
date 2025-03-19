@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
+import org.hl7.fhir.exceptions.FHIRException;
 import org.hl7.fhir.r4.model.Address;
 import org.hl7.fhir.r4.model.Bundle;
 import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
@@ -89,7 +90,7 @@ public class PatientConverter extends BaseConverter {
         populatePhone(patient, demographicData);
         populateAddress(patient, demographicData);
         populatePreferredLanguage(patient, demographicData);
-        populatePatientRelationContact(patient, demographicData);
+       // populatePatientRelationContact(patient, demographicData);
 
         // populatePatientText(patient, demographicData);
         BundleEntryComponent bundleEntryComponent = new BundleEntryComponent();
@@ -101,59 +102,87 @@ public class PatientConverter extends BaseConverter {
     }
 
     public static void populatePatientWithExtensions(Patient patient,DemographicData demographicData) {
-        if (StringUtils.isNotEmpty(demographicData.getExtensionOmbCategoryRaceCode())) {
+        if (StringUtils.isNotEmpty(demographicData.getRaceCode())) {
             Extension raceExtension = new Extension("http://hl7.org/fhir/us/core/StructureDefinition/us-core-race");
-            Extension ombCategoryExtension = new Extension("ombCategory");
-            ombCategoryExtension.setValue(new Coding()
-                    .setSystem(demographicData.getExtensionOmbCategoryRaceCodeSystemName())
-                    .setCode(demographicData.getExtensionOmbCategoryRaceCode())
-                    .setDisplay(demographicData.getExtensionOmbCategoryRaceCodeDescription()));
-            raceExtension.addExtension(ombCategoryExtension);
-            Extension textExtension = new Extension("text");
-            textExtension.setValue(new org.hl7.fhir.r4.model.StringType(demographicData.getExtensionOmbCategoryRaceCodeDescription()));
-            raceExtension.addExtension(textExtension);
+
+            String[] raceCodes = demographicData.getRaceCode().split(";");
+            String system = demographicData.getRaceCodeSystem(); // Common system
+            String[] raceDescriptions = demographicData.getRaceCodeDescription() != null
+                    ? demographicData.getRaceCodeDescription().split(";")
+                    : new String[0]; // Handle null descriptions by creating an empty array
+
+            for (int i = 0; i < raceCodes.length; i++) {
+                Extension ombCategoryExtension = new Extension("ombCategory");
+                ombCategoryExtension.setValue(new Coding()
+                        .setSystem(system) // Use the common system value
+                        .setCode(raceCodes[i].trim())
+                        .setDisplay(i < raceDescriptions.length ? raceDescriptions[i].trim() : "")); // Empty string if
+                                                                                                     // no description
+                raceExtension.addExtension(ombCategoryExtension);
+
+                Extension textExtension = new Extension("text");
+                String description = (i < raceDescriptions.length) ? raceDescriptions[i].trim() : "";
+                textExtension.setValue(new org.hl7.fhir.r4.model.StringType(description)); // Ensures empty text if
+                                                                                           // missing
+                raceExtension.addExtension(textExtension);
+            }
 
             patient.addExtension(raceExtension);
         }
+          
 
-        if (StringUtils.isNotEmpty(demographicData.getExtensionOmbCategoryEthnicityCode())) {
-            Extension ethnicityExtension = new Extension("http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity");
+        if (StringUtils.isNotEmpty(demographicData.getEthnicityCode())) {
+            Extension ethnicityExtension = new Extension(
+                    "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity");
 
-            Extension ombCategoryExtension = new Extension("ombCategory");
-            ombCategoryExtension.setValue(new Coding()
-                    .setSystem(demographicData.getExtensionOmbCategoryEthnicityCodeSystemName())
-                    .setCode(demographicData.getExtensionOmbCategoryEthnicityCode())
-                    .setDisplay(demographicData.getExtensionOmbCategoryEthnicityCodeDescription()));
-            ethnicityExtension.addExtension(ombCategoryExtension);
+            String[] ethnicityCodes = demographicData.getEthnicityCode().split(";");
+            String system = demographicData.getEthnicityCodeSystem(); // Common system
+            String[] ethnicityDescriptions = demographicData.getEthnicityCodeDescription() != null
+                    ? demographicData.getEthnicityCodeDescription().split(";")
+                    : new String[0]; // Handle null descriptions by creating an empty array
 
-            Extension textExtension = new Extension("text");
-            textExtension.setValue(new org.hl7.fhir.r4.model.StringType(demographicData.getExtensionOmbCategoryEthnicityCodeDescription()));
-            ethnicityExtension.addExtension(textExtension);
+            for (int i = 0; i < ethnicityCodes.length; i++) {
+                Extension ombCategoryExtension = new Extension("ombCategory");
+                ombCategoryExtension.setValue(new Coding()
+                        .setSystem(system) // Use the common system value
+                        .setCode(ethnicityCodes[i].trim())
+                        .setDisplay(i < ethnicityDescriptions.length ? ethnicityDescriptions[i].trim() : "")); // Empty
+                                                                                                               // string
+                                                                                                               // if no
+                                                                                 // description
+                ethnicityExtension.addExtension(ombCategoryExtension);
+
+                Extension textExtension = new Extension("text");
+                String description = (i < ethnicityDescriptions.length) ? ethnicityDescriptions[i].trim() : "";
+                textExtension.setValue(new org.hl7.fhir.r4.model.StringType(description)); // Ensures empty text if
+                                                                                           // missing
+                ethnicityExtension.addExtension(textExtension);
+            }
 
             patient.addExtension(ethnicityExtension);
-        }
+        }        
 
-        if (StringUtils.isNotEmpty(demographicData.getExtensionSexAtBirthCodeValue())) {
+        if (StringUtils.isNotEmpty(demographicData.getSexAtBirthCode())) {
             Extension birthSexExtension = new Extension("http://hl7.org/fhir/us/core/StructureDefinition/us-core-birthsex");
-            birthSexExtension.setValue(new CodeType(demographicData.getExtensionSexAtBirthCodeValue())); // Use CodeType for valueCode
+            birthSexExtension.setValue(new CodeType(demographicData.getSexAtBirthCode())); // Use CodeType for valueCode
             patient.addExtension(birthSexExtension);
         }
 
-        if (StringUtils.isNotEmpty(demographicData.getExtensionPersonalPronounsCode())) {
+        if (StringUtils.isNotEmpty(demographicData.getPersonalPronounsCode())) {
             Extension pronounsExtension = new Extension("http://shinny.org/us/ny/hrsn/StructureDefinition/shinny-personal-pronouns");
             pronounsExtension.setValue(new CodeableConcept().addCoding(new Coding()
-                    .setSystem(demographicData.getExtensionPersonalPronounsSystem())
-                    .setCode(demographicData.getExtensionPersonalPronounsCode())
-                    .setDisplay(demographicData.getExtensionPersonalPronounsDisplay())));
+                    .setSystem(demographicData.getPersonalPronounsSystem())
+                    .setCode(demographicData.getPersonalPronounsCode())
+                    .setDisplay(demographicData.getPersonalPronounsDescription())));
             patient.addExtension(pronounsExtension);
         }
 
-        if (StringUtils.isNotEmpty(demographicData.getExtensionGenderIdentityCode())) {
+        if (StringUtils.isNotEmpty(demographicData.getGenderIdentityCode())) {
             Extension genderIdentityExtension = new Extension("http://shinny.org/us/ny/hrsn/StructureDefinition/shinny-gender-identity");
             genderIdentityExtension.setValue(new CodeableConcept().addCoding(new Coding()
-                    .setSystem(demographicData.getExtensionGenderIdentitySystem())
-                    .setCode(demographicData.getExtensionGenderIdentityCode())
-                    .setDisplay(demographicData.getExtensionGenderIdentityDisplay())));
+                    .setSystem(demographicData.getGenderIdentityCodeSystem())
+                    .setCode(demographicData.getGenderIdentityCode())
+                    .setDisplay(demographicData.getGenderIdentityCodeDescription())));
             patient.addExtension(genderIdentityExtension);
         }
     }
@@ -223,7 +252,7 @@ public class PatientConverter extends BaseConverter {
     }
 
     private static void populateMaIdentifier(Patient patient, DemographicData data) {
-        if (StringUtils.isNotEmpty(data.getPatientMaIdValue())) {
+        if (StringUtils.isNotEmpty(data.getPatientMedicaidId())) {
             Identifier identifier = new Identifier();
             Coding coding = new Coding();
             coding.setSystem("http://terminology.hl7.org/CodeSystem/v2-0203"); // TODO : remove static reference
@@ -232,7 +261,7 @@ public class PatientConverter extends BaseConverter {
             type.addCoding(coding);
             identifier.setType(type);
             identifier.setSystem("http://www.medicaid.gov/"); // TODO : remove static reference
-            identifier.setValue(data.getPatientMaIdValue());
+            identifier.setValue(data.getPatientMedicaidId());
             patient.addIdentifier(identifier);
         }
     }
@@ -255,7 +284,7 @@ public class PatientConverter extends BaseConverter {
     }
 
     private static void populateAdministrativeSex(Patient patient, DemographicData demographicData) {
-        Optional.ofNullable(demographicData.getGender())
+        Optional.ofNullable(demographicData.getAdministrativeSexCode())
                 .map(sexCode -> switch (sexCode) {
                     case "male", "M" -> AdministrativeGender.MALE;
                     case "female", "F" -> AdministrativeGender.FEMALE;
@@ -273,12 +302,19 @@ public class PatientConverter extends BaseConverter {
 
     private static void populatePhone(Patient patient, DemographicData demographicData) {
         if (StringUtils.isNotEmpty(demographicData.getTelecomValue())) {
-             patient.addTelecom(new ContactPoint()
-                    .setSystem(ContactPoint.ContactPointSystem.PHONE) // TODO : remove static reference
+            ContactPoint.ContactPointUse telecomUse = null;
+            try {
+                telecomUse = ContactPoint.ContactPointUse.fromCode(demographicData.getTelecomUse());
+            } catch (FHIRException e) {
+                telecomUse = ContactPoint.ContactPointUse.HOME; // Default to HOME
+            }
+            patient.addTelecom(new ContactPoint()
+                    .setSystem(ContactPoint.ContactPointSystem.PHONE)
                     .setValue(demographicData.getTelecomValue())
-                    .setUse(ContactPoint.ContactPointUse.HOME));
+                    .setUse(telecomUse));
         }
     }
+
 
     private static void populateAddress(Patient patient, DemographicData data) {
         if (StringUtils.isNotEmpty(data.getCity()) && StringUtils.isNotEmpty(data.getState())) {
@@ -286,9 +322,12 @@ public class PatientConverter extends BaseConverter {
             Optional.ofNullable(data.getAddress1())
                     .filter(StringUtils::isNotEmpty)
                     .ifPresent(address::addLine);
+            Optional.ofNullable(data.getAddress2())
+            .filter(StringUtils::isNotEmpty)
+            .ifPresent(address::addLine);
             address.setCity(data.getCity());
             address.setState(data.getState());
-            Optional.ofNullable(data.getDistrict())
+            Optional.ofNullable(data.getCounty())
                     .filter(StringUtils::isNotEmpty)
                     .ifPresent(address::setDistrict);
             Optional.ofNullable(data.getZip())
@@ -303,11 +342,11 @@ public class PatientConverter extends BaseConverter {
     }
 
     private void populatePreferredLanguage(Patient patient, DemographicData data) {
-        Optional.ofNullable(data.getPreferredLanguageCodeSystemCode())
+        Optional.ofNullable(data.getPreferredLanguageCode())
                 .filter(StringUtils::isNotEmpty)
                 .ifPresent(languageCode -> {
                     Coding coding = new Coding();
-                    coding.setSystem(data.getPreferredLanguageCodeSystemName());
+                    coding.setSystem(data.getPreferredLanguageCodeSystem());
                     coding.setCode(languageCode);
                     CodeableConcept language = new CodeableConcept();
                     language.addCoding(coding);
@@ -318,42 +357,42 @@ public class PatientConverter extends BaseConverter {
                 });
     }
 
-    private static void populatePatientRelationContact(Patient patient, DemographicData data) {
-        if (patient == null || data == null)
-            return;
+    // private static void populatePatientRelationContact(Patient patient, DemographicData data) {
+    //     if (patient == null || data == null)
+    //         return;
 
-        Optional.ofNullable(data.getRelationshipPersonCode())
-                .filter(StringUtils::isNotEmpty)
-                .ifPresent(relationshipCode -> {
-                    // Using builder pattern where applicable
-                    var coding = new Coding()
-                            .setSystem("http://terminology.hl7.org/CodeSystem/v2-0063") // TODO : remove static reference
-                            .setCode(relationshipCode)
-                            .setDisplay(data.getRelationshipPersonDescription());
+    //     Optional.ofNullable(data.getRelationshipPersonCode())
+    //             .filter(StringUtils::isNotEmpty)
+    //             .ifPresent(relationshipCode -> {
+    //                 // Using builder pattern where applicable
+    //                 var coding = new Coding()
+    //                         .setSystem("http://terminology.hl7.org/CodeSystem/v2-0063") // TODO : remove static reference
+    //                         .setCode(relationshipCode)
+    //                         .setDisplay(data.getRelationshipPersonDescription());
 
-                    var relationship = new CodeableConcept().addCoding(coding);
+    //                 var relationship = new CodeableConcept().addCoding(coding);
 
-                    var name = new HumanName()
-                            .setFamily(data.getRelationshipPersonFamilyName())
-                            .addGiven(data.getRelationshipPersonGivenName());
+    //                 var name = new HumanName()
+    //                         .setFamily(data.getRelationshipPersonFamilyName())
+    //                         .addGiven(data.getRelationshipPersonGivenName());
 
-                    var telecomSystem = Optional.ofNullable("Phone") // TODO : remove static reference
-                            .filter(StringUtils::isNotEmpty)
-                            .map(String::toLowerCase)
-                            .map(ContactPoint.ContactPointSystem::fromCode)
-                            .orElse(null);
+    //                 var telecomSystem = Optional.ofNullable("Phone") // TODO : remove static reference
+    //                         .filter(StringUtils::isNotEmpty)
+    //                         .map(String::toLowerCase)
+    //                         .map(ContactPoint.ContactPointSystem::fromCode)
+    //                         .orElse(null);
 
-                    var telecom = new ContactPoint()
-                            .setSystem(telecomSystem)
-                            .setValue(data.getRelationshipPersonTelecomValue());
+    //                 var telecom = new ContactPoint()
+    //                         .setSystem(telecomSystem)
+    //                         .setValue(data.getRelationshipPersonTelecomValue());
 
-                    var contact = new Patient.ContactComponent()
-                            .setRelationship(List.of(relationship))
-                            .setName(name)
-                            .addTelecom(telecom);
+    //                 var contact = new Patient.ContactComponent()
+    //                         .setRelationship(List.of(relationship))
+    //                         .setName(name)
+    //                         .addTelecom(telecom);
 
-                    patient.addContact(contact);
-                });
-    }
+    //                 patient.addContact(contact);
+    //             });
+    // }
 
 }

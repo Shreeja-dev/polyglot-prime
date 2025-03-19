@@ -1,5 +1,6 @@
 package org.techbd.service.converters.shinny;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -75,7 +76,8 @@ public class EncounterConverter extends BaseConverter {
         String fullUrl = "http://shinny.org/us/ny/hrsn/Encounter/" + encounter.getId();
 
         Meta meta = encounter.getMeta();
-        meta.setLastUpdated(DateUtil.parseDate(screeningProfileData.getEncounterLastUpdated()));
+
+        meta.setLastUpdated(DateUtil.parseDate(screeningProfileData.getEncounterStartDatetime()));
 
         populateEncounterStatus(encounter, screeningProfileData);
 
@@ -143,8 +145,8 @@ public class EncounterConverter extends BaseConverter {
 
     private void populateEncounterPeriod(Encounter encounter, ScreeningProfileData screeningResourceData) {
         if (screeningResourceData != null) {
-            String startDateTime = "2024-02-23T00:00:00Z"; // TODO : remove static reference
-            String endDateTime = "2024-02-23T01:00:00Z"; // TODO : remove static reference
+            String startDateTime = screeningResourceData.getEncounterStartDatetime();
+            String endDateTime = screeningResourceData.getEncounterEndDatetime();
 
             if (startDateTime != null) {
                 encounter.getPeriod().setStart(DateUtil.convertStringToDate(startDateTime));
