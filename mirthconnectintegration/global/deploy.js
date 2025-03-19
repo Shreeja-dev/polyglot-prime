@@ -63,6 +63,33 @@ if (!globalMap.containsKey("mapper")) {
 }
 
 /********************************************GLOBAL OBJECTS CREATION  -END ******************************************************/
+/**
+ * Retrieves the Interaction ID from the channel map.
+ * If not found, returns "UNKNOWN_INTERACTION".
+ */
+function getInteractionId(channelMap) {
+    var interactionId = channelMap.get("interactionId");
+    return interactionId ? interactionId : "UNKNOWN_INTERACTION";
+}
+
+// Ensure globalMap has the logger functions when the channel starts
+globalMap.put("logInfo", function(message,channelMap) {
+    var channelId = channelMap.get("channelId");
+    var channelName = channelMap.get("channelName");
+    logger.info("[ ChannelID: " + channelId + "][ ChannelName: " + channelName + "][ InteractionID: " + getInteractionId(channelMap) + "] " + message);
+});
+
+globalMap.put("logError", function(message,channelMap) {
+    var channelId = channelMap.get("channelId");
+    var channelName = channelMap.get("channelName");	
+    logger.error("[ ChannelID: " + channelId + "][ ChannelName: " + channelName + "][ InteractionID: " + getInteractionId(channelMap) + "] " + message);
+});
+
+globalMap.put("logDebug", function(message,channelMap) {
+    var channelId = channelMap.get("channelId");
+    var channelName = channelMap.get("channelName");	
+   logger.debug("[ ChannelID: " + channelId + "][ ChannelName: " + channelName + "][ InteractionID: " + getInteractionId(channelMap) + "] " + message);
+});
 
 /*
  * This global function is used to build a map of request parameters.  
@@ -82,48 +109,64 @@ if (!globalMap.containsKey("mapper")) {
  * - `SOURCE_TYPE`: Specifies the type of data source (e.g., FHIR).
  * - `OBSERVABILITY_METRIC_INTERACTION_START_TIME`: A placeholder timestamp (to be replaced dynamically).
  *
- * **Additional Parameters to Consider:**
- * - `customDataLakeApi`: The custom Data Lake API endpoint.
- * - `dataLakeApiContentType`: The content type for Data Lake API requests.
- * - `healthCheck`: A flag indicating whether this is a health check request.
- * - `isSync`: Boolean flag to specify if the request is synchronous.
- * - `provenance`: The provenance information related to the request.
- * - `mtlsStrategy`: The mTLS (mutual TLS) strategy for secure communication.
- * - `groupInteractionId`: A unique identifier for the group-level interaction for csv processing.
- * - `masterInteractionId`: A unique identifier for the master interaction for csv processing.
- * - `requestUriToBeOverridden`: The request URI that should be overridden for CCD processing.
- * - `correlationId`: The correlation ID used for tracking requests across services for CCD processing.
  *
- * **Note:** 
- * - This function must be updated whenever new request parameters are introduced.
- * - Ensure that actual values are read from headers or maps where applicable.
  *
  * @returns {java.util.HashMap} A map containing request parameters.
  */
-function getRequestParameters(interactionId) {
+function getRequestParameters(interactionId, channelMap, sourceMap) {
     var requestParameters = new Packages.java.util.HashMap();
+    var requestUri = sourceMap.get('contextPath');
+    var parameters = sourceMap.get('parameters');
 
-    var requestUri = "/Bundle";// TODO: Replace with actual logic to fetch from headers or maps
-    var origin = "HTTP"; // TODO: Replace with actual logic to fetch from headers or maps
+    var origin = "HTTP";
+    var source = "FHIR";
 
-    if (requestUri != null) {
-        requestParameters.put(Packages.org.techbd.config.Constants.REQUEST_URI, requestUri);
+    if (parameters && parameters.getParameter("origin")) {
+        origin = parameters.getParameter("origin").trim();
     }
-    if (interactionId != null) {
-        requestParameters.put(Packages.org.techbd.config.Constants.INTERACTION_ID, interactionId);
-    }
-    if (origin != null) {
-        requestParameters.put(Packages.org.techbd.config.Constants.ORIGIN, origin);
+    if (parameters && parameters.getParameter("source")) {
+        source = parameters.getParameter("source").trim();
     }
 
-    requestParameters.put(Packages.org.techbd.config.Constants.SOURCE_TYPE, "FHIR"); // Placeholder, update as needed
+    if (requestUri && requestUri.trim() !== "") {
+        requestParameters.put(Packages.org.techbd.config.Constants.REQUEST_URI, requestUri.trim());
+    }
+    if (interactionId && interactionId.trim() !== "") {
+        requestParameters.put(Packages.org.techbd.config.Constants.INTERACTION_ID, interactionId.trim());
+    }
+    if (origin && origin.trim() !== "") {
+        requestParameters.put(Packages.org.techbd.config.Constants.ORIGIN, origin.trim());
+    }
+    if (source && source.trim() !== "") {
+        requestParameters.put(Packages.org.techbd.config.Constants.SOURCE_TYPE, source.trim());
+    }
+
+	if (parameters && parameters.keySet) { 
+	    var keys = parameters.keySet().toArray();
+	    
+	    for (var i = 0; i < keys.length; i++) {
+	        var key = keys[i] ? keys[i].toString().trim() : "";  // Trim key
+	        var value = parameters.getParameter(key);  // ✅ Use `getParameter(key)` instead of `get(key)`
+	        
+	        if (key !== "" && value && value.toString().trim() !== "") {
+	            requestParameters.put(key, value.toString().trim());
+	        }
+	    }
+	}
+
+    var sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+    var currentTime = sdf.format(new java.util.Date());
+
     requestParameters.put(
-        Packages.org.techbd.config.Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, 
-        "2024-01-24T10:15:30Z"
-    ); // TODO: Replace with dynamic timestamp
+        Packages.org.techbd.config.Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME,
+        currentTime
+    );
 
     return requestParameters;
 }
+
+
+
 /*
  * This global function is called in the preprocessor for every incoming message.
  * It retrieves and adds necessary header parameters to a HashMap.
@@ -132,23 +175,87 @@ function getRequestParameters(interactionId) {
  * - Ensures any new header parameter required by a channel is added here.
  * - Performs null checks before adding parameters to add only the ones available in request.
  *
- * **Note:** 
- * - This function should be updated whenever a new header parameter is introduced.
  *
  * @returns {java.util.HashMap} A map containing header parameters.
  */
-function getHeaderParameters() {
+function getHeaderParameters(headers,channelMap,sourceMap) {
     var headerParameters = new Packages.java.util.HashMap();
-    var userAgent = "testuseragent"; // TODO-Placeholder, replace with actual logic to read from maps or headers
-    var tenantId = "test123"; // TODO-Placeholder, replace with actual logic to read from maps or headers
-    if (userAgent != null) {
-        headerParameters.put(Packages.org.techbd.config.Constants.USER_AGENT, userAgent);
+
+    if (headers && Object.keys(headers).length > 0) { 
+        var keys = Object.keys(headers);
+        for (var i = 0; i < keys.length; i++) {
+            var key = keys[i].toString().trim()
+            var value = headers[key];
+            if (Array.isArray(value)) {
+                value = value.join(", ");
+            }
+
+            if (key !== "" && value && value.toString().trim() !== "") {
+                headerParameters.put(key, value.toString().trim());
+            }
+        }
     }
-    if (tenantId != null) {
-        headerParameters.put(Packages.org.techbd.config.Constants.TENANT_ID, tenantId);
+    // Generate and add Provenance header
+    var provenanceHeader = createProvenanceHeader(sourceMap, channelMap);
+    if (provenanceHeader) {
+        headerParameters.put("X-Provenance", provenanceHeader);
     }
+
     return headerParameters;
-} 
+}
+
+
+
+/*
+ * Creates a provenance JSON string to be sent as a header parameter ("X-Provenance").
+ * The provenance information is extracted from `sourceMap` and `channelMap`.
+ * 
+ * @param {Object} sourceMap - Contains details of the incoming request, such as headers, method, URI, etc.
+ *   Expected keys:
+ *     - headers
+ *     - localPort
+ *     - method
+ *     - remotePort
+ *     - contextPath
+ *     - uri
+ *     - url
+ *     - protocol
+ *     - remoteAddress
+ * 
+ * @param {Object} channelMap - Contains additional details related to the processing channel.
+ *   Expected keys:
+ *     - headerParameters
+ *     - requestParameters
+ *     - channelName
+ *     - startTime
+ *     - requestUri
+ *     - channelId
+ * 
+ * @returns {string} - A JSON string representing the provenance information.
+ */
+function createProvenanceHeader(sourceMap, channelMap) {
+    var provenance = new Packages.java.util.HashMap();
+    if (sourceMap != null) {
+        provenance.put("headers", sourceMap.get("headers"));
+        provenance.put("localPort", sourceMap.get("localPort"));
+        provenance.put("method", sourceMap.get("method"));
+        provenance.put("remotePort", sourceMap.get("remotePort"));
+        provenance.put("contextPath", sourceMap.get("contextPath"));
+        provenance.put("uri", sourceMap.get("uri"));
+        provenance.put("url", sourceMap.get("url"));
+        provenance.put("protocol", sourceMap.get("protocol"));
+        provenance.put("remoteAddress", sourceMap.get("remoteAddress"));
+    }
+    if (channelMap != null) {
+        provenance.put("headerParameters", channelMap.get("headerParameters"));
+        provenance.put("requestParameters", channelMap.get("requestParameters"));
+        provenance.put("channelName", channelMap.get("channelName"));
+        provenance.put("startTime", channelMap.get("startTime"));
+        provenance.put("requestUri", channelMap.get("requestUri"));
+        provenance.put("channelId", channelMap.get("channelId"));
+    }
+    return JSON.stringify(provenance);
+}
 
 /*
 * This function invokes the core Java library for FHIR processing.
@@ -166,6 +273,88 @@ function convertMapToJson(map) {
 }
 
 globalMap.put("convertMapToJson", convertMapToJson);
+
+/**
+ * Global function to validate request header parameters based on rules.
+ * 
+ * Supported Rules:
+ * 1. "isRequired"    - Ensures the parameter is not missing or empty.
+ * 2. "isAllowedValue" - Ensures the parameter matches one of the allowed values.
+ * 3. "isAValidUrl"    - Validates if the parameter is a properly formatted URL.
+ * 4. "isValidUUID"    - Ensures the parameter is a valid UUID.
+ * 
+ * @param {string} paramName - The name of the header parameter (e.g., "X-TechBD-Tenant-ID").
+ * @param {string} paramValue - The value of the header parameter.
+ * @param {string} validationRule - The rule to execute (e.g., "isRequired", "isValidUUID").
+ * @param {Object} responseMap - The responseMap object to update with errors.
+ * @param {int} statusCode - HTTP status code (e.g., 400 for BadRequest).
+ * @param {Array} allowedValues - Optional: List of allowed values (used for "isAllowedValue").
+ * @returns {boolean} - Returns true if validation fails, otherwise false.
+ */
+function validate(paramName, paramValue, validationRule, responseMap, statusCode, allowedValues) {
+    var UUID = Packages.java.util.UUID;
+    var isValid = true;
+    var errorMessage = "";
+
+    switch (validationRule) {
+        case "isRequired":
+            if (!paramValue || paramValue.trim() === "") {
+                errorMessage = paramName + " must be provided";
+                isValid = false;
+            }
+            break;
+
+        case "isAllowedValue":
+            if (!allowedValues || allowedValues.indexOf(paramValue) === -1) {
+                errorMessage = paramName + " must be one of: " + JSON.stringify(allowedValues);
+                isValid = false;
+            }
+            break;
+
+        case "isAValidUrl":
+            try {
+                var url = new java.net.URL(paramValue);
+            } catch (e) {
+                errorMessage = paramName + " is not a valid URL";
+                isValid = false;
+            }
+            break;
+
+        case "isValidUUID":
+            try {
+                UUID.fromString(paramValue);
+            } catch (e) {
+                errorMessage = paramName + " should be a valid UUID";
+                isValid = false;
+            }
+            break;
+
+        default:
+            errorMessage = "Unknown validation rule: " + validationRule;
+            isValid = false;
+    }
+
+    if (!isValid) {
+        logger.error("Validation Error: " + errorMessage);
+        responseMap.put('status', statusCode.toString());
+        responseMap.put('error', errorMessage);
+        responseMap.put('result', JSON.stringify({ "status": "Error", "message": errorMessage }));
+    }
+
+    return !isValid;  // Returns true if validation fails
+}
+
+/*
+ * This function Processes an FHIR Bundle by validating it using the FHIR service.
+ *
+ * @function processFHIRBundle
+ * @param {string} tenantId - The tenant identifier for multi-tenancy support.
+ * @param {Map} channelMap - A map containing request-related parameters.
+ * @param {Object} connectorMessage - The connector message containing the raw FHIR Bundle.
+ * @param {Map} responseMap - A map to store response-related parameters.
+ * @returns {string} - A JSON string containing OperationOutcome of fhir bundle validated against 
+ * SHIN-NY IG with hapi-fhir validator 
+ */
 globalMap.put("processFHIRBundle", function(tenantId, channelMap, connectorMessage, responseMap) {
     var fhirService = globalMap.get("fhirService");
     var convertMapToJson = globalMap.get("convertMapToJson");
@@ -178,17 +367,13 @@ globalMap.put("processFHIRBundle", function(tenantId, channelMap, connectorMessa
     var requestParameters = channelMap.get("requestParameters");
     var headerParameters = channelMap.get("headerParameters");
     var responseParameters = new Packages.java.util.HashMap();
-logger.info("before");
-logger.info("data" +connectorMessage.getRawData());
     var bundleJson = JSON.parse(connectorMessage.getRawData());
-logger.info("after");
     var validationResults = fhirService.processBundle(
         connectorMessage.getRawData(), 
         requestParameters, 
         headerParameters, 
         responseParameters
     );
-    logger.info("received validation results");
     return convertMapToJson(validationResults);
 });
 

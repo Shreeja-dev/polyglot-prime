@@ -3,7 +3,7 @@
   <nextMetaDataId>2</nextMetaDataId>
   <name>Bundle</name>
   <description></description>
-  <revision>7</revision>
+  <revision>31</revision>
   <sourceConnector version="4.5.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -22,38 +22,41 @@
         <respondAfterProcessing>true</respondAfterProcessing>
         <processBatch>false</processBatch>
         <firstResponse>false</firstResponse>
-        <processingThreads>1</processingThreads>
+        <processingThreads>0</processingThreads>
         <resourceIds class="linked-hash-map">
           <entry>
             <string>Default Resource</string>
             <string>[Default Resource]</string>
           </entry>
         </resourceIds>
-        <queueBufferSize>1000</queueBufferSize>
+        <queueBufferSize>0</queueBufferSize>
       </sourceConnectorProperties>
       <xmlBody>false</xmlBody>
       <parseMultipart>false</parseMultipart>
       <includeMetadata>false</includeMetadata>
       <binaryMimeTypes></binaryMimeTypes>
       <binaryMimeTypesRegex>false</binaryMimeTypesRegex>
-      <responseContentType>application/json</responseContentType>
+      <responseContentType></responseContentType>
       <responseDataTypeBinary>false</responseDataTypeBinary>
-      <responseStatusCode>200</responseStatusCode>
+      <responseStatusCode></responseStatusCode>
       <responseHeaders class="linked-hash-map"/>
       <responseHeadersVariable></responseHeadersVariable>
       <useResponseHeadersVariable>false</useResponseHeadersVariable>
       <charset>DEFAULT_ENCODING</charset>
-      <contextPath>/Bundle/</contextPath>
-      <timeout>10000</timeout>
+      <contextPath></contextPath>
+      <timeout></timeout>
       <staticResources/>
     </properties>
     <transformer version="4.5.0">
       <elements>
         <com.mirth.connect.plugins.javascriptstep.JavaScriptStep version="4.5.0">
-          <name>myjar</name>
+          <name>FHIR validation and submission</name>
           <sequenceNumber>0</sequenceNumber>
           <enabled>true</enabled>
-          <script>// TODO -Check and add validations for mandatory request and header parameters check
+          <script>var logInfo = globalMap.get(&quot;logInfo&quot;);
+var logError = globalMap.get(&quot;logError&quot;);
+var logDebug = globalMap.get(&quot;logDebug&quot;);
+var logError = globalMap.get(&quot;logError&quot;);
 var processFHIRBundle = globalMap.get(&quot;processFHIRBundle&quot;);
 if (processFHIRBundle) {
     var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
@@ -61,7 +64,7 @@ if (processFHIRBundle) {
     var validationResults = processFHIRBundle(tenantId, channelMap, connectorMessage, responseMap);
     responseMap.put(&quot;resultJSON&quot;,validationResults);
 } else {
-    logger.error(&quot;processFHIRBundle function not found in globalMap.&quot;);
+    logError(&quot;processFHIRBundle function not found in globalMap.&quot;,channelMap);
 }</script>
         </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
       </elements>
@@ -166,7 +169,24 @@ if (processFHIRBundle) {
     </connector>
   </destinationConnectors>
   <preprocessingScript>// Modify the message variable below to pre process data
-return message;</preprocessingScript>
+var logInfo = globalMap.get(&quot;logInfo&quot;);
+var logError = globalMap.get(&quot;logError&quot;);
+var logDebug = globalMap.get(&quot;logDebug&quot;);
+logInfo(&quot;Validate Header and Request Parameters BEGIN in channel preprocessor : &quot;,channelMap);
+var deleteSessionCookie = $(&apos;delete-session-cookie&apos;);
+logger.info(&quot;deletesessioncookie&quot;+deleteSessionCookie);
+var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
+if (validate(&quot;X-TechBD-Tenant-ID&quot;, tenantId, &quot;isRequired&quot;, responseMap, 400)) {
+    return;
+}
+var correlationId =$(&apos;headers&apos;).getHeader(&quot;X-Correlation-ID&quot;);
+if (correlationId &amp;&amp; correlationId.trim() !== &quot;&quot;) {
+    if (validate(&quot;X-Correlation-ID&quot;, correlationId, &quot;isValidUUID&quot;, responseMap, 400)) {
+        return;
+    }
+}
+//TODO - check and add other parameters /header validation for /Bundle
+logInfo(&quot;Validate Header and Request Parameters END  in channel preprocessor : &quot;,channelMap);</preprocessingScript>
   <postprocessingScript>// This script executes once after a message has been processed
 // Responses returned from here will be stored as &quot;Postprocessor&quot; in the response map
 return;</postprocessingScript>
@@ -214,7 +234,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1741950476606</time>
+        <time>1742375544956</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>
