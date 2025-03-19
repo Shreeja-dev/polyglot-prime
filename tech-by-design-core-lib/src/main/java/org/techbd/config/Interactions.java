@@ -171,9 +171,9 @@ public class Interactions {
     
     public static void setUserDetails(RegisterInteractionHttpRequest rihr, Map<String, String> requestParameters) {
         String curUserName = "API_USER";
-        String sessionId = requestParameters.get(Constants.REQUESTED_SESSION_ID);
+   //     String sessionId = requestParameters.get(Constants.REQUESTED_SESSION_ID);
         rihr.setUserName(curUserName);
-        rihr.setUserSession(sessionId);
+        rihr.setUserSession(UUID.randomUUID().toString()); //TODO -check and add how to get this from mirth
     }
 
     public static void setActiveInteraction(Map<String, String> requestParameters, RequestResponseEncountered rre) {

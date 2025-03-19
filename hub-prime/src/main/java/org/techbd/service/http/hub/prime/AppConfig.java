@@ -29,7 +29,7 @@ public class AppConfig {
                 public static final String DATALAKE_API_URL = Configuration.Servlet.HeaderName.PREFIX
                         + "DataLake-API-URL";
                 public static final String DATALAKE_API_CONTENT_TYPE = Configuration.Servlet.HeaderName.PREFIX
-                        + "DataLake-API-Content-Type";
+                        + "X-TechBD-DataLake-API-Content-Type";
                 public static final String HEALTH_CHECK_HEADER = Configuration.Servlet.HeaderName.PREFIX
                         + "HealthCheck";
             }

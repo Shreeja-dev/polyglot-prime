@@ -126,26 +126,16 @@ public class FHIRService {
 		LOG.info("Bundle processing start at {} for interaction id {}.", interactionId); 
 
 		var dataLakeApiContentType = requestParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE);
-		LOG.info("Retrieved dataLakeApiContentType: {}", dataLakeApiContentType); //TODO-to be removed
-		
+
 		var tenantId = headerParameters.get(Constants.TENANT_ID);
 		if (tenantId == null) {
 			tenantId ="test";
 		}
-		LOG.info("Retrieved tenantId: {}", tenantId); //TODO-to be removed
-		
 		var customDataLakeApi = requestParameters.get(Constants.CUSTOM_DATA_LAKE_API);
-		LOG.info("Retrieved customDataLakeApi: {}", customDataLakeApi); //TODO-to be removed
-		
 		final var healthCheck = requestParameters.get(Constants.HEALTH_CHECK);
-		LOG.info("Retrieved healthCheck: {}", healthCheck); //TODO-to be removed
-		
-		final var isSync = requestParameters.get(Constants.IS_SYNC);
+		final var isSync = false; //TODO  - check and add request parameter later
 		LOG.info("Retrieved isSync: {}", isSync); //TODO-to be removed
-		
 		var provenance = requestParameters.get(Constants.PROVENANCE);
-		LOG.info("Retrieved provenance: {}", provenance); //TODO-to be removed
-		
 		final var mtlsStrategy = requestParameters.get(Constants.MTLS_STRATEGY);
 		LOG.info("Retrieved mtlsStrategy: {}", mtlsStrategy); //TODO-to be removed
 		
@@ -158,7 +148,7 @@ public class FHIRService {
 		final var sourceType = requestParameters.get(Constants.SOURCE_TYPE);
 		LOG.info("Retrieved sourceType: {}", sourceType); //TODO-to be removed
 		
-		final var requestUriToBeOverriden = requestParameters.get(Constants.REQUEST_URI_TO_BE_OVERRIDDEN);
+		final var requestUriToBeOverriden = requestParameters.get(Constants.OVERRIDE_REQUEST_URI);
 		LOG.info("Retrieved requestUriToBeOverriden: {}", requestUriToBeOverriden); //TODO-to be removed
 		
 		final var coRrelationId = requestParameters.get(Constants.CORRELATION_ID);
@@ -358,7 +348,7 @@ public class FHIRService {
 							+ durationNsText + "\" }", StandardCharsets.UTF_8.toString()));
 			metricCookie.setPath("/"); // Set path as required
 			metricCookie.setHttpOnly(false); // Ensure the cookie is accessible via JavaScript
-			responsParameters.put(Constants.METRIC_COOKIE,metricCookie);
+			//responsParameters.put(Constants.METRIC_COOKIE,metricCookie);
 		} catch (UnsupportedEncodingException ex) {
 			LOG.error("Exception during setting  Observability-Metric-Interaction-Active cookie to response header",
 					ex);
@@ -466,10 +456,10 @@ public class FHIRService {
 	}
 
 	private void setUserDetails(RegisterInteractionHttpRequest rihr, Map<String, String> requestParameters) {
-		final var sessionId = requestParameters.get(Constants.REQUESTED_SESSION_ID);
+		//final var sessionId = requestParameters.get(Constants.REQUESTED_SESSION_ID);
 		rihr.setUserName(requestParameters.get(Constants.USER_NAME));
 		rihr.setUserId(requestParameters.get(Constants.USER_ID));
-		rihr.setUserSession(sessionId);
+		rihr.setUserSession(UUID.randomUUID().toString());//TODO -check and add from mirth
 		rihr.setUserRole(requestParameters.get(Constants.USER_ROLE));
 	}
 
