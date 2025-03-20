@@ -125,17 +125,27 @@ public class FHIRService {
 		}
 		LOG.info("Bundle processing start at {} for interaction id {}.", interactionId); 
 
-		var dataLakeApiContentType = requestParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE);
-
+		var dataLakeApiContentType = headerParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE);
+		LOG.info("Retrieved dataLakeApiContentType: {}", dataLakeApiContentType); //TODO-to be removed
 		var tenantId = headerParameters.get(Constants.TENANT_ID);
+		LOG.info("Retrieved tenantId: {}", tenantId); //TODO-to be removed
 		if (tenantId == null) {
 			tenantId ="test";
 		}
-		var customDataLakeApi = requestParameters.get(Constants.CUSTOM_DATA_LAKE_API);
-		final var healthCheck = requestParameters.get(Constants.HEALTH_CHECK);
-		final var isSync = false; //TODO  - check and add request parameter later
+		var source = requestParameters.get(Constants.SOURCE_TYPE);
+		LOG.info("Retrieved source: {}", source); //TODO-to be removed
+		var origin = requestParameters.get(Constants.ORIGIN);
+		LOG.info("Retrieved origin: {}", origin); //TODO-to be removed
+		var deletesessioncookie = requestParameters.get(Constants.DELETE_USER_SESSION_COOKIE);
+		LOG.info("Retrieved deletesessioncookie: {}", deletesessioncookie); //TODO-to be removed
+		var customDataLakeApi = headerParameters.get(Constants.CUSTOM_DATA_LAKE_API);
+		LOG.info("Retrieved customDataLakeApi: {}", customDataLakeApi); //TODO-to be removed
+		final var healthCheck = headerParameters.get(Constants.HEALTH_CHECK);
+		LOG.info("Retrieved healthCheck: {}", healthCheck); //TODO-to be removed
+		final var isSync =  requestParameters.get(Constants.IMMEDIATE);
 		LOG.info("Retrieved isSync: {}", isSync); //TODO-to be removed
-		var provenance = requestParameters.get(Constants.PROVENANCE);
+		var provenance = headerParameters.get(Constants.PROVENANCE);
+		LOG.info("Retrieved provenance: {}", provenance); //TODO-to be removed
 		final var mtlsStrategy = requestParameters.get(Constants.MTLS_STRATEGY);
 		LOG.info("Retrieved mtlsStrategy: {}", mtlsStrategy); //TODO-to be removed
 		
@@ -148,18 +158,18 @@ public class FHIRService {
 		final var sourceType = requestParameters.get(Constants.SOURCE_TYPE);
 		LOG.info("Retrieved sourceType: {}", sourceType); //TODO-to be removed
 		
-		final var requestUriToBeOverriden = requestParameters.get(Constants.OVERRIDE_REQUEST_URI);
+		final var requestUriToBeOverriden = headerParameters.get(Constants.OVERRIDE_REQUEST_URI);
 		LOG.info("Retrieved requestUriToBeOverriden: {}", requestUriToBeOverriden); //TODO-to be removed
 		
 		final var coRrelationId = requestParameters.get(Constants.CORRELATION_ID);
 		LOG.info("Retrieved coRrelationId: {}", coRrelationId); //TODO-to be removed
 		
-		final var requestUri = requestParameters.get(Constants.REQUEST_URI);
+		final var requestUri = headerParameters.get(Constants.REQUEST_URI);
 		LOG.info("Retrieved requestUri: {}", requestUri); //TODO-to be removed
 
 		if (null == interactionId) {
-			if (StringUtils.isNotEmpty(requestParameters.get(Constants.CORRELATION_ID))) {
-				interactionId = requestParameters.get(Constants.CORRELATION_ID);
+			if (StringUtils.isNotEmpty(headerParameters.get(Constants.CORRELATION_ID))) {
+				interactionId = headerParameters.get(Constants.CORRELATION_ID);
 				LOG.info("Updated interactionId from correlationId: {}", interactionId); //TODO-to be removed
 			}
 		}

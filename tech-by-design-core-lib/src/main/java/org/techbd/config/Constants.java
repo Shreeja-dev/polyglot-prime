@@ -24,7 +24,7 @@ public interface Constants {
     public static final String SOURCE_TYPE = "source";
     public static final String CORRELATION_ID = "X-Correlation-ID";
     public static final String OVERRIDE_REQUEST_URI = "X-TechBD-Override-Request-URI";
-    public static final String DELETE_SESSION = "'delete-session-cookie";
+    public static final String DELETE_SESSION = "delete-session-cookie";
     public static final String OBSERVABILITY_METRIC_INTERACTION_START_TIME = "X-Observability-Metric-Interaction-Start-Time";
     public static final String OBSERVABILITY_METRIC_INTERACTION_FINISH_TIME = "X-Observability-Metric-Interaction-Finish-Time";
     public static final String OBSERVABILITY_METRIC_INTERACTION_DURATION_NANOSECS = "X-Observability-Metric-Interaction-Duration-Nanosecs";
@@ -36,9 +36,13 @@ public interface Constants {
     public static final String USER_ROLE = "USER_ROLE";    
     public static final String DELETE_USER_SESSION_COOKIE="delete-session-cookie";
     public static final String PROVENANCE="X-Provenance";
-    public static final Object DATA_LAKE_API_CONTENT_TYPE = "X-TechBD-DataLake-API-Content-Type";
-    public static final Object CUSTOM_DATA_LAKE_API = "X-TechBD-DataLake-API-URL";
-    public static final Object MTLS_STRATEGY = "mtls-strategy";
-    public static final Object GROUP_INTERACTION_ID = "groupInteractionId";
-    public static final Object MASTER_INTERACTION_ID = "masterInteractionId";
+    public static final String DATA_LAKE_API_CONTENT_TYPE = "X-TechBD-DataLake-API-Content-Type";
+    public static final String CUSTOM_DATA_LAKE_API = "X-TechBD-DataLake-API-URL";
+    public static final String MTLS_STRATEGY = "mtls-strategy";
+    public static final String GROUP_INTERACTION_ID = "groupInteractionId";
+    public static final String MASTER_INTERACTION_ID = "masterInteractionId";
+    public static final String PROTOCOL ="protocol";
+    public static final String LOCAL_ADDRESS ="localAddress";
+    public static final String REMOTE_ADDRESS ="remoteAddress";
+    public static final String IMMEDIATE = "immediate";
 }
