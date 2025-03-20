@@ -3,8 +3,6 @@ var logInfo = globalMap.get("logInfo");
 var logError = globalMap.get("logError");
 var logDebug = globalMap.get("logDebug");
 logInfo("Validate Header and Request Parameters BEGIN in channel preprocessor : ",channelMap);
-var deleteSessionCookie = $('delete-session-cookie');
-logger.info("deletesessioncookie"+deleteSessionCookie);
 var tenantId = $('headers').getHeader('X-TechBD-Tenant-ID');
 if (validate("X-TechBD-Tenant-ID", tenantId, "isRequired", responseMap, 400)) {
     return;

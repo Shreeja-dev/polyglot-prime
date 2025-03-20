@@ -3,7 +3,7 @@
   <nextMetaDataId>2</nextMetaDataId>
   <name>Bundle</name>
   <description></description>
-  <revision>31</revision>
+  <revision>32</revision>
   <sourceConnector version="4.5.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -22,29 +22,54 @@
         <respondAfterProcessing>true</respondAfterProcessing>
         <processBatch>false</processBatch>
         <firstResponse>false</firstResponse>
-        <processingThreads>0</processingThreads>
+        <processingThreads>1</processingThreads>
         <resourceIds class="linked-hash-map">
           <entry>
             <string>Default Resource</string>
             <string>[Default Resource]</string>
           </entry>
         </resourceIds>
-        <queueBufferSize>0</queueBufferSize>
+        <queueBufferSize>1000</queueBufferSize>
       </sourceConnectorProperties>
       <xmlBody>false</xmlBody>
-      <parseMultipart>false</parseMultipart>
+      <parseMultipart>true</parseMultipart>
       <includeMetadata>false</includeMetadata>
-      <binaryMimeTypes></binaryMimeTypes>
-      <binaryMimeTypesRegex>false</binaryMimeTypesRegex>
-      <responseContentType></responseContentType>
+      <binaryMimeTypes>application/.*(?&lt;!json|xml)$|image/.*|video/.*|audio/.*</binaryMimeTypes>
+      <binaryMimeTypesRegex>true</binaryMimeTypesRegex>
+      <responseContentType>text/plain</responseContentType>
       <responseDataTypeBinary>false</responseDataTypeBinary>
       <responseStatusCode></responseStatusCode>
-      <responseHeaders class="linked-hash-map"/>
+      <responseHeaders class="linked-hash-map">
+        <entry>
+          <string>Access-Control-Allow-Origin</string>
+          <list>
+            <string>*</string>
+          </list>
+        </entry>
+        <entry>
+          <string>Access-Control-Allow-Methods</string>
+          <list>
+            <string>GET, POST, OPTIONS </string>
+          </list>
+        </entry>
+        <entry>
+          <string>Access-Control-Allow-Headers</string>
+          <list>
+            <string>Content-Type, Authorization, X-TechBD-Base-FHIR-URL, X-TechBD-Tenant-ID, User-Agent, X-TechBD-REMOTE-IP, X-TechBD-Override-Request-URI, X-Correlation-ID, accept </string>
+          </list>
+        </entry>
+        <entry>
+          <string>Access-Control-Expose-Headers</string>
+          <list>
+            <string>Location, X-TechBD-Tenant-ID, User-Agent, X-TechBD-REMOTE-IP, X-TechBD-Override-Request-URI,X-Correlation-ID,X-TechBD-HealthCheck</string>
+          </list>
+        </entry>
+      </responseHeaders>
       <responseHeadersVariable></responseHeadersVariable>
       <useResponseHeadersVariable>false</useResponseHeadersVariable>
-      <charset>DEFAULT_ENCODING</charset>
-      <contextPath></contextPath>
-      <timeout></timeout>
+      <charset>UTF-8</charset>
+      <contextPath>/Bundle/$validate/</contextPath>
+      <timeout>30000</timeout>
       <staticResources/>
     </properties>
     <transformer version="4.5.0">
@@ -173,8 +198,6 @@ var logInfo = globalMap.get(&quot;logInfo&quot;);
 var logError = globalMap.get(&quot;logError&quot;);
 var logDebug = globalMap.get(&quot;logDebug&quot;);
 logInfo(&quot;Validate Header and Request Parameters BEGIN in channel preprocessor : &quot;,channelMap);
-var deleteSessionCookie = $(&apos;delete-session-cookie&apos;);
-logger.info(&quot;deletesessioncookie&quot;+deleteSessionCookie);
 var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
 if (validate(&quot;X-TechBD-Tenant-ID&quot;, tenantId, &quot;isRequired&quot;, responseMap, 400)) {
     return;
@@ -234,7 +257,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1742375544956</time>
+        <time>1742452317207</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>

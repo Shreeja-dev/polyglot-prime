@@ -117,7 +117,10 @@ function getRequestParameters(interactionId, channelMap, sourceMap) {
     var requestParameters = new Packages.java.util.HashMap();
     var requestUri = sourceMap.get('contextPath');
     var parameters = sourceMap.get('parameters');
-
+    var requestUrl = sourceMap.get('requestUrl');
+    var protocol = sourceMap.get('protocol');
+    var localAddress = sourceMap.get('localAddress');
+    var remoteAddress = sourceMap.get('remoteAddress');
     var origin = "HTTP";
     var source = "FHIR";
 
@@ -140,19 +143,22 @@ function getRequestParameters(interactionId, channelMap, sourceMap) {
     if (source && source.trim() !== "") {
         requestParameters.put(Packages.org.techbd.config.Constants.SOURCE_TYPE, source.trim());
     }
+   // **Fetch predefined constants from parameters and put them in requestParameters**
+    var constantsToFetch = [
+        Packages.org.techbd.config.Constants.DELETE_USER_SESSION_COOKIE,
+        Packages.org.techbd.config.Constants.IMMEDIATE
+    ];
 
-	if (parameters && parameters.keySet) { 
-	    var keys = parameters.keySet().toArray();
-	    
-	    for (var i = 0; i < keys.length; i++) {
-	        var key = keys[i] ? keys[i].toString().trim() : "";  // Trim key
-	        var value = parameters.getParameter(key);  // ✅ Use `getParameter(key)` instead of `get(key)`
-	        
-	        if (key !== "" && value && value.toString().trim() !== "") {
-	            requestParameters.put(key, value.toString().trim());
-	        }
-	    }
-	}
+    if (parameters) {
+        for (var i = 0; i < constantsToFetch.length; i++) {
+            var key = constantsToFetch[i];
+            var value = parameters.getParameter(key);
+		  logger.info("key =" +key +  "   value =   "+value);
+            if (value && value.toString().trim() !== "") {
+                requestParameters.put(key, value.toString().trim());
+            }
+        }
+    }
 
     var sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
     var currentTime = sdf.format(new java.util.Date());
@@ -178,31 +184,44 @@ function getRequestParameters(interactionId, channelMap, sourceMap) {
  *
  * @returns {java.util.HashMap} A map containing header parameters.
  */
-function getHeaderParameters(headers,channelMap,sourceMap) {
+function getHeaderParameters(headers, channelMap, sourceMap) {
     var headerParameters = new Packages.java.util.HashMap();
 
-    if (headers && Object.keys(headers).length > 0) { 
-        var keys = Object.keys(headers);
-        for (var i = 0; i < keys.length; i++) {
-            var key = keys[i].toString().trim()
-            var value = headers[key];
-            if (Array.isArray(value)) {
-                value = value.join(", ");
-            }
+    var constantsToFetch = [
+        Packages.org.techbd.config.Constants.USER_AGENT,
+        Packages.org.techbd.config.Constants.TENANT_ID,
+        Packages.org.techbd.config.Constants.HEALTH_CHECK,
+        Packages.org.techbd.config.Constants.CORRELATION_ID,
+        Packages.org.techbd.config.Constants.OVERRIDE_REQUEST_URI,
+        Packages.org.techbd.config.Constants.PROVENANCE,
+        Packages.org.techbd.config.Constants.DATA_LAKE_API_CONTENT_TYPE,
+        Packages.org.techbd.config.Constants.CUSTOM_DATA_LAKE_API,
+        Packages.org.techbd.config.Constants.MTLS_STRATEGY,
+        Packages.org.techbd.config.Constants.GROUP_INTERACTION_ID,
+        Packages.org.techbd.config.Constants.MASTER_INTERACTION_ID,
+        Packages.org.techbd.config.Constants.SOURCE_TYPE
+    ];
 
-            if (key !== "" && value && value.toString().trim() !== "") {
-                headerParameters.put(key, value.toString().trim());
-            }
+    // Fetch and store only the required headers
+    for (var i = 0; i < constantsToFetch.length; i++) {
+        var key = constantsToFetch[i];
+        var value = headers.getHeader(key);
+
+        if (value && value.toString().trim() !== "") {
+            headerParameters.put(key, value.toString().trim());
         }
     }
+
     // Generate and add Provenance header
     var provenanceHeader = createProvenanceHeader(sourceMap, channelMap);
     if (provenanceHeader) {
-        headerParameters.put("X-Provenance", provenanceHeader);
+        headerParameters.put(Packages.org.techbd.config.Constants.PROVENANCE, provenanceHeader);
     }
 
     return headerParameters;
 }
+
+
 
 
 
