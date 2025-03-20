@@ -310,15 +310,12 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
                 Observation groupObservation = new Observation();
                 String observationId = CsvConversionUtil.sha256("group-" + screeningCode + screeningProfileData.getEncounterId());
                 groupObservation.setId(observationId);
-                ScreeningObservationData screeningObservationData = new ScreeningObservationData();
                 setMeta(groupObservation,baseFhirUrl);
                 Meta meta = groupObservation.getMeta();
                 meta.setLastUpdated(DateUtil.convertStringToDate(screeningProfileData.getScreeningLastUpdated()));
-                
-                meta.setLastUpdated(DateUtil.convertStringToDate(demographicData.getPatientLastUpdated()));
                 groupObservation.setMeta(meta);
 
-                groupObservation.setLanguage("en");
+                groupObservation.setLanguage(screeningProfileData.getScreeningLanguageCode());
 
                 // Set status from screening profile
                 String screeningStatusCode = screeningProfileData.getScreeningStatusCode();
