@@ -1,0 +1,4 @@
+Observation.encounter: minimum required = 1, but only found 0 (from http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response|1.4.1)
+Observation.performer: minimum required = 1, but only found 0 (from http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response|1.4.1)
+
+Total Errors: 2

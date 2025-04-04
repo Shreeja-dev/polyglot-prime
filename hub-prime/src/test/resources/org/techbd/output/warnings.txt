@@ -1,0 +1,15 @@
+None of the codings provided are in the value set 'IdentifierType' (http://hl7.org/fhir/ValueSet/identifier-type|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://www.irs.gov/#TAX)
+Constraint failed: dom-6: 'A resource should have narrative for robust management' (defined in http://hl7.org/fhir/StructureDefinition/DomainResource) (Best Practice Recommendation)
+Best Practice Recommendation: In general, all observations should have a performer
+Constraint failed: SHINNY-Patient-Address: 'All elements of address should be present' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+Constraint failed: SHINNY-Patient-GenderId: 'Gender Id should be present' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+Constraint failed: SHINNY-Patient-Communication: 'Communication should exist' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+Constraint failed: SHINNY-Patient-MiddleName: 'MiddleName should be present' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+Constraint failed: SHINNY-Obs-Encounter: 'SDOH Observations should have an Encounter' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+Constraint failed: ObservationScreenRes-Langauge: 'Ensure that all Observation Screening Responses have a language.' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+Constraint failed: ObservationScreenRes-Interpretation: 'Ensure that specific Observation Screening Responses have an interpretation.' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+Constraint failed: Location-Address: 'Ensure that all Location resources include all address elements.' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+Constraint failed: Organization-Address: 'Ensure that all Organization resources include all address elements.' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+Constraint failed: Organization-Type: 'Ensure that all Organization resources include a value for type.' (defined in http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile)
+
+Total Warnings: 13

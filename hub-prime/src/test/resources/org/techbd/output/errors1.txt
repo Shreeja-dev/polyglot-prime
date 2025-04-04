@@ -1,0 +1,7 @@
+The extension http://intersystems.com/fhir/extn/sda3/lib/patient-entered-on could not be found so is not allowed here
+Unable to find a match for profile Patient/49651034668 among choices: http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient
+Observation.encounter: minimum required = 1, but only found 0 (from http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response|1.4.1)
+Observation.performer: minimum required = 1, but only found 0 (from http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response|1.4.1)
+Unable to find a match for profile Patient/49651034668 among choices: http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-patient
+
+Total Errors: 5
