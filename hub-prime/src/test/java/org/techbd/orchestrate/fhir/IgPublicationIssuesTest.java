@@ -965,12 +965,12 @@ public class IgPublicationIssuesTest {
                 shinnyV123.put("ig-version", "1.3.0");
                 shinnyPackages.put("shinny-v1-3-0", shinnyV123);
 
-                // Test Shinny version 1.3.0
-                Map<String, String> testShinnyV130 = new HashMap<>();
-                testShinnyV130.put("profile-base-url", "http://test.shinny.org/us/ny/hrsn");
-                testShinnyV130.put("package-path", "ig-packages/shin-ny-ig/test-shinny/v1.4.1");
-                testShinnyV130.put("ig-version", "1.4.1");
-                shinnyPackages.put("test-shinny-v1-4-1", testShinnyV130);
+        // Test Shinny version 1.3.0
+        Map<String, String> testShinnyV130 = new HashMap<>();
+        testShinnyV130.put("profile-base-url", "http://test.shinny.org/us/ny/hrsn");
+        testShinnyV130.put("package-path", "ig-packages/shin-ny-ig/test-shinny/v1.4.2");
+        testShinnyV130.put("ig-version", "1.4.2");
+        shinnyPackages.put("test-shinny-v1-4-2", testShinnyV130);
 
                 fhirV4Config.setBasePackages(basePackages);
                 fhirV4Config.setShinnyPackages(shinnyPackages);
