@@ -837,7 +837,7 @@ public class IgPublicationIssuesTest {
                                         .withTracer(tracer)
                                         .withFhirIGPackages(getIgPackages())
                                         .withIgVersion(getIgVersion())
-                                        .withValidationSeverityLevel("information")
+                                        //.withValidationSeverityLevel("information")
                                         .addHapiValidationEngine()
                                         .build();
                         sessionSpy = spy(session);
