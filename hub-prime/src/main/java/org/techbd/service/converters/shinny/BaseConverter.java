@@ -10,7 +10,8 @@ import org.hl7.fhir.r4.model.StringType;
 import org.techbd.util.FHIRUtil;
 
 public abstract class BaseConverter implements IConverter {
-
+    
+    
     public CanonicalType getProfileUrl() {
         return new CanonicalType(FHIRUtil.getProfileUrl(getResourceType().name().toLowerCase()));
     }

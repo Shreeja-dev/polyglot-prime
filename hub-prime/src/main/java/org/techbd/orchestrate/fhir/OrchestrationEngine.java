@@ -54,7 +54,10 @@ import com.nimbusds.oauth2.sdk.util.CollectionUtils;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
+import ca.uhn.fhir.parser.LenientErrorHandler;
+import ca.uhn.fhir.parser.StrictErrorHandler;
 import ca.uhn.fhir.validation.FhirValidator;
+import ca.uhn.fhir.validation.SingleValidationMessage;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import jakarta.validation.constraints.NotNull;
@@ -284,7 +287,6 @@ public class OrchestrationEngine {
         private final Tracer tracer;
         private final String interactionId;
         private final List<FhirBundleValidator> fhirBundleValidators;
-    
         private HapiValidationEngine(final Builder builder) {
             this.fhirProfileUrl = builder.fhirProfileUrl;
             this.fhirContext = FhirContext.forR4();
@@ -317,7 +319,7 @@ public class OrchestrationEngine {
                         String igVersion = igPackageMap.get("ig-version");
                     
                         LOG.info("Creating FhirBundleValidator for package: {} interactionId :{}", packagePath,interactionId);
-                    
+                        
                         FhirBundleValidator bundleValidator = FhirBundleValidator.builder()
                             .fhirContext(FhirContext.forR4())
                             .fhirValidator(initializeFhirValidator(packagePath, basePackages)) // Pass igPackageMap directly
@@ -338,7 +340,7 @@ public class OrchestrationEngine {
             Span span = tracer.spanBuilder("OrchestrationEngine.initializeFhirValidator").startSpan();
             try {
                 LOG.info("Initializing FHIR Validator for package: {} inteactionId :{} ", shinNyPackagePath,interactionId);
-        
+               
                 final var supportChain = new ValidationSupportChain();
                 final var defaultSupport = new DefaultProfileValidationSupport(fhirContext);
         
@@ -425,6 +427,7 @@ public class OrchestrationEngine {
             Span span = tracer.spanBuilder("OrchestrationEngine.validate").startSpan();
             try {
                 try {
+                  
                     LOG.info("VALIDATOR -BEGIN initiated At : {} for interactionid:{}", initiatedAt, interactionId);
                     String profileUrl = extractProfileUrl(payload);
                     LOG.info("Extracted Profile URL: {} for interactionId :{} ", profileUrl,interactionId);
@@ -440,11 +443,22 @@ public class OrchestrationEngine {
                     this.fhirProfileUrl = bundleValidator.getFhirProfileUrl();
                     
                     LOG.debug("BUNDLE PAYLOAD parse -BEGIN for interactionId:{}", interactionId);
+                    var lenientErrorHandler = new CustomLenientErrorHandler();
+                    //lenientErrorHandler.setErrorOnInvalidValue(false);
+                    fhirContext.setParserErrorHandler(lenientErrorHandler);
+                    
                     final var bundle = fhirContext.newJsonParser().parseResource(Bundle.class, payload);
                     LOG.debug("BUNDLE PAYLOAD parse -END for interactionid:{} ",interactionId);
 
                    
                     final var hapiVR = bundleValidator.getFhirValidator().validateWithResult(bundle);
+                    if (null != hapiVR && CollectionUtils.isNotEmpty(lenientErrorHandler.getPreValidationMessages())) {
+                        LOG.warn("{} FATAL errors were found during parsing.",
+                                lenientErrorHandler.getPreValidationMessages().size());
+                        lenientErrorHandler.getPreValidationMessages().stream().forEach(mes -> {
+                            LOG.warn("Parse Error {} found and added to validation result.", mes.getMessage());
+                        });
+                    }
                     final var completedAt = Instant.now();
                     LOG.info("VALIDATOR -END completed at :{} ms for interactionId:{} with ig version :{}",
                             Duration.between(initiatedAt, completedAt).toMillis(), interactionId,igVersion);
@@ -453,7 +467,22 @@ public class OrchestrationEngine {
                         @JsonSerialize(using = JsonTextSerializer.class)
                         public String getOperationOutcome() {
                             final var jp = FhirContext.forR4Cached().newJsonParser();
-                            return jp.encodeResourceToString(hapiVR.toOperationOutcome());
+                                OperationOutcome outcome = (OperationOutcome) hapiVR.toOperationOutcome();
+                            if (lenientErrorHandler != null && !lenientErrorHandler.getPreValidationMessages().isEmpty()) {
+                                for (SingleValidationMessage message : lenientErrorHandler.getPreValidationMessages()) {
+                                    OperationOutcome.OperationOutcomeIssueComponent issue = new OperationOutcome.OperationOutcomeIssueComponent();
+                                    issue.setSeverity(OperationOutcome.IssueSeverity.ERROR); 
+                                    issue.setCode(OperationOutcome.IssueType.INVALID);
+                                    issue.setDiagnostics(message.getMessage());
+
+                                    if (message.getLocationString() != null) {
+                                        issue.addLocation(message.getLocationString());
+                                    }
+
+                                    outcome.addIssue(issue);
+                                }
+                            }
+                            return jp.encodeResourceToString(outcome);
                         }
 
                         @Override
