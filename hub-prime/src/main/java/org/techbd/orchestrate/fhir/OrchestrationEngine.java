@@ -55,6 +55,7 @@ import com.nimbusds.oauth2.sdk.util.CollectionUtils;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
 import ca.uhn.fhir.validation.FhirValidator;
+import ca.uhn.fhir.validation.SingleValidationMessage;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import jakarta.validation.constraints.NotNull;
@@ -437,7 +438,8 @@ public class OrchestrationEngine {
                     }
                     this.igVersion =bundleValidator.getIgVersion();
                     this.fhirProfileUrl = bundleValidator.getFhirProfileUrl();
-                    
+                    var lenientErrorHandler = new CustomLenientErrorHandler();
+                    fhirContext.setParserErrorHandler(lenientErrorHandler);
                     LOG.debug("BUNDLE PAYLOAD parse -BEGIN for interactionId:{}", interactionId);
                     final var bundle = fhirContext.newJsonParser().parseResource(Bundle.class, payload);
                     LOG.debug("BUNDLE PAYLOAD parse -END for interactionid:{} ",interactionId);
@@ -452,7 +454,22 @@ public class OrchestrationEngine {
                         @JsonSerialize(using = JsonTextSerializer.class)
                         public String getOperationOutcome() {
                             final var jp = FhirContext.forR4Cached().newJsonParser();
-                            return jp.encodeResourceToString(hapiVR.toOperationOutcome());
+                                OperationOutcome outcome = (OperationOutcome) hapiVR.toOperationOutcome();
+                            if (lenientErrorHandler != null && !lenientErrorHandler.getPreValidationMessages().isEmpty()) {
+                                for (SingleValidationMessage message : lenientErrorHandler.getPreValidationMessages()) {
+                                    OperationOutcome.OperationOutcomeIssueComponent issue = new OperationOutcome.OperationOutcomeIssueComponent();
+                                    issue.setSeverity(OperationOutcome.IssueSeverity.ERROR); 
+                                    issue.setCode(OperationOutcome.IssueType.INVALID);
+                                    issue.setDiagnostics(message.getMessage());
+
+                                    if (message.getLocationString() != null) {
+                                        issue.addLocation(message.getLocationString());
+                                    }
+
+                                    outcome.addIssue(issue);
+                                }
+                            }
+                            return jp.encodeResourceToString(outcome);
                         }
 
                         @Override
