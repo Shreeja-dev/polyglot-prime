@@ -450,7 +450,7 @@ public class OrchestrationEngine {
                     LOG.info("VALIDATOR -END completed at :{} ms for interactionId:{} with ig version :{}",
                             Duration.between(initiatedAt, completedAt).toMillis(), interactionId,igVersion);
                     return new OrchestrationEngine.ValidationResult() {
-                        @Override
+                       @Override
                         @JsonSerialize(using = JsonTextSerializer.class)
                         public String getOperationOutcome() {
                             final var jp = FhirContext.forR4Cached().newJsonParser();
@@ -471,7 +471,7 @@ public class OrchestrationEngine {
                             }
                             return jp.encodeResourceToString(outcome);
                         }
-
+                        
                         @Override
                         public boolean isValid() {
                             return hapiVR.isSuccessful();
