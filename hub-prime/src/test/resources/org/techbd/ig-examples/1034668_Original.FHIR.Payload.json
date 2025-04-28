@@ -1,0 +1,1312 @@
+{
+  "id": "15EC432A-C506-41A1-B0CE-8829FD2AD2FD",
+  "meta": {
+    "profile": [
+      "http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile"
+    ],
+    "lastUpdated": "2025-04-01T16:20:05-04:00"
+  },
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "https://hixny.org/Organization/4965",
+      "request": {
+        "url": "Organization/4965",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "4965",
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shin-ny-organization"
+          ],
+          "lastUpdated": "2025-04-01T16:20:05-04:00"
+        },
+        "name": "4965",
+        "active": true,
+        "identifier": [
+          {
+            "value": "4965"
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "code": "TAX",
+                  "system": "http://www.irs.gov/"
+                }
+              ]
+            },
+            "value": "132828349",
+            "system": "http://www.irs.gov/"
+          }
+        ],
+        "resourceType": "Organization"
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Patient/49651034668",
+      "request": {
+        "url": "Patient/49651034668",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "49651034668",
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-patient"
+          ],
+          "lastUpdated": "2025-04-01T16:20:05-04:00"
+        },
+        "name": [
+          {
+            "use": "official",
+            "text": "INFORMATICS XTEST",
+            "given": [
+              "INFORMATICS"
+            ],
+            "family": "XTEST"
+          }
+        ],
+        "gender": "male",
+        "address": [
+          {
+            "city": "PEEKSKILL",
+            "line": [
+              "1200 BROWN ST"
+            ],
+            "state": "NY",
+            "postalCode": "10566"
+          }
+        ],
+        "telecom": [
+          {
+            "use": "home",
+            "value": "9147348668",
+            "system": "phone"
+          }
+        ],
+        "birthDate": "2008-06-16",
+        "extension": [
+          {
+            "url": "http://intersystems.com/fhir/extn/sda3/lib/patient-entered-on",
+            "valueDateTime": "2025-03-28T15:08:29-04:00"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2186-5",
+                  "system": "urn:oid:2.16.840.1.113883.6.238",
+                  "display": "Not Hispanic or Latino"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Not Hispanic or Latino"
+              }
+            ]
+          },
+          {
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2106-3",
+                  "system": "urn:oid:2.16.840.1.113883.6.238",
+                  "display": "White"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "White"
+              }
+            ]
+          }
+        ],
+        "identifier": [
+          {
+            "type": {
+              "text": "MRN",
+              "coding": [
+                {
+                  "code": "MR",
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203"
+                }
+              ]
+            },
+            "value": "1034668",
+            "system": "https://hixny.org/Facility/4965",
+            "assigner": {
+              "reference": "Organization/4965"
+            }
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "code": "MA",
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "display": "Patient Medicaid number"
+                }
+              ]
+            },
+            "value": "OV83455P",
+            "system": "http://www.medicaid.gov/"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Location/4965",
+      "request": {
+        "url": "Location/4965",
+        "method": "PUT",
+        "fullUrl": "https://hixny.org/Location/4965"
+      },
+      "resource": {
+        "id": "4965",
+        "meta": {
+          "lastUpdated": "2025-04-02T00:20:04Z"
+        },
+        "name": "downtown location",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "CSC",
+                "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode"
+              }
+            ]
+          }
+        ],
+        "status": "active",
+        "physicalType": {
+          "coding": [
+            {
+              "code": "bu",
+              "system": "http://terminology.hl7.org/CodeSystem/location-physical-type"
+            }
+          ]
+        },
+        "resourceType": "Location",
+        "managingOrganization": {
+          "reference": "Organization/4965"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Consent/2c79f6fa-27e9-4def-bb4f-5b579ad622c8",
+      "request": {
+        "url": "Consent/2c79f6fa-27e9-4def-bb4f-5b579ad622c8",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "2c79f6fa-27e9-4def-bb4f-5b579ad622c8",
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-Consent"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "scope": {
+          "coding": [
+            {
+              "code": "patient-privacy",
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "display": "Privacy Consent"
+            }
+          ]
+        },
+        "status": "active",
+        "patient": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "59284-0",
+                "system": "http://loinc.org",
+                "display": "Patient Consent"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "IDSCL",
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                "display": "information disclosure"
+              }
+            ]
+          }
+        ],
+        "dateTime": "2025-02-27T13:00:14-05:00",
+        "datetime": {},
+        "provision": {
+          "type": "permit"
+        },
+        "policyRule": {
+          "coding": [
+            {
+              "code": "hipaa-auth",
+              "system": "http://terminology.hl7.org/CodeSystem/consentpolicycodes",
+              "display": "HIPAA Authorization"
+            }
+          ]
+        },
+        "organization": [
+          {
+            "reference": "Organization/4965"
+          }
+        ],
+        "resourceType": "Consent",
+        "sourceReference": {
+          "reference": "QuestionnaireResponse/ConsentQuestionnaireResponse"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/6a9248db-4d58-42d2-b0c3-a594fa67041f",
+      "request": {
+        "url": "Observation/6a9248db-4d58-42d2-b0c3-a594fa67041f",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "6a9248db-4d58-42d2-b0c3-a594fa67041f",
+        "code": {
+          "text": "Within the past 12 months we worried whether our food would run out before we got money to buy more [U.S. FSS]",
+          "coding": [
+            {
+              "code": "88122-7",
+              "system": "http://loinc.org",
+              "display": "Within the past 12 months we worried whether our food would run out before we got money to buy more [U.S. FSS]"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "food-insecurity",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Food Insecurity"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "Never true",
+          "coding": [
+            {
+              "code": "LA28398-8",
+              "system": "http://loinc.org",
+              "display": "Never true"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/04bce3db-c1f2-4338-9856-fdd611eafe99",
+      "request": {
+        "url": "Observation/04bce3db-c1f2-4338-9856-fdd611eafe99",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "04bce3db-c1f2-4338-9856-fdd611eafe99",
+        "code": {
+          "text": "Within the past 12 months the food we bought just didn't last and we didn't have money to get more [U.S. FSS]",
+          "coding": [
+            {
+              "code": "88123-5",
+              "system": "http://loinc.org",
+              "display": "Within the past 12 months the food we bought just didn't last and we didn't have money to get more [U.S. FSS]"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "food-insecurity",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Food Insecurity"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "Never true",
+          "coding": [
+            {
+              "code": "LA28398-8",
+              "system": "http://loinc.org",
+              "display": "Never true"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/7d4bbaf6-5a0c-4335-a4a6-ad6e446139da",
+      "request": {
+        "url": "Observation/7d4bbaf6-5a0c-4335-a4a6-ad6e446139da",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "7d4bbaf6-5a0c-4335-a4a6-ad6e446139da",
+        "code": {
+          "text": "Wants help finding or keeping work or a job",
+          "coding": [
+            {
+              "code": "96780-2",
+              "system": "http://loinc.org",
+              "display": "Wants help finding or keeping work or a job"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "employment-status",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Employment Status"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "I do not need or want help",
+          "coding": [
+            {
+              "code": "LA31983-2",
+              "system": "http://loinc.org",
+              "display": "I do not need or want help"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/43b39c38-9e6b-4fbf-9942-d00575723dc3",
+      "request": {
+        "url": "Observation/43b39c38-9e6b-4fbf-9942-d00575723dc3",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "43b39c38-9e6b-4fbf-9942-d00575723dc3",
+        "code": {
+          "text": "Housing status",
+          "coding": [
+            {
+              "code": "71802-3",
+              "system": "http://loinc.org",
+              "display": "Housing status"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "housing-instability",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Housing Instability"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "I have a steady place to live",
+          "coding": [
+            {
+              "code": "LA31993-1",
+              "system": "http://loinc.org",
+              "display": "I have a steady place to live"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/b8bedfe3-535c-4ba2-839a-047816c19df0",
+      "request": {
+        "url": "Observation/b8bedfe3-535c-4ba2-839a-047816c19df0",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "b8bedfe3-535c-4ba2-839a-047816c19df0",
+        "code": {
+          "text": "Has lack of transportation kept you from medical appointments meetings work or from getting things needed for daily living",
+          "coding": [
+            {
+              "code": "93030-5",
+              "system": "http://loinc.org",
+              "display": "Has lack of transportation kept you from medical appointments meetings work or from getting things needed for daily living"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "transportation-insecurity",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Transportation Insecurity"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "No",
+          "coding": [
+            {
+              "code": "LA32-8",
+              "system": "http://loinc.org",
+              "display": "No"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/6752bf5e-f99b-4fb9-a5fd-5da1512caa74",
+      "request": {
+        "url": "Observation/6752bf5e-f99b-4fb9-a5fd-5da1512caa74",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "6752bf5e-f99b-4fb9-a5fd-5da1512caa74",
+        "code": {
+          "text": "Has the electric gas oil or water company threatened to shut off services in your home in past 12 months",
+          "coding": [
+            {
+              "code": "96779-4",
+              "system": "http://loinc.org",
+              "display": "Has the electric gas oil or water company threatened to shut off services in your home in past 12 months"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "utility-insecurity",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Utility Insecurity"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "No",
+          "coding": [
+            {
+              "code": "LA32-8",
+              "system": "http://loinc.org",
+              "display": "No"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/cb8216c7-92ef-4194-93f1-425f5963e3e8",
+      "request": {
+        "url": "Observation/cb8216c7-92ef-4194-93f1-425f5963e3e8",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "cb8216c7-92ef-4194-93f1-425f5963e3e8",
+        "code": {
+          "text": "Wants help with school or training",
+          "coding": [
+            {
+              "code": "96782-8",
+              "system": "http://loinc.org",
+              "display": "Wants help with school or training"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "educational-attainment",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Educational Attainment"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "No",
+          "coding": [
+            {
+              "code": "LA32-8",
+              "system": "http://loinc.org",
+              "display": "No"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/8315331b-8ed2-445b-9c20-23223b2aba1e",
+      "request": {
+        "url": "Observation/8315331b-8ed2-445b-9c20-23223b2aba1e",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "8315331b-8ed2-445b-9c20-23223b2aba1e",
+        "code": {
+          "text": "Scream or curse at you [HITS]",
+          "coding": [
+            {
+              "code": "95615-1",
+              "system": "http://loinc.org",
+              "display": "Scream or curse at you [HITS]"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "sdoh-category-unspecified",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "SDOH Category Unspecified"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "Never (1)",
+          "coding": [
+            {
+              "code": "LA6270-8",
+              "system": "http://loinc.org",
+              "display": "Never (1)"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/8ceae80b-0bf0-48a0-ad05-14aa8867163a",
+      "request": {
+        "url": "Observation/8ceae80b-0bf0-48a0-ad05-14aa8867163a",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "8ceae80b-0bf0-48a0-ad05-14aa8867163a",
+        "code": {
+          "text": "Threaten you with physical harm [HITS]",
+          "coding": [
+            {
+              "code": "95616-9",
+              "system": "http://loinc.org",
+              "display": "Threaten you with physical harm [HITS]"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "sdoh-category-unspecified",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "SDOH Category Unspecified"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "Never (1)",
+          "coding": [
+            {
+              "code": "LA6270-8",
+              "system": "http://loinc.org",
+              "display": "Never (1)"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/fffe69d6-3cc3-49b5-a760-550ce105d431",
+      "request": {
+        "url": "Observation/fffe69d6-3cc3-49b5-a760-550ce105d431",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "fffe69d6-3cc3-49b5-a760-550ce105d431",
+        "code": {
+          "text": "Insult you or talk down to you [HITS]",
+          "coding": [
+            {
+              "code": "95617-7",
+              "system": "http://loinc.org",
+              "display": "Insult you or talk down to you [HITS]"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "sdoh-category-unspecified",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "SDOH Category Unspecified"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "Never (1)",
+          "coding": [
+            {
+              "code": "LA6270-8",
+              "system": "http://loinc.org",
+              "display": "Never (1)"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/74afcaf5-bc7a-4bdd-9fc4-57ba1e61506e",
+      "request": {
+        "url": "Observation/74afcaf5-bc7a-4bdd-9fc4-57ba1e61506e",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "74afcaf5-bc7a-4bdd-9fc4-57ba1e61506e",
+        "code": {
+          "text": "Physically hurt you [HITS]",
+          "coding": [
+            {
+              "code": "95618-5",
+              "system": "http://loinc.org",
+              "display": "Physically hurt you [HITS]"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "sdoh-category-unspecified",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "SDOH Category Unspecified"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "Never (1)",
+          "coding": [
+            {
+              "code": "LA6270-8",
+              "system": "http://loinc.org",
+              "display": "Never (1)"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/1545aa95-0888-48cf-8ff8-b2e8b1000e84",
+      "request": {
+        "url": "Observation/1545aa95-0888-48cf-8ff8-b2e8b1000e84",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "1545aa95-0888-48cf-8ff8-b2e8b1000e84",
+        "code": {
+          "text": "Problems with place where you live",
+          "coding": [
+            {
+              "code": "96778-6",
+              "system": "http://loinc.org",
+              "display": "Problems with place where you live"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Social History"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "display": "Survey"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "inadequate-housing",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Inadequate Housing"
+              }
+            ]
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00",
+        "valueCodeableConcept": {
+          "text": "None of the above",
+          "coding": [
+            {
+              "code": "LA9-3",
+              "system": "http://loinc.org",
+              "display": "None of the above"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Encounter/1da0d25f-8735-4bd7-b7b7-f1583c3ca6e5",
+      "request": {
+        "url": "Encounter/1da0d25f-8735-4bd7-b7b7-f1583c3ca6e5",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "1da0d25f-8735-4bd7-b7b7-f1583c3ca6e5",
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-encounter"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "type": [
+          {
+            "text": "Direct questioning (procedure)",
+            "coding": [
+              {
+                "code": "405672008",
+                "system": "http://snomed.info/sct",
+                "display": "Direct questioning (procedure)"
+              }
+            ]
+          }
+        ],
+        "class": {
+          "code": "FLD",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "display": "field"
+        },
+        "period": {
+          "end": "2025-02-27T13:00:14-05:00",
+          "start": "2025-02-27T13:00:14-05:00"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "location": [
+          {
+            "location": {
+              "reference": "Location/4965"
+            }
+          }
+        ],
+        "resourceType": "Encounter"
+      }
+    },
+    {
+      "fullUrl": "https://hixny.org/Observation/45562175-6a1b-42e5-afdc-b547550a0c76",
+      "request": {
+        "url": "Observation/45562175-6a1b-42e5-afdc-b547550a0c76",
+        "method": "PUT"
+      },
+      "resource": {
+        "id": "45562175-6a1b-42e5-afdc-b547550a0c76",
+        "code": {
+          "coding": [
+            {
+              "code": "96777-8",
+              "system": "http://loinc.org",
+              "display": "Accountable health communities (AHC) health-related social needs screening (HRSN) tool"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://test.shinny.org/us/ny/hrsn/StructureDefinition/shinny-observation-screening-response"
+          ],
+          "lastUpdated": "2025-04-01T16:20:04-04:00"
+        },
+        "issued": "2025-02-27T13:00:14-05:00",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/49651034668"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "housing-instability",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Housing Instability"
+              },
+              {
+                "code": "inadequate-housing",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Inadequate Housing"
+              },
+              {
+                "code": "food-insecurity",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Food Insecurity"
+              },
+              {
+                "code": "transportation-insecurity",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Transportation Insecurity"
+              },
+              {
+                "code": "sdoh-category-unspecified",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "SDOH Category Unspecified"
+              },
+              {
+                "code": "utility-insecurity",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Utility Insecurity"
+              },
+              {
+                "code": "employment-status",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Employment Status"
+              },
+              {
+                "code": "educational-attainment",
+                "system": "http://hl7.org/fhir/us/sdoh-clinicalcare/CodeSystem/SDOHCC-CodeSystemTemporaryCodes",
+                "display": "Educational Attainment"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "code": "survey",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "encounter": {
+          "reference": "Encounter/1da0d25f-8735-4bd7-b7b7-f1583c3ca6e5"
+        },
+        "hasMember": [
+          {
+            "reference": "Observation/6a9248db-4d58-42d2-b0c3-a594fa67041f"
+          },
+          {
+            "reference": "Observation/04bce3db-c1f2-4338-9856-fdd611eafe99"
+          },
+          {
+            "reference": "Observation/7d4bbaf6-5a0c-4335-a4a6-ad6e446139da"
+          },
+          {
+            "reference": "Observation/43b39c38-9e6b-4fbf-9942-d00575723dc3"
+          },
+          {
+            "reference": "Observation/b8bedfe3-535c-4ba2-839a-047816c19df0"
+          },
+          {
+            "reference": "Observation/6752bf5e-f99b-4fb9-a5fd-5da1512caa74"
+          },
+          {
+            "reference": "Observation/cb8216c7-92ef-4194-93f1-425f5963e3e8"
+          },
+          {
+            "reference": "Observation/8315331b-8ed2-445b-9c20-23223b2aba1e"
+          },
+          {
+            "reference": "Observation/8ceae80b-0bf0-48a0-ad05-14aa8867163a"
+          },
+          {
+            "reference": "Observation/fffe69d6-3cc3-49b5-a760-550ce105d431"
+          },
+          {
+            "reference": "Observation/74afcaf5-bc7a-4bdd-9fc4-57ba1e61506e"
+          },
+          {
+            "reference": "Observation/1545aa95-0888-48cf-8ff8-b2e8b1000e84"
+          }
+        ],
+        "resourceType": "Observation",
+        "effectiveDateTime": "2025-02-27T13:00:14-05:00"
+      }
+    }
+  ],
+  "resourceType": "Bundle"
+}

@@ -145,10 +145,15 @@
 			<artifactId>hapi-fhir-base</artifactId>
 			<version>7.6.1</version>
 		</dependency>
-		<dependency>
+			<dependency>
 			<groupId>ca.uhn.hapi.fhir</groupId>
 			<artifactId>hapi-fhir-structures-r4</artifactId>
 			<version>7.6.1</version>
+		</dependency>
+		<dependency>
+			<groupId>ca.uhn.hapi.fhir</groupId>
+			<artifactId>org.hl7.fhir.validation</artifactId>
+			<version>6.5.19</version>
 		</dependency>
 		<dependency>
 			<groupId>ca.uhn.hapi.fhir</groupId>
