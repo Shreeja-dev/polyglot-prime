@@ -39,4 +39,6 @@ csv:
     packagePath: datapackage-nyher-fhir-ig-equivalent.json
     inboundPath: /app/techbyDesign/flatFile/inbound
     outputPath: /app/techbyDesign/flatFile/outbound
-    ingessHomePath: /app/techbyDesign/flatFile/ingress
+    ingessHomePath: /app/techbyDesign/flatFi
+server:
+  port: 9990

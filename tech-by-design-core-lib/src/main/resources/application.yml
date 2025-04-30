@@ -41,11 +41,12 @@ csv:
     outputPath: /app/techbyDesign/flatFile/outbound
     ingessHomePath: /app/techbyDesign/flatFile/ingress
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+  # Comment out or remove the datasource configuration
   datasource:
-    url: jdbc:mysql://localhost:3306/mydb
-    username: myuser
-    password: mypassword
-    driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       driverClassName: org.postgresql.Driver
       maximumPoolSize: 500 # Set to 500 as per your request
@@ -53,6 +54,15 @@ spring:
       idleTimeout: 300000 # 30 seconds to wait for a connection from the pool
       connectionTimeout: 30000  # 5 minutes - idle connections are removed after this time
       maxLifetime: 1800000  # 30 minutes - connections are refreshed after this time    
+  # security:
+  #   user:
+  #     name: admin
+  #     password: admin123
+  #   basic:
+  #     enabled: true
 logging:
   level:
     com.zaxxer.hikari: DEBUG
+
+server:
+  port: 9990
