@@ -107,6 +107,9 @@ org:
                   us-core: ig-packages/fhir-v4/us-core/stu-7.0.0
                   sdoh: ig-packages/fhir-v4/sdoh-clinicalcare/stu-2.2.0
                   uv-sdc: ig-packages/fhir-v4/uv-sdc/stu-3.0.0
+                  hl7-r4-core: ig-packages/fhir-v4/hl7.fhir.r4.core/4.0.1
+                  hl7-core: ig-packages/fhir-v4/hl7.fhir.core/4.1.0
+                  hl7-r4b-core: ig-packages/fhir-v4/hl7.r4b.core/4.1.0
             baseFHIRURL: http://test.shinny.org/us/ny/hrsn #This is the default FHIR url used in generating FHIR from CSV
             structureDefinitionsUrls:
               bundle: /StructureDefinition/SHINNYBundleProfile
@@ -172,11 +175,11 @@ org:
           username: ${${SPRING_PROFILES_ACTIVE}_TECHBD_UDI_DS_PRIME_JDBC_USERNAME:}
           password: ${${SPRING_PROFILES_ACTIVE}_TECHBD_UDI_DS_PRIME_JDBC_PASSWORD:}
           driverClassName: org.postgresql.Driver
-          maximumPoolSize: 500 # Set to 500 as per your request
+          maximumPoolSize: 50 # Set to 500 as per your request
           minimumIdle: 100  # Minimum idle connections in the pool
-          idleTimeout: 300000 # 30 seconds to wait for a connection from the pool
+          idleTimeout: 100000 # 30 seconds to wait for a connection from the pool
           connectionTimeout: 30000  # 5 minutes - idle connections are removed after this time
-          maxLifetime: 1800000  # 30 minutes - connections are refreshed after this time
+          maxLifetime: 300000  # 30 minutes - connections are refreshed after this time
 management:
   tracing:
     sampling:

@@ -49,4 +49,6 @@ management:
     java:
       enabled: true
     os:
-      enabled: true       
+      enabled: true     
+server:
+  port: 9999        
