@@ -132,102 +132,65 @@ public class FHIRService {
         try {
             final var start = Instant.now();
             var interactionId = requestParameters.get(Constants.INTERACTION_ID);
-            if (null == interactionId) {
-                interactionId = UUID.randomUUID().toString();
-            }
-            LOG.info("Bundle processing start at {} for interaction id {}.", interactionId);
-
             var dataLakeApiContentType = headerParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE);
-            LOG.info("Retrieved dataLakeApiContentType: {}", dataLakeApiContentType); // TODO-to be removed
             var tenantId = headerParameters.get(Constants.TENANT_ID);
-            LOG.info("Retrieved tenantId: {}", tenantId); // TODO-to be removed
             if (tenantId == null) {
-                tenantId = "test";
+                throw new IllegalArgumentException("Tenant ID is required.");
             }
-            var source = requestParameters.get(Constants.SOURCE_TYPE);
-            LOG.info("Retrieved source: {}", source); // TODO-to be removed
-            var origin = requestParameters.get(Constants.ORIGIN);
-            LOG.info("Retrieved origin: {}", origin); // TODO-to be removed
-            var deletesessioncookie = requestParameters.get(Constants.DELETE_USER_SESSION_COOKIE);
-            LOG.info("Retrieved deletesessioncookie: {}", deletesessioncookie); // TODO-to be removed
+            LOG.info("FHIRService:: processBundle Bundle processing start at {} for interaction id {} -BEGIN.", interactionId);
+        //     var source = requestParameters.get(Constants.SOURCE_TYPE); //TODO - check and add
+        //     var origin = requestParameters.get(Constants.ORIGIN); //TODO - check and add
+        //     var deletesessioncookie = requestParameters.get(Constants.DELETE_USER_SESSION_COOKIE); //TODO - check and add
             var customDataLakeApi = headerParameters.get(Constants.CUSTOM_DATA_LAKE_API);
-            LOG.info("Retrieved customDataLakeApi: {}", customDataLakeApi); // TODO-to be removed
             final var healthCheck = headerParameters.get(Constants.HEALTH_CHECK);
-            LOG.info("Retrieved healthCheck: {}", healthCheck); // TODO-to be removed
-            final var isSync = requestParameters.get(Constants.IMMEDIATE);
-            LOG.info("Retrieved isSync: {}", isSync); // TODO-to be removed
+        //     final var isSync = requestParameters.get(Constants.IMMEDIATE); //TODO - check and add 
             var provenance = headerParameters.get(Constants.PROVENANCE);
-            LOG.info("Retrieved provenance: {}", provenance); // TODO-to be removed
             final var mtlsStrategy = requestParameters.get(Constants.MTLS_STRATEGY);
-            LOG.info("Retrieved mtlsStrategy: {}", mtlsStrategy); // TODO-to be removed
-
             final var groupInteractionId = requestParameters.get(Constants.GROUP_INTERACTION_ID);
-            LOG.info("Retrieved groupInteractionId: {}", groupInteractionId); // TODO-to be removed
-
             final var masterInteractionId = requestParameters.get(Constants.MASTER_INTERACTION_ID);
-            LOG.info("Retrieved masterInteractionId: {}", masterInteractionId); // TODO-to be removed
-
             final var sourceType = requestParameters.get(Constants.SOURCE_TYPE);
-            LOG.info("Retrieved sourceType: {}", sourceType); // TODO-to be removed
-
             final var requestUriToBeOverriden = headerParameters.get(Constants.OVERRIDE_REQUEST_URI);
-            LOG.info("Retrieved requestUriToBeOverriden: {}", requestUriToBeOverriden); // TODO-to be removed
-
             final var coRrelationId = requestParameters.get(Constants.CORRELATION_ID);
-            LOG.info("Retrieved coRrelationId: {}", coRrelationId); // TODO-to be removed
-
             final var requestUri = headerParameters.get(Constants.REQUEST_URI);
-            LOG.info("Retrieved requestUri: {}", requestUri); // TODO-to be removed
-
             if (null == interactionId) {
                 if (StringUtils.isNotEmpty(headerParameters.get(Constants.CORRELATION_ID))) {
                     interactionId = headerParameters.get(Constants.CORRELATION_ID);
-                    LOG.info("Updated interactionId from correlationId: {}", interactionId); // TODO-to be removed
+                    LOG.info("FHIRService:: processBundle Updated interactionId {} from correlationId ", interactionId);
                 }
             }
-
+            if (null == interactionId) {
+                throw new IllegalArgumentException("Interaction ID is required.");
+            }
             final var dslContext = MirthJooqConfig.dsl();
-            LOG.info("Initialized dslContext"); // TODO-to be removed
             final var jooqCfg = dslContext.configuration();
-            LOG.info("Configured jooqCfg"); // TODO-to be removed
-
             Map<String, Object> payloadWithDisposition = null;
             try {
                 validateJson(payload, interactionId);
-                LOG.info("JSON validated"); // TODO-to be removed
                 validateBundleProfileUrl(payload, interactionId);
-                LOG.info("Bundle profile URL validated"); // TODO-to be removed
-
                 if (null == requestParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE)) {
                     dataLakeApiContentType = MediaType.APPLICATION_JSON_VALUE;
-                    LOG.info("Defaulting dataLakeApiContentType to JSON"); // TODO-to be removed
                 }
 
                 Map<String, Object> immediateResult = validate(requestParameters, payload, interactionId, provenance,
                         sourceType);
-                LOG.info("Validation result: {}", immediateResult); // TODO-to be removed
-
                 final var result = Map.of("OperationOutcome", immediateResult);
-                LOG.info("Final validation result wrapped in OperationOutcome"); // TODO-to be removed
 
                 if (StringUtils.isNotEmpty(requestUri)
                         && (requestUri.equals("/Bundle/$validate") || requestUri.equals("/Bundle/$validate/"))) {
-                    LOG.info("Returning validation result for /Bundle/$validate"); // TODO-to be removed
                     return result;
                 }
 
                 if ("true".equals(healthCheck)) {
-                    LOG.info("Health check enabled, skipping scoring engine submission"); // TODO-to be removed
+                    LOG.info("FHIRService:: processBundle Health check enabled, skipping scoring engine submission for interactionId :{}",interactionId); // TODO-to be removed
                     return result;
                 }
 
                 payloadWithDisposition = registerBundleInteraction(jooqCfg, headerParameters, requestParameters,
                         headerParameters, payload, result, interactionId, groupInteractionId, masterInteractionId,
                         sourceType, requestUriToBeOverriden, coRrelationId);
-                LOG.info("Payload with disposition registered: {}", payloadWithDisposition); // TODO-to be removed
 
                 if (isActionDiscard(payloadWithDisposition)) {
-                    LOG.info("Action discard detected, returning payloadWithDisposition"); // TODO-to be removed
+                    LOG.info("FHIRService:: processBundle Action discard detected, returning payloadWithDisposition for interactionId :{}",interactionId); // TODO-to be removed
                     return payloadWithDisposition;
                 }
                 if (null == payloadWithDisposition) {
@@ -242,12 +205,12 @@ public class FHIRService {
                             sourceType, requestUriToBeOverriden, coRrelationId);
                     Instant end = Instant.now();
                     Duration timeElapsed = Duration.between(start, end);
-                    LOG.info("Bundle processing end for interaction id: {} Time Taken : {}  milliseconds",
+                    LOG.info("FHIRService:: processBundle Bundle processing END for interaction id: {} Time Taken : {}  milliseconds",
                             interactionId, timeElapsed.toMillis());
                     return result;
                 } else {
                     LOG.info(
-                            "FHIRService:: Received Disposition payload.Send Disposition payload to scoring engine for interaction id {}.",
+                            "FHIRService:: processBundle Received Disposition payload.Send Disposition payload to scoring engine for interaction id {}.",
                             interactionId);
                     sendToScoringEngine(jooqCfg, requestParameters, customDataLakeApi, dataLakeApiContentType,
                             tenantId, payload,
@@ -256,7 +219,7 @@ public class FHIRService {
                             masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
                     Instant end = Instant.now();
                     Duration timeElapsed = Duration.between(start, end);
-                    LOG.info("Bundle processing end for interaction id: {} Time Taken : {}  milliseconds",
+                    LOG.info("FHIRService:: processBundle Bundle processing end for interaction id: {} Time Taken : {}  milliseconds",
                             interactionId, timeElapsed.toMillis());
                     return payloadWithDisposition;
                 }
@@ -264,17 +227,16 @@ public class FHIRService {
                 payloadWithDisposition = registerBundleInteraction(jooqCfg, headerParameters, requestParameters,
                         headerParameters, payload, buildOperationOutcome(ex, interactionId), interactionId,
                         groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
-                LOG.info("Exception occurred: {}", ex.getMessage()); // TODO-to be removed
+                LOG.error("ERROR:: FHIRService:: processBundle Exception occurred for interactionId : {}", interactionId,ex.getMessage());
             }
 
             Instant end = Instant.now();
             Duration timeElapsed = Duration.between(start, end);
-            LOG.info("Bundle processing end for interaction id: {} Time Taken: {} milliseconds", interactionId,
-                    timeElapsed.toMillis()); // TODO-to be removed
+            LOG.info("FHIRService:: processBundle Bundle processing END for interaction id: {} Time Taken: {} milliseconds", interactionId,
+                    timeElapsed.toMillis());
             return payloadWithDisposition;
         } finally {
             span.end();
-            LOG.info("Span ended"); // TODO-to be removed
         }
     }
 
@@ -391,6 +353,8 @@ public class FHIRService {
             String groupInteractionId, String masterInteractionId, String sourceType,
             String requestUriToBeOverriden, String coRrelationId)
             throws IOException {
+        LOG.info("FHIRService :: registerBundleInteraction REGISTER State None, Accept, Disposition: BEGIN for interaction id: {} ",
+				interactionId);        
         Span span = tracer.spanBuilder("FHIRMapService.registerBundleInteraction").startSpan();
         try {
             final Interactions interactions = new Interactions();
@@ -440,18 +404,18 @@ public class FHIRService {
                 int i = rihr.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "FHIRMapService  - Time taken : {} milliseconds for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
+                        "FHIRService:: processBundle  - Time taken : {} milliseconds for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
                         Duration.between(start, end).toMillis(),
                         rre.interactionId().toString());
                 JsonNode payloadWithDisposition = rihr.getReturnValue();
-                LOG.info("REGISTER State None, Accept, Disposition: END for interaction id: {} ",
+                LOG.info("FHIRService :: registerBundleInteraction  REGISTER State None, Accept, Disposition: END for interaction id: {} ",
                         rre.interactionId().toString());
                 return Configuration.objectMapper.convertValue(payloadWithDisposition,
                         new TypeReference<Map<String, Object>>() {
                 });
             } catch (Exception e) {
                 LOG.error(
-                        "ERROR:: REGISTER State None, Accept, Disposition: for interaction id: {} tenant id: {}: CALL "
+                        "ERROR:: FHIRService :: registerBundleInteraction  REGISTER State None, Accept, Disposition: for interaction id: {} tenant id: {}: CALL "
                         + rihr.getName() + " error",
                         rre.interactionId().toString(),
                         rre.tenant(), e);
@@ -466,8 +430,6 @@ public class FHIRService {
     private void prepareRequest(RegisterInteractionHttpRequest rihr, RequestResponseEncountered rre,
             String provenance, Map<String, String> requestParameters, String interactionId, String groupInteractionId,
             String masterInteractionId, String sourceType, String requestUriToBeOverriden) {
-        LOG.info("REGISTER State None, Accept, Disposition: BEGIN for interaction id: {} tenant id: {}",
-                rre.interactionId().toString(), rre.tenant());
         rihr.setInteractionId(interactionId != null ? interactionId : rre.interactionId().toString());
         rihr.setGroupHubInteractionId(groupInteractionId);
         rihr.setSourceHubInteractionId(masterInteractionId);
@@ -523,7 +485,7 @@ public class FHIRService {
         Span span = tracer.spanBuilder("FhirService.validate").startSpan();
         try {
             final var start = Instant.now();
-            LOG.info("FHIRService  - Validate -BEGIN for interactionId: {} ", interactionId);
+            LOG.info("FHIRService::validate  -BEGIN for interactionId: {} ", interactionId);
             final var igPackages = appConfig.getIgPackages();
             final var igVersion = appConfig.getIgVersion();
 
@@ -568,7 +530,7 @@ public class FHIRService {
                 return immediateResult; // Return the validation results
             } catch (Exception e) {
                 // Log the error and create a failure response
-                LOG.error("FHIRService - Validate - FAILED for interactionId: {}", interactionId, e);
+                LOG.error("ERROR:: FHIRService::validate - FAILED for interactionId: {}", interactionId, e);
                 return Map.of(
                         "resourceType", "OperationOutcome",
                         "interactionId", interactionId,
@@ -578,7 +540,7 @@ public class FHIRService {
                 engine.clear(session);
                 Instant end = Instant.now();
                 Duration timeElapsed = Duration.between(start, end);
-                LOG.info("FHIRService  - Validate -END for interaction id: {} Time Taken : {}  milliseconds",
+                LOG.info("FHIRService::validate  -END for interaction id: {} Time Taken : {}  milliseconds",
                         interactionId, timeElapsed.toMillis());
             }
         } finally {
@@ -602,12 +564,11 @@ public class FHIRService {
             if (StringUtils.isNotEmpty(coRrelationId)) {
                 interactionId = coRrelationId;
             }
-            LOG.info("FHIRService:: sendToScoringEngine BEGIN for interaction id: {} for", interactionId);
+            LOG.info("FHIRService:: sendToScoringEngine BEGIN for interaction id: {} ", interactionId);
 
             try {
                 Map<String, Object> bundlePayloadWithDisposition = null;
-                LOG.debug("FHIRService:: sendToScoringEngine includeOperationOutcome : {} interaction id: {}",
-                        interactionId);
+            
                 if (null != validationPayloadWithDisposition) { // todo
                     // -revisit
                     LOG.debug(
@@ -673,7 +634,7 @@ public class FHIRService {
         LOG.info("FHIRService:: handleMTlsStrategy MTLS strategy from application.yml :{} for interaction id: {}",
                 defaultDatalakeApiAuthn.mTlsStrategy(), interactionId);
         if (StringUtils.isNotEmpty(mtlsStrategyStr)) {
-            LOG.info("FHIRService:: Proceed with mtls strategy from endpoint  :{} for interaction id: {}",
+            LOG.info("FHIRService:: handleMTlsStrategy Proceed with mtls strategy from endpoint  :{} for interaction id: {}",
                     defaultDatalakeApiAuthn.mTlsStrategy(), interactionId);
             mTlsStrategy = MTlsStrategy.fromString(mtlsStrategyStr);
         } else {
@@ -681,7 +642,7 @@ public class FHIRService {
         }
         String requestURI = StringUtils.isNotEmpty(requestUriToBeOverriden) ? requestUriToBeOverriden
                 : requestParameters.get(Constants.REQUEST_URI);
-        LOG.info("FHIRService:: apiKeyAuthDetails MTLS strategy from application.yml :{} for interaction id: {}",
+        LOG.info("FHIRService:: handleMTlsStrategy apiKeyAuthDetails MTLS strategy from application.yml :{} for interaction id: {}",
                 defaultDatalakeApiAuthn.withApiKeyAuth(), interactionId);
         switch (mTlsStrategy) {
             case AWS_SECRETS ->
@@ -711,17 +672,17 @@ public class FHIRService {
             String masterInteractionId, String sourceType, String requestUriToBeOverriden,
             WithApiKeyAuth apiKeyAuthDetails) {
         if (null == apiKeyAuthDetails) {
-            LOG.error("ERROR:: FHIRService:: handleApiKeyAuth apiKeyAuthDetails is not configured in application.yml");
+            LOG.error("ERROR:: FHIRService:: handleNoMtls apiKeyAuthDetails is not configured in application.yml");
             throw new IllegalArgumentException("apiKeyAuthDetails configuration is not defined in application.yml");
         }
 
         if (StringUtils.isEmpty(apiKeyAuthDetails.apiKeyHeaderName())) {
-            LOG.error("ERROR:: FHIRService:: handleApiKeyAuth apiKeyHeaderName is not configured in application.yml");
+            LOG.error("ERROR:: FHIRService:: handleNoMtls apiKeyHeaderName is not configured in application.yml");
             throw new IllegalArgumentException("apiKeyHeaderName is not defined in application.yml");
         }
 
         if (StringUtils.isEmpty(apiKeyAuthDetails.apiKeySecretName())) {
-            LOG.error("ERROR:: FHIRService:: handleApiKeyAuth apiKeySecretName is not configured in application.yml");
+            LOG.error("ERROR:: FHIRService:: handleNoMtls apiKeySecretName is not configured in application.yml");
             throw new IllegalArgumentException("apiKeySecretName is not defined in application.yml");
         }
         if (!MTlsStrategy.NO_MTLS.value.equals(mTlsStrategy.value)) {
