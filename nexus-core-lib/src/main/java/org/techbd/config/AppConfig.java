@@ -44,6 +44,15 @@ public class AppConfig {
     @JsonProperty("csv")
     private CsvValidation csv;
 
+    @JsonProperty("dataLedgerApiUrl")
+    private String dataLedgerApiUrl;
+
+    @JsonProperty("dataLedgerTracking")
+    private boolean dataLedgerTracking;
+    
+    @JsonProperty("dataLedgerDiagnostics")
+    private boolean dataLedgerDiagnostics; 
+
     @JsonProperty("ig-packages")
     private Map<String, FhirV4Config> igPackages;
 

@@ -12,8 +12,11 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.techbd.config.AppConfig;
 import org.techbd.config.AppConfig.FhirV4Config;
+import org.techbd.config.Configuration;
 import org.techbd.config.Constants;
 import org.techbd.config.Interactions.Header;
+
+import com.fasterxml.jackson.databind.JsonNode;
 
 public class FHIRUtil {
 
@@ -127,5 +130,16 @@ public class FHIRUtil {
         return mergedMap.entrySet().stream()
                 .map(entry -> new Header(entry.getKey(), entry.getValue()))
                 .collect(Collectors.toList());
+    }
+     public static String extractBundleId(String json,String interactionId) {
+        try {
+            JsonNode rootNode = Configuration.objectMapper.readTree(json);
+            if (!"Bundle".equals(rootNode.path("resourceType").asText())) {
+                return "Bundle id not provided"; 
+            }
+            return rootNode.path("id").asText("Bundle id not provided");
+        } catch (Exception e) {
+            return "Bundle id not provided";
+        }
     }
 }
