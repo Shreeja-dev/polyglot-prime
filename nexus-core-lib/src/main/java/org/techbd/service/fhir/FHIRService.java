@@ -99,33 +99,6 @@ public class FHIRService {
         }
     }
 
-    /**
-     * TODO: These parameters will be removed. Ensure they are set in the
-     * {@code requestMap} from Mirth.
-     *
-     * Sets the following parameters in the provided {@code requestParameters}
-     * map:
-     *
-     * @param tenantId The unique identifier for the tenant.
-     * @param customDataLakeApi The custom Data Lake API endpoint.
-     * @param dataLakeApiContentType The content type for Data Lake API
-     * requests.
-     * @param healthCheck A flag indicating whether this is a health check
-     * request.
-     * @param isSync A boolean flag to specify if the request is synchronous.
-     * @param provenance The provenance information related to the request.
-     * @param mtlsStrategy The mTLS (mutual TLS) strategy used for secure
-     * communication.
-     * @param interactionId A unique identifier for the interaction.
-     * @param groupInteractionId A unique identifier for the group-level
-     * interaction.
-     * @param masterInteractionId A unique identifier for the master
-     * interaction.
-     * @param sourceType The type of source making the request.
-     * @param requestUriToBeOverriden The request URI that should be overridden.
-     * @param coRrelationId The correlation ID used for tracking requests across
-     * services
-     */
     public Object processBundle(final @RequestBody @Nonnull String payload, Map<String, String> requestParameters,
             Map<String, String> headerParameters,
             Map<String, Object> responseParameters)
@@ -206,6 +179,9 @@ public class FHIRService {
                     LOG.info("FHIRService:: processBundle Action discard detected, returning payloadWithDisposition for interactionId :{}",interactionId); // TODO-to be removed
                     return payloadWithDisposition;
                 }
+                if (!SourceType.CSV.name().equals(sourceType)) {
+                    addObservabilityHeadersToResponse(requestParameters, headerParameters, responseParameters);
+                }
                 if (null == payloadWithDisposition) {
                     LOG.warn(
                             "FHIRService:: ERROR:: Disposition payload is not available.Send Bundle payload to scoring engine for interaction id {}.",
@@ -252,18 +228,17 @@ public class FHIRService {
             span.end();
         }
     }
-
     @SuppressWarnings("unchecked")
-    public static boolean isActionDiscard(Map<String, Object> payloadWithDisposition) {
-        return Optional.ofNullable(payloadWithDisposition)
-                .map(map -> (Map<String, Object>) map.get("OperationOutcome"))
-                .map(outcome -> (List<Map<String, Object>>) outcome.get("techByDesignDisposition"))
-                .flatMap(dispositions -> dispositions.stream()
-                .map(disposition -> disposition != null ? (String) disposition.get("action") : null)
-                .filter(action -> TechByDesignDisposition.DISCARD.action.equals(action))
-                .findFirst())
-                .isPresent();
-    }
+	public static boolean isActionDiscard(Map<String, Object> payloadWithDisposition) {
+		return Optional.ofNullable(payloadWithDisposition)
+				.map(map -> (Map<String, Object>) map.get("OperationOutcome"))
+				.map(outcome -> (List<Map<String, Object>>) outcome.get("techByDesignDisposition"))
+				.flatMap(dispositions -> dispositions.stream()
+						.map(disposition -> (String) disposition.get("action"))
+						.filter(TechByDesignDisposition.DISCARD.action::equals)
+						.findFirst())
+				.isPresent();
+	}
 
     public void validateJson(String jsonString, String interactionId) {
         Span validateJsonSpan = tracer.spanBuilder("FHIRService.validateJson").startSpan();
@@ -511,8 +486,7 @@ public class FHIRService {
                     .withTracer(tracer)
                     .withFhirIGPackages(igPackages)
                     .withIgVersion(igVersion)
-                    .addHapiValidationEngine(); // by default
-            // clearExisting is set to true so engines can be fully supplied through header
+                    .addHapiValidationEngine(); 
 
             final var session = sessionBuilder.build();
             try {
