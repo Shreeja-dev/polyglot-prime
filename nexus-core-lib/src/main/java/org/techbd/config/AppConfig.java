@@ -2,9 +2,6 @@ package org.techbd.config;
 
 import java.util.Map;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
-
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.Getter;
@@ -12,9 +9,6 @@ import lombok.Setter;
 
 @Getter
 @Setter
-
-@Component
-@ConfigurationProperties
 public class AppConfig {
 
     @JsonProperty("version")
@@ -55,6 +49,10 @@ public class AppConfig {
 
     @JsonProperty("ig-packages")
     private Map<String, FhirV4Config> igPackages;
+    
+    @JsonProperty("validation-severity-level")
+    private String validationSeverityLevel;
+
 
     @Getter
     @Setter

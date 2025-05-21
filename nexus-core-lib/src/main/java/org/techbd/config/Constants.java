@@ -38,6 +38,7 @@ public interface Constants {
     public static final String PROVENANCE = "X-Provenance";
     public static final String DATA_LAKE_API_CONTENT_TYPE = "X-TechBD-DataLake-API-Content-Type";
     public static final String CUSTOM_DATA_LAKE_API = "X-TechBD-DataLake-API-URL";
+    public static final String VALIDATION_SEVERTITY_LEVEL = "X-TechBD-Validation-Severity-Level";    
     public static final String MTLS_STRATEGY = "mtls-strategy";
     public static final String GROUP_INTERACTION_ID = "groupInteractionId";
     public static final String MASTER_INTERACTION_ID = "masterInteractionId";

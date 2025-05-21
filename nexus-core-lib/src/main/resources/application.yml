@@ -19,6 +19,7 @@ ig-packages:
       sdoh: ig-packages/fhir-v4/sdoh-clinicalcare/stu-2.2.0
       uv-sdc: ig-packages/fhir-v4/uv-sdc/stu-3.0.0
 baseFHIRURL: http://shinny.org/us/ny/hrsn #This is the default FHIR url used in generating FHIR from CSV
+validation-severity-level: error  # Possible values: fatal, error, warning, information
 structureDefinitionsUrls:
   bundle: /StructureDefinition/SHINNYBundleProfile
   patient: /StructureDefinition/shinny-patient
