@@ -143,7 +143,8 @@ public class OrchestrationEngine {
     private static final Logger LOG = LoggerFactory.getLogger(OrchestrationEngine.class);
     private Tracer tracer;
 
-    public OrchestrationEngine() {
+    public OrchestrationEngine(AppConfig appConfig) {
+        this.appConfig = appConfig;
         this.sessions = new ConcurrentHashMap<>();
         this.validationEngineCache = new HashMap<>();
          try {

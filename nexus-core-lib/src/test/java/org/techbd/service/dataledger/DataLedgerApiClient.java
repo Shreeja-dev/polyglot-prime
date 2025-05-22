@@ -9,7 +9,6 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,22 +16,22 @@ import org.techbd.config.Configuration;
 import org.techbd.config.AppConfig;
 import org.techbd.config.MirthJooqConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.SatDiagnosticDataledgerApiUpserted;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
-@AllArgsConstructor
 public class DataLedgerApiClient {
     private final HttpClient client = HttpClient.newHttpClient();
     private AppConfig appConfig;
-    private MirthJooqConfig udiPrimeJpaConfig;
     private static final Logger LOG = LoggerFactory.getLogger(DataLedgerApiClient.class.getName());
+
+    public DataLedgerApiClient(AppConfig appConfig) {
+        this.appConfig = appConfig;
+    }
+
     public void processRequest(DataLedgerPayload dataLedgerPayload, String interactionId, String provenance,
             String source, Map<String, Object> additionalDetails) {
         processRequest(dataLedgerPayload, interactionId, null, null, provenance, source, additionalDetails);
@@ -90,7 +89,8 @@ public class DataLedgerApiClient {
         String curlCommand = buildCurlCommand(request, jsonPayload);
         LOG.info("Equivalent CURL: " + curlCommand); // TODO -remove after testing
 
-        CompletableFuture<Void> future = HttpClient.newHttpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString())
+        CompletableFuture<Void> future = HttpClient.newHttpClient()
+                .sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenAccept(response -> {
                     boolean isSuccess = response.statusCode() >= 200 && response.statusCode() < 300;
                     LOG.info("Data Ledger API response code : " + response.statusCode() + " for interactionId : "
@@ -136,7 +136,7 @@ public class DataLedgerApiClient {
             Map<String, Object> additionalDetails) {
         try {
             SatDiagnosticDataledgerApiUpserted satDiagnosticDataledgerApiUpserted = new SatDiagnosticDataledgerApiUpserted();
-            final var dslContext = udiPrimeJpaConfig.dsl();
+            final var dslContext = MirthJooqConfig.dsl();
             final var jooqCfg = dslContext.configuration();
             satDiagnosticDataledgerApiUpserted.setHubInteractionId(interactionId);
             satDiagnosticDataledgerApiUpserted.setDataledgerUrl(apiUrl);
@@ -185,7 +185,7 @@ public class DataLedgerApiClient {
             Map<String, Object> additionalDetails) {
         try {
             SatDiagnosticDataledgerApiUpserted satDiagnosticDataledgerApiUpserted = new SatDiagnosticDataledgerApiUpserted();
-            final var dslContext = udiPrimeJpaConfig.dsl();
+            final var dslContext = MirthJooqConfig.dsl();
             final var jooqCfg = dslContext.configuration();
 
             satDiagnosticDataledgerApiUpserted.setHubInteractionId(interactionId);
