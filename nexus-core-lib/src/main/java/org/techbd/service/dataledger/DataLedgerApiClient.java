@@ -17,22 +17,21 @@ import org.techbd.config.Configuration;
 import org.techbd.config.AppConfig;
 import org.techbd.config.MirthJooqConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.SatDiagnosticDataledgerApiUpserted;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
-@AllArgsConstructor
 public class DataLedgerApiClient {
     private final HttpClient client = HttpClient.newHttpClient();
     private AppConfig appConfig;
     private MirthJooqConfig udiPrimeJpaConfig;
     private static final Logger LOG = LoggerFactory.getLogger(DataLedgerApiClient.class.getName());
+    public DataLedgerApiClient(AppConfig appConfig) {
+        this.appConfig = appConfig;
+    }
     public void processRequest(DataLedgerPayload dataLedgerPayload, String interactionId, String provenance,
             String source, Map<String, Object> additionalDetails) {
         processRequest(dataLedgerPayload, interactionId, null, null, provenance, source, additionalDetails);
