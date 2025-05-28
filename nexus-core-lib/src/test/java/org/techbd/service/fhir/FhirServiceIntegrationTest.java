@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.techbd.config.AppConfig;
 import org.techbd.config.ConfigLoader;
 import org.techbd.config.Constants;
+import org.techbd.service.dataledger.DataLedgerApiClient;
 import org.techbd.service.fhir.engine.OrchestrationEngine;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,6 +26,7 @@ public class FhirServiceIntegrationTest {
 
     private FHIRService fhirService;
     private AppConfig appConfig;
+    private DataLedgerApiClient dataaLedgerApiClient;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -32,50 +34,51 @@ public class FhirServiceIntegrationTest {
         fhirService = new FHIRService();
         fhirService.setAppConfig(appConfig);
         org.techbd.util.fhir.FHIRUtil.initialize(appConfig);
-        OrchestrationEngine engine = new OrchestrationEngine();
+        dataaLedgerApiClient = new DataLedgerApiClient(appConfig);
+        OrchestrationEngine engine = new OrchestrationEngine(appConfig);
+        fhirService.setDataLedgerApiClient(dataaLedgerApiClient);
         fhirService.setEngine(engine);
     }
 
-    // @Test
-    // public void testProcessBundle() throws Exception {
-    //     String interactionId = UUID.randomUUID().toString();
-    //     Map<String, String> requestParameters = getRequestParameters(interactionId);
-    //     Map<String, String> headerParameters = getHeaderParameters();
-    //     Map<String, Object> responseParameters = new HashMap<>();
-    //     String bundleJson = Files.readString(Path.of(
-    //             "src/test/resources/org/techbd/fhir/AHCHRSNQuestionnaireResponseExample1.2.3.json"));
-    //     Object validationResults = fhirService.processBundle(bundleJson,
-    //             requestParameters, headerParameters,
-    //             responseParameters);
-    //     assertNotNull(validationResults);
+    @Test
+    public void testProcessBundle() throws Exception {
+        String interactionId = UUID.randomUUID().toString();
+        Map<String, String> requestParameters = getRequestParameters(interactionId);
+        Map<String, String> headerParameters = getHeaderParameters();
+        Map<String, Object> responseParameters = new HashMap<>();
+        String bundleJson = Files.readString(Path.of(
+                "src/test/resources/org/techbd/fhir/AHCHRSNQuestionnaireResponseExample1.2.3.json"));
+        Object validationResults = fhirService.processBundle(bundleJson,
+                requestParameters, headerParameters,
+                responseParameters);
+        assertNotNull(validationResults);
 
-    //     // Convert validationResults to JSON
-    //     ObjectMapper mapper = new ObjectMapper();
-    //     mapper.registerModule(new JavaTimeModule());
-    //     String jsonString
-    //             = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(validationResults);
-    //     Files.writeString(Path.of("src/test/resources/org/techbd/fhir/output.json"),
-    //             jsonString,
-    //             StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-    //     JsonNode rootNode = mapper.readTree(jsonString);
-    //     JsonNode validationResultsNode = rootNode.path("validationResults");
-    //     boolean isValid = validationResultsNode.path(0).path("valid").asBoolean();
-    //     JsonNode issuesNode
-    //             = validationResultsNode.path(0).path("operationOutcome").path("issue");
-    //     boolean hasError = false;
-    //     for (JsonNode issue : issuesNode) {
-    //         if ("error".equalsIgnoreCase(issue.path("severity").asText())) {
-    //             hasError = true;
-    //             break;
-    //         }
-    //     }
-    //     assertThat(hasError).isFalse();
-    // }
+        // Convert validationResults to JSON
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        String jsonString
+                = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(validationResults);
+        Files.writeString(Path.of("src/test/resources/org/techbd/fhir/output.json"),
+                jsonString,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        JsonNode rootNode = mapper.readTree(jsonString);
+        JsonNode validationResultsNode = rootNode.path("validationResults");
+        boolean isValid = validationResultsNode.path(0).path("valid").asBoolean();
+        JsonNode issuesNode
+                = validationResultsNode.path(0).path("operationOutcome").path("issue");
+        boolean hasError = false;
+        for (JsonNode issue : issuesNode) {
+            if ("error".equalsIgnoreCase(issue.path("severity").asText())) {
+                hasError = true;
+                break;
+            }
+        }
+        assertThat(hasError).isFalse();
+    }
 
     private Map<String, String> getRequestParameters(String interactionId) {
         Map<String, String> requestParams = new HashMap<>();
         requestParams.put(Constants.INTERACTION_ID, interactionId);
-        requestParams.put(Constants.TENANT_ID, "tenant123");
         requestParams.put(Constants.SOURCE_TYPE, "FHIR");
         requestParams.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, "2024-01-24T10:15:30Z");
         return requestParams;
@@ -84,6 +87,7 @@ public class FhirServiceIntegrationTest {
     private Map<String, String> getHeaderParameters() {
         Map<String, String> headerParams = new HashMap<>();
         headerParams.put(Constants.USER_AGENT, "user-agent");
+        headerParams.put(Constants.TENANT_ID, "tenant123");
         return headerParams;
     }
 }

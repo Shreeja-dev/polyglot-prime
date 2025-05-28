@@ -12,8 +12,8 @@ public class ConfigLoader {
     public static AppConfig loadConfig(String env) throws IOException {
         ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
         yamlMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        AppConfig config = loadYamlFromClasspath("application.yml", yamlMapper);
-        AppConfig envConfig = loadYamlFromClasspath("application-" + env + ".yml", yamlMapper);
+        AppConfig config = loadYamlFromClasspath("nexus-core-lib/application.yml", yamlMapper);
+        AppConfig envConfig = loadYamlFromClasspath("nexus-core-lib/application-" + env + ".yml", yamlMapper);
         if (envConfig != null) {
             mergeConfigs(config, envConfig);
         }

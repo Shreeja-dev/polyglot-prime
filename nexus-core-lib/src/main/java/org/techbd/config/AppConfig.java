@@ -32,9 +32,6 @@ public class AppConfig {
     @JsonProperty("fhirVersion")
     private String fhirVersion;
 
-    @JsonProperty("igVersion")
-    private String igVersion;
-
     @JsonProperty("csv")
     private CsvValidation csv;
 

@@ -158,10 +158,9 @@ public class OrchestrationEngine {
 
     private void initializeEngines() {
         LOG.info("OrchestrationEngine:: initializeEngines -BEGIN");
-        getOrCreateValidationEngine(ValidationEngineIdentifier.HAPI,  appConfig.getIgPackages(),
-         appConfig.getIgVersion(), tracer);
-        getOrCreateValidationEngine(ValidationEngineIdentifier.HL7_EMBEDDED,  null, null, null);
-        getOrCreateValidationEngine(ValidationEngineIdentifier.HL7_API,   null, null, null);
+        getOrCreateValidationEngine(ValidationEngineIdentifier.HAPI,  appConfig.getIgPackages(), tracer);
+        getOrCreateValidationEngine(ValidationEngineIdentifier.HL7_EMBEDDED,  null, null);
+        getOrCreateValidationEngine(ValidationEngineIdentifier.HL7_API,   null, null);
         LOG.info("OrchestrationEngine:: initializeEngines -END");
     }
 
@@ -192,7 +191,6 @@ public class OrchestrationEngine {
 
     private ValidationEngine getOrCreateValidationEngine(@NotNull final ValidationEngineIdentifier type,
             final Map<String, FhirV4Config> igPackages,
-            final String igVersion,
             final Tracer tracer) {
         return validationEngineCache.computeIfAbsent(type, k -> {
             switch (type) {

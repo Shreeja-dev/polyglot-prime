@@ -217,7 +217,7 @@ public class FHIRService {
                 payloadWithDisposition = registerBundleInteraction(jooqCfg, headerParameters, requestParameters,
                         headerParameters, payload, buildOperationOutcome(ex, interactionId), interactionId,
                         groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
-                LOG.error("ERROR:: FHIRService:: processBundle Exception occurred for interactionId : {}", interactionId,ex.getMessage());
+                LOG.error("ERROR:: FHIRService:: processBundle Exception occurred for interactionId : {}", interactionId,ex);
             }
 
             Instant end = Instant.now();
@@ -476,7 +476,6 @@ public class FHIRService {
             final var start = Instant.now();
             LOG.info("FHIRService::validate  -BEGIN for interactionId: {} ", interactionId);
             final var igPackages = appConfig.getIgPackages();
-            final var igVersion = appConfig.getIgVersion();
 
             final var sessionBuilder = engine.session()
                     .withSessionId(UUID.randomUUID().toString())
@@ -486,7 +485,6 @@ public class FHIRService {
                     .withFhirProfileUrl(FHIRUtil.getBundleProfileUrl())
                     .withTracer(tracer)
                     .withFhirIGPackages(igPackages)
-                    .withIgVersion(igVersion)
                     .addHapiValidationEngine(); 
 
             final var session = sessionBuilder.build();
