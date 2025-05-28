@@ -26,7 +26,6 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
         private static final String INTERACTION_ID = UUID.randomUUID().toString();  
 
         @Test
-        @Disabled
         void testOrchestrateSingleSession() {
                 String payload = "{ \"resourceType\": \"Bundle\", \"id\": \"AHCHRSNScreeningResponseExample\", \"meta\": { \"lastUpdated\": \"2024-02-23T00:00:00Z\", \"profile\": [\"http://shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile\"] } }";
                 OrchestrationEngine.OrchestrationSession realSession = null;
@@ -38,11 +37,10 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
                                         .withInteractionId(INTERACTION_ID)
                                         .addHapiValidationEngine()
                                         .build();
-                        sessionSpy = spy(realSession);
-                        engine.orchestrate(sessionSpy);
+                        engine.orchestrate(realSession);
                         assertThat(engine.getSessions()).hasSize(1);
-                        assertThat(engine.getSessions().get(0).getPayloads()).isNotNull();
-                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(0)
+                        assertThat(engine.getSessions().get(realSession.getSessionId()).getPayloads()).isNotNull();
+                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(realSession.getSessionId())
                                         .getValidationResults();
                         assertThat(results).hasSize(1);
                         assertThat(results.get(0).isValid()).isFalse();
@@ -60,7 +58,6 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
         }
 
         @Test
-        @Disabled
         void testOrchestrateMultipleSessions() {
                 String payload = "{ \"resourceType\": \"Bundle\", \"id\": \"AHCHRSNScreeningResponseExample\", \"meta\": { \"lastUpdated\": \"2024-02-23T00:00:00Z\", \"profile\": [\"http://shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile\"] } }";
                 String payload2 = "{ \"resourceType\": \"Bundle\", \"id\": \"AHCHRSNScreeningResponseExample\", \"meta\": { \"lastUpdated\": \"2024-02-23T00:00:00Z\", \"profile\": [\"http://test.shinny.org/us/ny/hrsn/StructureDefinition/SHINNYBundleProfile\"] } }";
@@ -74,21 +71,19 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
                                         .withInteractionId(INTERACTION_ID)
                                         .addHapiValidationEngine()
                                         .build();
-                        sessionSpy = spy(realSession);
                         realSession2 = engine.session()
                                         .withPayloads(List.of(payload2))
                                         .withSessionId(UUID.randomUUID().toString())
                                         .withTracer(tracer)
                                         .withInteractionId(INTERACTION_ID)
-                                        .addHl7ValidationApiEngine()
+                                        .addHapiValidationEngine()
                                         .build();
-                        sessionSpy2 = spy(realSession2);
-                        engine.orchestrate(sessionSpy, sessionSpy2);
+                        engine.orchestrate(realSession, realSession2);
                         assertThat(engine.getSessions()).hasSize(2);
-                        OrchestrationEngine.OrchestrationSession retrievedSession1 = engine.getSessions().get(0);
+                        OrchestrationEngine.OrchestrationSession retrievedSession1 = engine.getSessions().get(realSession.getSessionId());
                         assertThat(retrievedSession1.getPayloads()).isNotNull(); 
                         assertThat(retrievedSession1.getValidationResults()).hasSize(1);
-                        OrchestrationEngine.OrchestrationSession retrievedSession2 = engine.getSessions().get(1);
+                        OrchestrationEngine.OrchestrationSession retrievedSession2 = engine.getSessions().get(realSession2.getSessionId());
                         assertThat(retrievedSession2.getPayloads()).isNotNull();
                         assertThat(retrievedSession2.getValidationResults()).hasSize(1);
                 } finally {
@@ -98,7 +93,6 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
         }
 
         @Test
-        @Disabled
         void testValidationEngineCaching() {
                 OrchestrationEngine.OrchestrationSession session1 = null;
                 OrchestrationEngine.OrchestrationSession session2 = null;
@@ -133,7 +127,6 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
         }
 
         @Test
-        @Disabled
         void testValidationAgainstLatestShinnyIgHasNoErrors() throws Exception {
                 String payload = Files.readString(Path.of(
                                 "src/test/resources/org/techbd/ig-examples/shinny-examples/Bundle-AHCHRSNScreeningResponseExample.json"));
@@ -146,11 +139,9 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
                                         .withInteractionId(INTERACTION_ID)
                                         .addHapiValidationEngine()
                                         .build();
-
-                        sessionSpy = spy(realSession);
-                        engine.orchestrate(sessionSpy);
+                        engine.orchestrate(realSession);
                         assertThat(engine.getSessions()).hasSize(1);
-                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(0)
+                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(realSession.getSessionId())
                                         .getValidationResults();
                         assertThat(results).hasSize(1);
                         assertThat(results.get(0).isValid()).isTrue();
@@ -166,7 +157,6 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
         }
 
         @Test
-        @Disabled
         void testValidationAgainstShinnyIgLatestVersion_ReferentialIntegrityError() throws Exception {
                 String payload = Files.readString(Path.of(
                                 "src/test/resources/org/techbd/ig-examples/shinny-examples/Bundle-AHCHRSNScreeningResponseExample-HasErrors.json"));
@@ -179,12 +169,10 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
                                         .withInteractionId(INTERACTION_ID)
                                         .addHapiValidationEngine()
                                         .build();
-
-                        sessionSpy = spy(realSession);
-                        engine.orchestrate(sessionSpy);
+                        engine.orchestrate(realSession);
                         assertThat(engine.getSessions()).hasSize(1);
 
-                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(0)
+                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(realSession.getSessionId())
                                         .getValidationResults();
                         assertThat(results).hasSize(1);
                         assertThat(results.get(0).isValid()).isFalse();
@@ -208,7 +196,6 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
         }
 
         @Test
-        @Disabled
         void testValidationAgainstLatestTestShinnyIgHasNoErrors() throws Exception {
                 String payload = Files.readString(Path.of(
                                 "src/test/resources/org/techbd/ig-examples/test-shinny-examples/Bundle-AHCHRSNScreeningResponseExample.json"));
@@ -221,12 +208,10 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
                                         .withInteractionId(INTERACTION_ID)
                                         .addHapiValidationEngine()
                                         .build();
-
-                        sessionSpy = spy(realSession);
-                        engine.orchestrate(sessionSpy);
+                        engine.orchestrate(realSession);
                         assertThat(engine.getSessions()).hasSize(1);
                         
-                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(0)
+                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(realSession.getSessionId())
                                         .getValidationResults();
                         assertThat(results).hasSize(1);
                         assertThat(results.get(0).isValid()).isTrue();
@@ -243,7 +228,6 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
         }
 
         @Test
-        @Disabled
         void testValidationAgainstLatestShinnyIg_PatientMRNMissingError() throws Exception {
                 String payload = Files.readString(Path.of(
                                 "src/test/resources/org/techbd/ig-examples/shinny-examples/Bundle-AHCHRSNScreeningResponseExample-HasErrors.json"));
@@ -256,18 +240,15 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
                                         .withSessionId(UUID.randomUUID().toString())
                                         .addHapiValidationEngine()
                                         .build();
-
-                        sessionSpy = spy(realSession);
-                        engine.orchestrate(sessionSpy);
+                        engine.orchestrate(realSession);
                         assertThat(engine.getSessions()).hasSize(1);
-                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(0)
+                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(realSession.getSessionId())
                                         .getValidationResults();
                         assertThat(results).hasSize(1);
                         assertThat(results.get(0).isValid()).isFalse();
                         IParser parser = FhirContext.forR4().newJsonParser();
                         OperationOutcome operationOutcome = (OperationOutcome) parser
                                         .parseResource(results.get(0).getOperationOutcome());
-
                         List<OperationOutcomeIssueComponent> issues = operationOutcome.getIssue();
                         assertThat(issues).isNotNull().hasSizeGreaterThan(1);
 
@@ -285,7 +266,6 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
         }
 
         @Test
-        @Disabled
         void testValidationAgainstLatestTestShinnyIg_PatientMRNMissingError() throws Exception {
                 String payload = Files.readString(Path.of(
                                 "src/test/resources/org/techbd/ig-examples/test-shinny-examples/Bundle-AHCHRSNQuestionnaireResponseExample-Errors.json"));
@@ -298,11 +278,9 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
                                         .withSessionId(UUID.randomUUID().toString())
                                         .addHapiValidationEngine()
                                         .build();
-
-                        sessionSpy = spy(realSession);
-                        engine.orchestrate(sessionSpy);
+                        engine.orchestrate(realSession);
                         assertThat(engine.getSessions()).hasSize(1);
-                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(0)
+                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(realSession.getSessionId())
                                         .getValidationResults();
                         assertThat(results).hasSize(1);
                         assertThat(results.get(0).isValid()).isFalse();
@@ -327,7 +305,6 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
         }
 
         @Test
-        @Disabled
         void testValidationWhenTheIncomingPayloadHasInValidProfileUrl() throws Exception {
                 String payload = Files.readString(Path.of(
                                 "src/test/resources/org/techbd/ig-examples/shinny-examples/Bundle-AHCHRSNScreeningResponseExample-InvalidProfileUrl.json"));
@@ -340,11 +317,9 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
                                         .withSessionId(UUID.randomUUID().toString())
                                         .addHapiValidationEngine()
                                         .build();
-
-                        sessionSpy = spy(realSession);
-                        engine.orchestrate(sessionSpy);
+                        engine.orchestrate(realSession);
                         assertThat(engine.getSessions()).hasSize(1);
-                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(0)
+                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(realSession.getSessionId())
                                         .getValidationResults();
                         assertThat(results).hasSize(1);
                         assertThat(results.get(0).isValid()).isFalse();

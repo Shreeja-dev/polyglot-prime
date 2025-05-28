@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
 
 import org.assertj.core.api.SoftAssertions;
 import org.hl7.fhir.r4.model.OperationOutcome;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,42 +26,36 @@ import ca.uhn.fhir.parser.IParser;
 public class IgPublicationIssuesTest extends BaseIgValidationTest {
 
         @Test
-        @Disabled
         @DisplayName("Validate SHIN-NY IG AHCHRSN QuestionnaireResponse ExampleFile")
         void testValidateShinnyIG_AHCHRSNQuestionnaireResponseExampleFile() throws IOException {
                 validateFile("shinny-examples/Bundle-AHCHRSNQuestionnaireResponseExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate SHIN-NY IG Patient Negative Consent ExampleFile")
         void testValidateShinnyIG_PatientNegativeConsentExampleFile() throws IOException {
                 validateFile("shinny-examples/Bundle-PatientNegativeConsent.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate SHIN-NY IG AHCHRSN ScreeningResponse ExampleFile")
         void testValidateShinnyIG_AHCHRSNScreeningResponseExampleFile() throws IOException {
                 validateFile("shinny-examples/Bundle-AHCHRSNScreeningResponseExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate SHIN-NY IG NY ScreeningResponse ExampleFile")
         void testValidateShinnyIG_NYScreeningResponseExampleFile() throws IOException {
                 validateFile("shinny-examples/Bundle-NYScreeningResponseExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate SHIN-NY IG Food Insecurity Assessment ExampleFile")
         void testValidateShinnyIG_FoodInsecurityAssessmentExampleFile() throws IOException {
                 validateFile("shinny-examples/Bundle-ObservationAssessmentFoodInsecurityExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate SHIN-NY IG ServiceRequest ExampleFile")
         void testValidateShinnyIG_ServiceRequestExampleFile() throws IOException {
                 validateFile("shinny-examples/Bundle-ServiceRequestExample.json");
@@ -75,91 +68,78 @@ public class IgPublicationIssuesTest extends BaseIgValidationTest {
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate SHIN-NY IG Task ExampleFile")
         void testValidateShinnyIG_TaskExampleFile() throws IOException {
                 validateFile("shinny-examples/Bundle-TaskExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate SHIN-NY IG Task Output Procedure ExampleFile")
         void testValidateShinnyIG_TaskOutputProcedureExampleFile() throws IOException {
                 validateFile("shinny-examples/Bundle-TaskOutputProcedureExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG AHCHRSN ScreeningResponse ExampleFile")
         void testValidateTestShinnyIG_AHCHRSNScreeningResponseExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-AHCHRSNScreeningResponseExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG NY ScreeningResponse ExampleFile")
         void testValidateTestShinnyIG_NYScreeningResponseExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-NYScreeningResponseExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG Food Insecurity Assessment ExampleFile")
         void testValidateTestShinnyIG_FoodInsecurityAssessmentExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-ObservationAssessmentFoodInsecurityExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG ServiceRequest ExampleFile")
         void testValidateTestShinnyIG_ServiceRequestExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-ServiceRequestExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG Task Completed ExampleFile")
         void testValidateTestShinnyIG_TaskCompletedExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-TaskCompletedExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG Task ExampleFile")
         void testValidateTestShinnyIG_TaskExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-TaskExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG Task Output Procedure ExampleFile")
         void testValidateTestShinnyIG_TaskOutputProcedureExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-TaskOutputProcedureExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG Patient Negative Consent ExampleFile")
         void testValidateTestShinnyIG_PatientNegativeConsentExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-PatientNegativeConsent.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG AHCHRSN QuestionnaireResponse ExampleFile")
         void testValidateTestShinnyIG_AHCHRSNQuestionnaireResponseExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-AHCHRSNQuestionnaireResponseExample.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG AHCHRSN ScreeningResponse Unknown1to8 ExampleFile")
         void testValidateTestShinnyIG_AHCHRSNQuestionnaireResponseUnknownExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-NYScreeningResponseExampleUnknown1to8.json");
         }
 
         @Test
-        @Disabled
         @DisplayName("Validate Test SHIN-NY IG AHCHRSN ScreeningResponse Declined9to12 ExampleFile")
         void testValidateTestShinnyIG_AHCHRSNQuestionnaireResponseDeclineExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-NYScreeningResponseExampleDeclined9to12.json");
@@ -206,7 +186,7 @@ public class IgPublicationIssuesTest extends BaseIgValidationTest {
                 try {
                         sessionSpy = spy(session);
                         engine.orchestrate(session);
-                        results = engine.getSessions().get(0).getValidationResults();
+                        results = engine.getSessions().get(session.getSessionId()).getValidationResults();
 
                 } finally {
                         engine.clear(session);
