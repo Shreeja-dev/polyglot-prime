@@ -1,7 +1,5 @@
 package org.techbd.service.fhir;
 
-import static org.mockito.Mockito.spy;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -184,7 +182,6 @@ public class IgPublicationIssuesTest extends BaseIgValidationTest {
                                 .addHapiValidationEngine()
                                 .build();
                 try {
-                        sessionSpy = spy(session);
                         engine.orchestrate(session);
                         results = engine.getSessions().get(session.getSessionId()).getValidationResults();
 

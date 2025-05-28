@@ -29,10 +29,6 @@ public abstract class BaseIgValidationTest {
 
     protected static Span span;
 
-    protected static OrchestrationEngine.OrchestrationSession sessionSpy;
-
-    protected static OrchestrationEngine.OrchestrationSession sessionSpy2;
-
     protected static OrchestrationEngine.HapiValidationEngine spyHapiEngine;
 
     @BeforeAll
