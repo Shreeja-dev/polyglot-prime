@@ -16,7 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.techbd.orchestrate.fhir.OrchestrationEngine.ValidationResult;
+import org.techbd.service.fhir.engine.OrchestrationEngine;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.IParser;
@@ -173,7 +173,7 @@ public class IgPublicationIssuesTest extends BaseIgValidationTest {
 
         private List<OrchestrationEngine.ValidationResult> getValidationErrors(final String exampleFileName)
                         throws IOException {
-                List<ValidationResult> results = new ArrayList<>();
+                List<OrchestrationEngine.ValidationResult> results = new ArrayList<>();
                 final var payload = Files.readString(Path.of(
                                 "src/test/resources/org/techbd/ig-examples/" + exampleFileName));
                 OrchestrationEngine.OrchestrationSession session = engine.session()

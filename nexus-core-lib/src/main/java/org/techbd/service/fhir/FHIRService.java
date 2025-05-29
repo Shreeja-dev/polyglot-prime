@@ -138,7 +138,7 @@ public class FHIRService {
             final var sourceType = requestParameters.get(Constants.SOURCE_TYPE);
             final var requestUriToBeOverriden = headerParameters.get(Constants.OVERRIDE_REQUEST_URI);
             final var coRrelationId = requestParameters.get(Constants.CORRELATION_ID);
-            final var requestUri = headerParameters.get(Constants.REQUEST_URI);
+            final var requestUri = requestParameters.get(Constants.REQUEST_URI);
             if (null == interactionId) {
                 if (StringUtils.isNotEmpty(headerParameters.get(Constants.CORRELATION_ID))) {
                     interactionId = headerParameters.get(Constants.CORRELATION_ID);
@@ -162,11 +162,6 @@ public class FHIRService {
                         sourceType);
                 final var result = Map.of("OperationOutcome", immediateResult);
 
-                if (StringUtils.isNotEmpty(requestUri)
-                        && (requestUri.equals("/Bundle/$validate") || requestUri.equals("/Bundle/$validate/"))) {
-                    return result;
-                }
-
                 if ("true".equals(healthCheck)) {
                     LOG.info("FHIRService:: processBundle Health check enabled, skipping scoring engine submission for interactionId :{}",interactionId); // TODO-to be removed
                     return result;
@@ -174,8 +169,11 @@ public class FHIRService {
 
                 payloadWithDisposition = registerBundleInteraction(jooqCfg, headerParameters, requestParameters,
                         headerParameters, payload, result, interactionId, groupInteractionId, masterInteractionId,
-                        sourceType, requestUriToBeOverriden, coRrelationId);
-
+                        sourceType, requestUriToBeOverriden, coRrelationId,tenantId);  
+                if (StringUtils.isNotEmpty(requestUri)
+                        && (requestUri.equals("/Bundle/$validate") || requestUri.equals("/Bundle/$validate/"))) {
+                    return result;
+                }
                 if (isActionDiscard(payloadWithDisposition)) {
                     LOG.info("FHIRService:: processBundle Action discard detected, returning payloadWithDisposition for interactionId :{}",interactionId); // TODO-to be removed
                     return payloadWithDisposition;
@@ -216,7 +214,7 @@ public class FHIRService {
             } catch (JsonValidationException ex) {
                 payloadWithDisposition = registerBundleInteraction(jooqCfg, headerParameters, requestParameters,
                         headerParameters, payload, buildOperationOutcome(ex, interactionId), interactionId,
-                        groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId);
+                        groupInteractionId, masterInteractionId, sourceType, requestUriToBeOverriden, coRrelationId,tenantId);
                 LOG.error("ERROR:: FHIRService:: processBundle Exception occurred for interactionId : {}", interactionId,ex);
             }
 
@@ -340,7 +338,7 @@ public class FHIRService {
             Map<String, String> requestParameters, Map<String, String> responseParameters,
             String payload, Map<String, Map<String, Object>> validationResult, String interactionId,
             String groupInteractionId, String masterInteractionId, String sourceType,
-            String requestUriToBeOverriden, String coRrelationId)
+            String requestUriToBeOverriden, String coRrelationId,String tenantId)
             throws IOException {
         LOG.info("FHIRService :: registerBundleInteraction REGISTER State None, Accept, Disposition: BEGIN for interaction id: {} ",
 				interactionId);        
@@ -349,6 +347,7 @@ public class FHIRService {
             final Interactions interactions = new Interactions();
             // final var mutatableReq = new ContentCachingRequestWrapper(requestParameters);
             RequestEncountered requestEncountered = null;
+            requestParameters.put(Constants.TENANT_ID, tenantId);
             if (StringUtils.isNotEmpty(coRrelationId)) {
                 requestEncountered = new Interactions.RequestEncountered(requestParameters,
                         payload.getBytes(),
@@ -388,13 +387,13 @@ public class FHIRService {
 
             try {
                 prepareRequest(rihr, rre, provenance, requestParameters, interactionId, groupInteractionId,
-                        masterInteractionId, sourceType, requestUriToBeOverriden);
+                        masterInteractionId, sourceType, requestUriToBeOverriden,tenantId);
                 final var start = Instant.now();
-                int i = rihr.execute(jooqCfg);
+                int noOfRecordsUpdated = rihr.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "FHIRService:: processBundle  - Time taken : {} milliseconds for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
-                        Duration.between(start, end).toMillis(),
+                        "FHIRService:: processBundle  - Time taken : {} milliseconds  and no of records updated : {} for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
+                        Duration.between(start, end).toMillis(),noOfRecordsUpdated,
                         rre.interactionId().toString());
                 JsonNode payloadWithDisposition = rihr.getReturnValue();
                 LOG.info("FHIRService :: registerBundleInteraction  REGISTER State None, Accept, Disposition: END for interaction id: {} ",
@@ -408,7 +407,6 @@ public class FHIRService {
                         + rihr.getName() + " error",
                         rre.interactionId().toString(),
                         rre.tenant(), e);
-                e.printStackTrace();
             }
             return null;
         } finally {
@@ -418,16 +416,13 @@ public class FHIRService {
 
     private void prepareRequest(RegisterInteractionHttpRequest rihr, RequestResponseEncountered rre,
             String provenance, Map<String, String> requestParameters, String interactionId, String groupInteractionId,
-            String masterInteractionId, String sourceType, String requestUriToBeOverriden) {
+            String masterInteractionId, String sourceType, String requestUriToBeOverriden,String tenantId) {
         rihr.setInteractionId(interactionId != null ? interactionId : rre.interactionId().toString());
         rihr.setGroupHubInteractionId(groupInteractionId);
         rihr.setSourceHubInteractionId(masterInteractionId);
         rihr.setNature((JsonNode) Configuration.objectMapper.valueToTree(
                 Map.of("nature", "org.techbd.service.http.Interactions$RequestResponseEncountered",
-                        "tenant_id",
-                        rre.tenant() != null ? (rre.tenant().tenantId() != null
-                        ? rre.tenant().tenantId()
-                        : "N/A") : "N/A")));
+                        "tenant_id",tenantId)));
         rihr.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
         rihr.setInteractionKey(StringUtils.isNotEmpty(requestUriToBeOverriden) ? requestUriToBeOverriden
                 : requestParameters.get(Constants.REQUEST_URI));
@@ -1237,11 +1232,11 @@ public class FHIRService {
                 initRIHR.setCreatedBy(FHIRService.class.getName());
                 initRIHR.setProvenance(provenance);
                 final var start = Instant.now();
-                final var execResult = initRIHR.execute(jooqCfg);
+                final var noOfRecordsUpdated = initRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "REGISTER State Forward : END for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
-                        + execResult,
+                        "REGISTER State Forward : END  No of Records Updated :{} for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
+                        , noOfRecordsUpdated,
                         bundleAsyncInteractionId, tenantId,
                         Duration.between(start, end).toMillis());
             } catch (Exception e) {
@@ -1290,11 +1285,11 @@ public class FHIRService {
                 forwardRIHR.setCreatedBy(FHIRService.class.getName());
                 forwardRIHR.setProvenance(provenance);
                 final var start = Instant.now();
-                final var execResult = forwardRIHR.execute(jooqCfg);
+                final var noOfRecordsUpdated = forwardRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "REGISTER State Complete : END for interaction id : {} tenant id : {} .Time Taken : {} milliseconds"
-                        + execResult,
+                        "REGISTER State Complete : END .No of records Updated : {} for interaction id : {} tenant id : {} .Time Taken : {} milliseconds"
+                        , noOfRecordsUpdated,
                         bundleAsyncInteractionId, tenantId,
                         Duration.between(start, end).toMillis());
             } catch (Exception e) {
@@ -1344,11 +1339,11 @@ public class FHIRService {
                 forwardRIHR.setCreatedBy(FHIRService.class.getName());
                 forwardRIHR.setProvenance(provenance);
                 final var start = Instant.now();
-                final var execResult = forwardRIHR.execute(jooqCfg);
+                final var noOfRecordsUpdated = forwardRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "REGISTER State Fail : END for interaction id : {} tenant id : {} .Time Taken : {} milliseconds"
-                        + execResult,
+                        "REGISTER State Fail : END .No of records Updated:{} for interaction id : {} tenant id : {} .Time Taken : {} milliseconds"
+                        , noOfRecordsUpdated,
                         bundleAsyncInteractionId, tenantId,
                         Duration.between(start, end).toMillis());
             } catch (Exception e) {
@@ -1442,10 +1437,11 @@ public class FHIRService {
                 errorRIHR.setCreatedBy(FHIRService.class.getName());
                 errorRIHR.setProvenance(provenance);
                 final var start = Instant.now();
-                final var execResult = errorRIHR.execute(jooqCfg);
+                final var noOfRecordsUpdated = errorRIHR.execute(jooqCfg);
                 final var end = Instant.now();
-                LOG.error("Register State Failure - END for interaction id : {} tenant id : {} forwardRIHR execResult"
-                        + execResult + ". Time Taken : {} milliseconds ",
+                LOG.error("Register State Failure - END .No of records Updated : {} for interaction id : {} tenant id : {} forwardRIHR execResult"
+                         + ". Time Taken : {} milliseconds ",
+                        noOfRecordsUpdated,
                         bundleAsyncInteractionId,
                         tenantId, Duration.between(start, end).toMillis());
             } catch (Exception e) {

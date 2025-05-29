@@ -9,8 +9,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeAll;
-import org.techbd.service.http.hub.prime.AppConfig;
-import org.techbd.service.http.hub.prime.AppConfig.FhirV4Config;
+import org.techbd.config.AppConfig;
+import org.techbd.config.AppConfig.FhirV4Config;
+import org.techbd.service.fhir.engine.OrchestrationEngine;
 import org.techbd.util.FHIRUtil;
 
 import io.opentelemetry.api.trace.Span;
@@ -46,7 +47,7 @@ public abstract class BaseIgValidationTest {
         when(appConfig.getIgPackages()).thenReturn(getIgPackages());
        // when(appConfig.getIgVersion()).thenReturn("1.3.0");
 
-        engine = new OrchestrationEngine(tracer, appConfig);
+        engine = new OrchestrationEngine(appConfig);
         Field profileMapField = FHIRUtil.class.getDeclaredField("PROFILE_MAP");
         profileMapField.setAccessible(true);
         profileMapField.set(null, getProfileMap());
