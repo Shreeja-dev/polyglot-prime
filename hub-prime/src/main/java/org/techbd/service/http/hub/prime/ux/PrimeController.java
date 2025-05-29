@@ -55,6 +55,13 @@ public class PrimeController {
         return presentation.populateModel("page/home", model, request);
     }
 
+    
+    @GetMapping("/oauth2/authorization/github")
+    @RouteMapping(label = "Home", siblingOrder = 0)
+    public String home1(final Model model, final HttpServletRequest request) {
+        return presentation.populateModel("page/home", model, request);
+    }
+
     @GetMapping("/")
     public String index() {
         return "login/login";

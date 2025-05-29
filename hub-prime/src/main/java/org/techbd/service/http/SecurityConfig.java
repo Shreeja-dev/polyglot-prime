@@ -56,40 +56,14 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(final HttpSecurity http) throws Exception {
-        // allow authentication for security
-        // and turn off CSRF to allow POST methods
+
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .authorizeHttpRequests(
-                        authorize -> authorize
-                                .requestMatchers(Constant.UNAUTHENTICATED_URLS)
-                                .permitAll()
-                                .anyRequest().authenticated())
-                .oauth2Login(
-                        oauth2Login -> oauth2Login
-                                .successHandler(gitHubLoginSuccessHandler())
-                                .defaultSuccessUrl(Constant.HOME_PAGE_URL)
-                                .loginPage(Constant.LOGIN_PAGE_URL))
-                .logout(
-                        logout -> logout
-                                .deleteCookies(Constant.SESSIONID_COOKIE)
-                                .logoutSuccessUrl(Constant.LOGOUT_PAGE_URL)
-                                .invalidateHttpSession(true)
-                                .permitAll())
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(
-                        sessionManagement -> sessionManagement
-                                .invalidSessionUrl(Constant.SESSION_TIMEOUT_URL)
-                                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
-                .addFilterAfter(authzFilter, UsernamePasswordAuthenticationFilter.class);
-        // allow us to show our own content in IFRAMEs (e.g. Swagger, etc.)
-        http.headers(headers -> {
-            headers.frameOptions(frameOptions -> frameOptions.sameOrigin());
-            headers.httpStrictTransportSecurity(
-                    hsts -> hsts
-                            .includeSubDomains(true)
-                            .maxAgeInSeconds(Constant.HSTS_MAX_AGE)); // Enable HSTS
-        });
+                .authorizeHttpRequests(authorize -> authorize
+                        .anyRequest().permitAll())
+                .csrf().disable()
+                .oauth2Login().disable();
+
         return http.build();
     }
 
@@ -101,7 +75,8 @@ public class SecurityConfig {
         config.addAllowedOriginPattern("*"); // Customize as needed
         config.addAllowedMethod("*");
         config.addAllowedHeader("*");
-        // Expose Location header for session time out redirection at the UI side (AGGrid etc)
+        // Expose Location header for session time out redirection at the UI side
+        // (AGGrid etc)
         config.addExposedHeader("Location");
         source.registerCorsConfiguration("/**", config);
         return new CorsFilter(source);
@@ -125,15 +100,7 @@ public class SecurityConfig {
         public void onAuthenticationSuccess(HttpServletRequest request,
                 HttpServletResponse response, Authentication authentication)
                 throws IOException, jakarta.servlet.ServletException {
-            final var savedRequest = requestCache.getRequest(request, response);
-
-            if (savedRequest == null) {
-                response.sendRedirect(Constant.HOME_PAGE_URL);
-                return;
-            }
-
-            final var targetUrl = savedRequest.getRedirectUrl();
-            response.sendRedirect(targetUrl);
+            response.sendRedirect(Constant.HOME_PAGE_URL);
         }
     }
 

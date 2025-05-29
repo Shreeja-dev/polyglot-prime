@@ -2,10 +2,13 @@ package org.techbd.service.http;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.jetbrains.annotations.NotNull;
 import org.springframework.lang.NonNull;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -54,24 +57,52 @@ public class GitHubUserAuthorizationFilter extends OncePerRequestFilter {
             @NotNull FilterChain filterChain)
             throws ServletException, IOException {
         final var sessionUser = getAuthenticatedUser(request);
-        if (sessionUser.isEmpty()) {
-            final var authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication != null && authentication.isAuthenticated()
-                    && !"anonymousUser".equals(authentication.getPrincipal().toString())) {
-                final var gitHubPrincipal = (DefaultOAuth2User) authentication.getPrincipal();
-                final var gitHubLoginId = Optional.ofNullable(gitHubPrincipal.getAttribute("login")).orElseThrow();
-                final var gitHubAuthnUser = gitHubUsers.isAuthorizedUser(gitHubLoginId.toString());
-                if (!gitHubAuthnUser.isPresent()) {
-                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    response.setContentType("text/html");
-                    response.getWriter().write("GitHub ID " + gitHubLoginId
-                            + " does not have permission to access this resource. Please fill out the <a href=\"https://techbd.org/submit-form/access-request\" target=\"_blank\"> Access Request Form </a> to request access. Once submitted, Tech by Design Support will review your request. For further assistance, contact Tech by Design Support at <<a href=\"mailto:"
-                            + supportEmailDisplayName + "\">" + supportEmail + "</a>>.");
-                    return;
-                }
-                setAuthenticatedUser(request, new AuthenticatedUser(gitHubPrincipal, gitHubAuthnUser.orElseThrow()));
-            }
+   if (sessionUser.isEmpty()) {
+    final var authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (authentication != null && authentication.isAuthenticated()
+            && !"anonymousUser".equals(authentication.getPrincipal().toString())) {
+
+        Object principal = authentication.getPrincipal();
+        String gitHubLoginId;
+
+        if (principal instanceof DefaultOAuth2User oauth2User) {
+            gitHubLoginId = Optional.ofNullable(oauth2User.getAttribute("login"))
+                                    .map(Object::toString)
+                                    .orElse(null);
+        } else if (principal instanceof String mockUser) {
+            // fallback for mocked user, such as "Shreeja-dev"
+            gitHubLoginId = mockUser;
+        } else {
+            gitHubLoginId = authentication.getName(); // general fallback
         }
+
+        if (gitHubLoginId == null) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.getWriter().write("Missing GitHub login ID.");
+            return;
+        }
+
+        final var gitHubAuthnUser = gitHubUsers.isAuthorizedUser(gitHubLoginId);
+        if (!gitHubAuthnUser.isPresent()) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setContentType("text/html");
+            response.getWriter().write("GitHub ID " + gitHubLoginId
+                    + " does not have permission to access this resource. Please fill out the <a href=\"https://techbd.org/submit-form/access-request\" target=\"_blank\"> Access Request Form </a> to request access. Once submitted, Tech by Design Support will review your request. For further assistance, contact Tech by Design Support at <<a href=\"mailto:"
+                    + supportEmailDisplayName + "\">" + supportEmail + "</a>>.");
+            return;
+        }
+
+        // Use a dummy OAuth2User when mocking
+        OAuth2User oauth2Principal = (principal instanceof OAuth2User)
+                ? (OAuth2User) principal
+                : new DefaultOAuth2User(
+                    List.of(new SimpleGrantedAuthority("ROLE_USER")),
+                    Map.of("login", gitHubLoginId),
+                    "login");
+
+        setAuthenticatedUser(request, new AuthenticatedUser(oauth2Principal, gitHubAuthnUser.get()));
+    }
+}
 
         if (request.getRequestURI().startsWith("/actuator")) {
             Optional<AuthenticatedUser> userOptional = getAuthenticatedUser(request);
