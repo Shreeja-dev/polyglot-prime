@@ -325,19 +325,19 @@
   - `type` string
   - `constraints`:
     - `required` True
-    - `enum` ['96777-8', '97023-6', 'nysahchrsn']
+    - `enum` ['96777-8', '97023-6', 'nysahchrsn', 'nys-ahc-hrsn']
 ### `SCREENING_CODE_DESCRIPTION`
   - `description` Bundle.entry.resource.where(resourceType ='Observation' and hasMember.exists()).code.coding.display
   - `type` string
   - `constraints`:
     - `required` True
-    - `enum` ['accountable health communities (ahc) health-related social needs screening (hrsn) tool', 'accountable health communities (ahc) health-related social needs (hrsn) supplemental questions', 'nys accountable health communities (ahc) health-related social needs (hrsn) screening tool']
+    - `enum` ['accountable health communities (ahc) health-related social needs screening (hrsn) tool', 'accountable health communities (ahc) health-related social needs (hrsn) supplemental questions', 'nys accountable health communities (ahc) health-related social needs (hrsn) screening tool', 'nys accountable health communities (ahc) health-related social needs screening (hrsn) tool']
 ### `SCREENING_CODE_SYSTEM`
   - `description` Bundle.entry.resource.where(resourceType ='Observation' and hasMember.exists()).code.coding.system
   - `type` string
   - `constraints`:
     - `required` True
-    - `enum` ['http://loinc.org', 'https://shinny.org/us/ny/hrsn/index.html']
+    - `enum` ['http://loinc.org', 'https://shinny.org/us/ny/hrsn/index.html', 'http://test.shinny.org/us/ny/hrsn/codesystem/nys-hrsn-questionnaire', 'http://shinny.org/us/ny/hrsn/codesystem/nys-hrsn-questionnaire']
 ### `QUESTION_CODE`
   - `description` Bundle.entry.resource.where(resourceType ='Observation' and not(hasMember.exists())).code.coding.code
   - `type` string

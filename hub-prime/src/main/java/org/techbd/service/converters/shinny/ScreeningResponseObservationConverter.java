@@ -103,7 +103,11 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
                         String fullUrl = "http://shinny.org/us/ny/hrsn/Observation/" + observationIdHashed;
                         setMeta(observation,baseFHIRUrl);
                         Meta meta = observation.getMeta();
-                        meta.setLastUpdated(DateUtil.convertStringToDate(screeningProfileData.getScreeningLastUpdated()));
+                        if (StringUtils.isNotEmpty(screeningProfileData.getScreeningLastUpdated())) {
+                                meta.setLastUpdated(DateUtil.convertStringToDate(screeningProfileData.getScreeningLastUpdated()));
+                        } else {
+                                meta.setLastUpdated(new Date());
+                        }
                         populateScreeningIdentifier(observation, data);
                         // max date
                         // available in all
@@ -367,9 +371,13 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
                 groupObservation.setId(observationId);
                 setMeta(groupObservation,baseFhirUrl);
                 Meta meta = groupObservation.getMeta();
-                meta.setLastUpdated(DateUtil.convertStringToDate(screeningProfileData.getScreeningLastUpdated()));
+                if (StringUtils.isNotEmpty(screeningProfileData.getScreeningLastUpdated())) {
+                        meta.setLastUpdated(
+                                        DateUtil.convertStringToDate(screeningProfileData.getScreeningLastUpdated()));
+                } else {
+                        meta.setLastUpdated(new Date());
+                }
                 groupObservation.setMeta(meta);
-
                 groupObservation.setLanguage(fetchCode(screeningProfileData.getScreeningLanguageCode(), CsvConstants.SCREENING_LANGUAGE_CODE, interactionId));
 
                 // Set status from screening profile
@@ -409,10 +417,28 @@ public class ScreeningResponseObservationConverter extends BaseConverter {
                 ScreeningObservationData firstData = groupData.stream().findFirst().orElse(null);
                 if (firstData != null) {
                     CodeableConcept code = new CodeableConcept();
-                    code.addCoding(new Coding(
-                            fetchSystem(firstData.getScreeningCodeSystem(), CsvConstants.SCREENING_CODE, interactionId),
-                            fetchCode(firstData.getScreeningCode(), CsvConstants.SCREENING_CODE, interactionId),
-                            firstData.getScreeningCodeDescription()));
+
+                        String scrngCode = fetchCode(firstData.getScreeningCode(), CsvConstants.SCREENING_CODE, interactionId);
+                        String system = fetchSystem(firstData.getScreeningCodeSystem(), CsvConstants.SCREENING_CODE, interactionId);
+                        String display = firstData.getScreeningCodeDescription();
+
+                if ("NYSAHCHRSN".equalsIgnoreCase(scrngCode) || "NYS-AHC-HRSN".equalsIgnoreCase(scrngCode)) {
+                        code.addCoding(new Coding()
+                        .setSystem("http://loinc.org")
+                        .setCode("100698-0")
+                        .setDisplay("Social Determinants of Health screening report Document"));
+
+                        code.addCoding(new Coding()
+                        .setSystem(system)
+                        .setCode(scrngCode)
+                        .setDisplay(display));
+                } else {
+                        code.addCoding(new Coding()
+                        .setSystem(system)
+                        .setCode(scrngCode)
+                        .setDisplay(display));
+                }
+
                     groupObservation.setCode(code);
                 }   
 
