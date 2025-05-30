@@ -44,6 +44,7 @@ operationOutcomeHelpUrl: "https://techbd.org/get-help/"
 dataLedgerApiUrl: https://gbp2obo8d0.execute-api.us-east-1.amazonaws.com/development/DataLedger 
 dataLedgerTracking: false
 dataLedgerDiagnostics: true
+dataLedgerApiKeySecretName: techbd-nyec-dataledger-api-key
 defaultDataLakeApiAuthn:
   mTlsStrategy: with-api-key-auth
   withApiKeyAuth:
