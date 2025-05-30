@@ -43,13 +43,15 @@ public class AppConfig {
     
     @JsonProperty("dataLedgerDiagnostics")
     private boolean dataLedgerDiagnostics; 
+    
+    @JsonProperty("dataLedgerApiKeySecretName")
+    private String dataLedgerApiKeySecretName;     
 
     @JsonProperty("ig-packages")
     private Map<String, FhirV4Config> igPackages;
     
     @JsonProperty("validation-severity-level")
     private String validationSeverityLevel;
-
 
     @Getter
     @Setter

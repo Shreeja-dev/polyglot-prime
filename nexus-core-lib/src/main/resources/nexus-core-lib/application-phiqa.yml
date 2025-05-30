@@ -1,0 +1,10 @@
+defaultDatalakeApiUrl: https://qa.hrsn.nyehealth.org/HRSNBundle
+defaultDataLakeApiAuthn:
+   mTlsStrategy: aws-secrets
+   mTlsAwsSecrets: 
+    mTlsKeySecretName: techbd-qa-client-key # The name of the AWS Secrets Manager secret that holds the mTLS private key
+    mTlsCertSecretName: techbd-qa-client-certificate  # The name of the AWS Secrets Manager secret that holds the mTLS client certificate
+dataLedgerApiUrl: https://k77kvhgmkh.execute-api.us-east-1.amazonaws.com/qa 
+dataLedgerTracking: true
+dataLedgerDiagnostics: true
+dataLedgerApiKeySecretName: techbd-nyec-dataledger-api-key

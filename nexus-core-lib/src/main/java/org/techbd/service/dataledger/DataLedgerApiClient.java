@@ -17,8 +17,11 @@ import org.techbd.config.Configuration;
 import org.techbd.config.AppConfig;
 import org.techbd.config.MirthJooqConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.SatDiagnosticDataledgerApiUpserted;
+import org.techbd.util.AWSUtil;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -86,16 +89,29 @@ public class DataLedgerApiClient {
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                 .build();
-        String curlCommand = buildCurlCommand(request, jsonPayload);
-        LOG.info("Equivalent CURL: " + curlCommand); // TODO -remove after testing
+        String dataLedgerApiKey = AWSUtil.getValue(appConfig.getDataLedgerApiKeySecretName());
+        LOG.info("DataLedger Api Key fetched from Secret Manager:" +dataLedgerApiKey == null ? "null" : "not null");        
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(request.uri())
+                .headers(request.headers().map().entrySet().stream()
+                        .flatMap(e -> e.getValue().stream().map(v -> new String[] { e.getKey(), v }))
+                        .flatMap(arr -> java.util.stream.Stream.of(arr))
+                        .toArray(String[]::new))
+                .method(request.method(), request.bodyPublisher().orElse(HttpRequest.BodyPublishers.noBody())); // safer
+                                                                                                                // get()
+
+        if (dataLedgerApiKey != null) {
+            requestBuilder.header("x-api-key", dataLedgerApiKey);
+        }
+
+        request = requestBuilder.build();
 
         CompletableFuture<Void> future = HttpClient.newHttpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenAccept(response -> {
+            .thenAccept(response -> {
                     boolean isSuccess = response.statusCode() >= 200 && response.statusCode() < 300;
                     LOG.info("Data Ledger API response code : " + response.statusCode() + " for interactionId : "
                             + interactionId);
-                    LOG.info("Data Ledger API response body : " + response.body() + " for interactionId : "
-                            + interactionId);
+                    // LOG.info("Data Ledger API response body : " + response.body() + " for interactionId : "
+                    //         + interactionId);
                     if (appConfig.isDataLedgerDiagnostics()) {
                         processActionDiagnosticData(interactionId, apiUrl, jsonPayload, response, null,
                                 groupHubInteractionId, sourceHubInteractionId, action, provenance, source,
@@ -112,21 +128,6 @@ public class DataLedgerApiClient {
                     }
                     return null;
                 });
-    }
-
-    private static String buildCurlCommand(HttpRequest request, String body) {
-        StringBuilder curl = new StringBuilder("curl -X ").append(request.method());
-        request.headers().map().forEach((key, values) -> {
-            String headerString = values.stream().map(value -> "-H \"" + key + ": " + value + "\"")
-                    .collect(Collectors.joining(" "));
-            curl.append(" ").append(headerString);
-        });
-        curl.append(" \"").append(request.uri()).append("\"");
-        if (body != null && !body.isEmpty()) {
-            curl.append(" -d '").append(body.replace("'", "\\'")).append("'");
-        }
-
-        return curl.toString();
     }
 
     private void saveSentActionDiagnosticData(String interactionId, String apiUrl, String requestPayload,
@@ -284,7 +285,7 @@ public class DataLedgerApiClient {
 
     @Getter
     public enum Actor {
-        TECHBD("TechBD-devl"),
+        TECHBD("TechBD"),
         NYEC("NYeC"),
         INVALID_CSV("Invalid - Csv Conversion Failed"),
         INVALID_CCDA("Invalid - CCDA Conversion Failed");
