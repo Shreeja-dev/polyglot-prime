@@ -45,7 +45,7 @@ public class AppConfig {
     private boolean dataLedgerDiagnostics; 
     
     @JsonProperty("dataLedgerApiKeySecretName")
-    private boolean dataLedgerApiKeySecretName;     
+    private String dataLedgerApiKeySecretName;     
 
     @JsonProperty("ig-packages")
     private Map<String, FhirV4Config> igPackages;

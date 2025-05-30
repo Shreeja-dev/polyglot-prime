@@ -389,11 +389,11 @@ public class FHIRService {
                 prepareRequest(rihr, rre, provenance, requestParameters, interactionId, groupInteractionId,
                         masterInteractionId, sourceType, requestUriToBeOverriden,tenantId);
                 final var start = Instant.now();
-                int noOfRecordsUpdated = rihr.execute(jooqCfg);
+                rihr.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "FHIRService:: processBundle  - Time taken : {} milliseconds  and no of records updated : {} for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
-                        Duration.between(start, end).toMillis(),noOfRecordsUpdated,
+                        "FHIRService:: processBundle  - Time taken : {} milliseconds  for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
+                        Duration.between(start, end).toMillis(),
                         rre.interactionId().toString());
                 JsonNode payloadWithDisposition = rihr.getReturnValue();
                 LOG.info("FHIRService :: registerBundleInteraction  REGISTER State None, Accept, Disposition: END for interaction id: {} ",
@@ -1232,11 +1232,11 @@ public class FHIRService {
                 initRIHR.setCreatedBy(FHIRService.class.getName());
                 initRIHR.setProvenance(provenance);
                 final var start = Instant.now();
-                final var noOfRecordsUpdated = initRIHR.execute(jooqCfg);
+                initRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "REGISTER State Forward : END  No of Records Updated :{} for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
-                        , noOfRecordsUpdated,
+                        "REGISTER State Forward : END  for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
+                        , 
                         bundleAsyncInteractionId, tenantId,
                         Duration.between(start, end).toMillis());
             } catch (Exception e) {
@@ -1285,11 +1285,10 @@ public class FHIRService {
                 forwardRIHR.setCreatedBy(FHIRService.class.getName());
                 forwardRIHR.setProvenance(provenance);
                 final var start = Instant.now();
-                final var noOfRecordsUpdated = forwardRIHR.execute(jooqCfg);
+                forwardRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "REGISTER State Complete : END .No of records Updated : {} for interaction id : {} tenant id : {} .Time Taken : {} milliseconds"
-                        , noOfRecordsUpdated,
+                        "REGISTER State Complete : END for interaction id : {} tenant id : {} .Time Taken : {} milliseconds", 
                         bundleAsyncInteractionId, tenantId,
                         Duration.between(start, end).toMillis());
             } catch (Exception e) {
@@ -1339,12 +1338,11 @@ public class FHIRService {
                 forwardRIHR.setCreatedBy(FHIRService.class.getName());
                 forwardRIHR.setProvenance(provenance);
                 final var start = Instant.now();
-                final var noOfRecordsUpdated = forwardRIHR.execute(jooqCfg);
+                forwardRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "REGISTER State Fail : END .No of records Updated:{} for interaction id : {} tenant id : {} .Time Taken : {} milliseconds"
-                        , noOfRecordsUpdated,
-                        bundleAsyncInteractionId, tenantId,
+                        "REGISTER State Fail : END for interaction id : {} tenant id : {} .Time Taken : {} milliseconds"
+                        ,bundleAsyncInteractionId, tenantId,
                         Duration.between(start, end).toMillis());
             } catch (Exception e) {
                 LOG.error("ERROR:: REGISTER State Fail CALL for interaction id : {} tenant id : {} "
@@ -1437,11 +1435,10 @@ public class FHIRService {
                 errorRIHR.setCreatedBy(FHIRService.class.getName());
                 errorRIHR.setProvenance(provenance);
                 final var start = Instant.now();
-                final var noOfRecordsUpdated = errorRIHR.execute(jooqCfg);
+               errorRIHR.execute(jooqCfg);
                 final var end = Instant.now();
-                LOG.error("Register State Failure - END .No of records Updated : {} for interaction id : {} tenant id : {} forwardRIHR execResult"
+                LOG.error("Register State Failure - END for interaction id : {} tenant id : {} forwardRIHR execResult"
                          + ". Time Taken : {} milliseconds ",
-                        noOfRecordsUpdated,
                         bundleAsyncInteractionId,
                         tenantId, Duration.between(start, end).toMillis());
             } catch (Exception e) {
