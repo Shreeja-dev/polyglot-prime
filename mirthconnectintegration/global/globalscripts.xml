@@ -78,8 +78,10 @@ if (!globalMap.containsKey(&quot;appConfig&quot;)) {
 
 if (!globalMap.containsKey(&quot;fhirService&quot;)) {
     var fhirService = new Packages.org.techbd.service.fhir.FHIRService();
-    var orchestrationEngine = new Packages.org.techbd.service.fhir.engine.OrchestrationEngine();
+    var orchestrationEngine = new Packages.org.techbd.service.fhir.engine.OrchestrationEngine(appConfig);
+    var dataLedgerApiClient = new Packages.org.techbd.service.dataledger.DataLedgerApiClient(appConfig);
     fhirService.setAppConfig(appConfig);
+    fhirService.setDataLedgerApiClient(dataLedgerApiClient);
     fhirService.setEngine(orchestrationEngine);
     globalMap.put(&quot;fhirService&quot;, fhirService);
 }
@@ -151,14 +153,14 @@ function getRequestParameters(interactionId, channelMap, sourceMap) {
     var remoteAddress = sourceMap.get(&apos;remoteAddress&apos;);
     var origin = &quot;HTTP&quot;;
     var source = &quot;FHIR&quot;;
-
+ logger.info(&quot;############################################################requestUri =&quot; +requestUri);
     if (parameters &amp;&amp; parameters.getParameter(&quot;origin&quot;)) {
         origin = parameters.getParameter(&quot;origin&quot;).trim();
     }
     if (parameters &amp;&amp; parameters.getParameter(&quot;source&quot;)) {
         source = parameters.getParameter(&quot;source&quot;).trim();
     }
-
+	
     if (requestUri &amp;&amp; requestUri.trim() !== &quot;&quot;) {
         requestParameters.put(Packages.org.techbd.config.Constants.REQUEST_URI, requestUri.trim());
     }
@@ -404,6 +406,9 @@ function validate(paramName, paramValue, validationRule, responseMap, statusCode
  */
 globalMap.put(&quot;processFHIRBundle&quot;, function(tenantId, channelMap, connectorMessage, responseMap) {
     var fhirService = globalMap.get(&quot;fhirService&quot;);
+    logger.info(&quot;fhirService.orchestraionengin&quot;+fhirService.getEngine());
+    logger.info(&quot;fhirService.orchestraionengin.appConfig&quot;+fhirService.getEngine().getAppConfig());
+    logger.info(&quot;fhirService.appConfig&quot;+fhirService.getAppConfig());
     var convertMapToJson = globalMap.get(&quot;convertMapToJson&quot;);
 
     if (!fhirService || !convertMapToJson) {

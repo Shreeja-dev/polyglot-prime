@@ -50,8 +50,10 @@ if (!globalMap.containsKey("appConfig")) {
 
 if (!globalMap.containsKey("fhirService")) {
     var fhirService = new Packages.org.techbd.service.fhir.FHIRService();
-    var orchestrationEngine = new Packages.org.techbd.service.fhir.engine.OrchestrationEngine();
+    var orchestrationEngine = new Packages.org.techbd.service.fhir.engine.OrchestrationEngine(appConfig);
+    var dataLedgerApiClient = new Packages.org.techbd.service.dataledger.DataLedgerApiClient(appConfig);
     fhirService.setAppConfig(appConfig);
+    fhirService.setDataLedgerApiClient(dataLedgerApiClient);
     fhirService.setEngine(orchestrationEngine);
     globalMap.put("fhirService", fhirService);
 }
@@ -123,14 +125,14 @@ function getRequestParameters(interactionId, channelMap, sourceMap) {
     var remoteAddress = sourceMap.get('remoteAddress');
     var origin = "HTTP";
     var source = "FHIR";
-
+ logger.info("############################################################requestUri =" +requestUri);
     if (parameters && parameters.getParameter("origin")) {
         origin = parameters.getParameter("origin").trim();
     }
     if (parameters && parameters.getParameter("source")) {
         source = parameters.getParameter("source").trim();
     }
-
+	
     if (requestUri && requestUri.trim() !== "") {
         requestParameters.put(Packages.org.techbd.config.Constants.REQUEST_URI, requestUri.trim());
     }
@@ -376,6 +378,9 @@ function validate(paramName, paramValue, validationRule, responseMap, statusCode
  */
 globalMap.put("processFHIRBundle", function(tenantId, channelMap, connectorMessage, responseMap) {
     var fhirService = globalMap.get("fhirService");
+    logger.info("fhirService.orchestraionengin"+fhirService.getEngine());
+    logger.info("fhirService.orchestraionengin.appConfig"+fhirService.getEngine().getAppConfig());
+    logger.info("fhirService.appConfig"+fhirService.getAppConfig());
     var convertMapToJson = globalMap.get("convertMapToJson");
 
     if (!fhirService || !convertMapToJson) {

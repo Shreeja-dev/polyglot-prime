@@ -1,6 +1,7 @@
 var logInfo = globalMap.get("logInfo");
 var logError = globalMap.get("logError");
 var logDebug = globalMap.get("logDebug");
+ logError("processFHIRBundle function not found in globalMap.",channelMap);
 var processFHIRBundle = globalMap.get("processFHIRBundle");
 if (processFHIRBundle) {
     var tenantId = $('headers').getHeader('X-TechBD-Tenant-ID');
