@@ -3,8 +3,7 @@
 var BufferedOutputStream = Packages.java.io.BufferedOutputStream;
 var ObjectMapper = Packages.com.fasterxml.jackson.databind.ObjectMapper;
 var JavaTimeModule = Packages.com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-var FHIRUtil = Packages.org.techbd.util.fhir.FHIRUtil;
-
+var SpringContextHolder = Packages.org.techbd.SpringContextHolder;
 /*************************************GLOBAL OBJECTS CREATION  -BEGIN ***************************************************************
  * This block is responsible for initializing and storing singleton-like Java objects  
  * in `globalMap`. Objects that need to be instantiated only once for the application's  
@@ -40,19 +39,9 @@ var FHIRUtil = Packages.org.techbd.util.fhir.FHIRUtil;
  * fhirService.processFHIRData(someData);
  * ```
  */
-if (!globalMap.containsKey("appConfig")) {
-    var confLoader = new Packages.org.techbd.config.ConfigLoader();
-    var appConfig = confLoader.loadConfig("dev"); // TODO: Read env from an environment variable
-    
-    globalMap.put("appConfig", appConfig);
-    FHIRUtil.initialize(appConfig);
-}
 
 if (!globalMap.containsKey("fhirService")) {
-    var fhirService = new Packages.org.techbd.service.fhir.FHIRService();
-    var orchestrationEngine = new Packages.org.techbd.service.fhir.engine.OrchestrationEngine();
-    fhirService.setAppConfig(appConfig);
-    fhirService.setEngine(orchestrationEngine);
+    var fhirService = SpringContextHolder.getBean(Packages.org.techbd.service.fhir.FHIRService);
     globalMap.put("fhirService", fhirService);
 }
 
@@ -121,16 +110,17 @@ function getRequestParameters(interactionId, channelMap, sourceMap) {
     var protocol = sourceMap.get('protocol');
     var localAddress = sourceMap.get('localAddress');
     var remoteAddress = sourceMap.get('remoteAddress');
-    var origin = "HTTP";
-    var source = "FHIR";
-
+    var SourceType = Packages.org.techbd.config.SourceType;
+    var Origin = Packages.org.techbd.config.Origin;
+    var origin = Origin.HTTP.name();
+    var source = SourceType.FHIR.name(); //Add source accordingly in preprocessor of respective channels.Default value is FHIR
     if (parameters && parameters.getParameter("origin")) {
         origin = parameters.getParameter("origin").trim();
     }
     if (parameters && parameters.getParameter("source")) {
         source = parameters.getParameter("source").trim();
     }
-
+	
     if (requestUri && requestUri.trim() !== "") {
         requestParameters.put(Packages.org.techbd.config.Constants.REQUEST_URI, requestUri.trim());
     }
@@ -376,6 +366,9 @@ function validate(paramName, paramValue, validationRule, responseMap, statusCode
  */
 globalMap.put("processFHIRBundle", function(tenantId, channelMap, connectorMessage, responseMap) {
     var fhirService = globalMap.get("fhirService");
+    logger.info("fhirService.orchestraionengin"+fhirService.getEngine());
+//    logger.info("fhirService.orchestraionengin.appConfig"+fhirService.getEngine().getAppConfig());
+//    logger.info("fhirService.appConfig"+fhirService.getAppConfig());
     var convertMapToJson = globalMap.get("convertMapToJson");
 
     if (!fhirService || !convertMapToJson) {
@@ -386,6 +379,7 @@ globalMap.put("processFHIRBundle", function(tenantId, channelMap, connectorMessa
     var requestParameters = channelMap.get("requestParameters");
     var headerParameters = channelMap.get("headerParameters");
     var responseParameters = new Packages.java.util.HashMap();
+    logger.info("payload"+connectorMessage.getRawData());
     var bundleJson = JSON.parse(connectorMessage.getRawData());
     var validationResults = fhirService.processBundle(
         connectorMessage.getRawData(), 
