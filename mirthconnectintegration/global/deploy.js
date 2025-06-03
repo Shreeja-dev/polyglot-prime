@@ -121,6 +121,7 @@ function getRequestParameters(interactionId, channelMap, sourceMap) {
         source = parameters.getParameter("source").trim();
     }
 	
+	
     if (requestUri && requestUri.trim() !== "") {
         requestParameters.put(Packages.org.techbd.config.Constants.REQUEST_URI, requestUri.trim());
     }

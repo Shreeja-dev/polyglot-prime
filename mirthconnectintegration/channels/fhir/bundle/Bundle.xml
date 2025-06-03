@@ -3,7 +3,7 @@
   <nextMetaDataId>2</nextMetaDataId>
   <name>Bundle</name>
   <description></description>
-  <revision>32</revision>
+  <revision>33</revision>
   <sourceConnector version="4.5.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -32,13 +32,13 @@
         <queueBufferSize>1000</queueBufferSize>
       </sourceConnectorProperties>
       <xmlBody>false</xmlBody>
-      <parseMultipart>true</parseMultipart>
+      <parseMultipart>false</parseMultipart>
       <includeMetadata>false</includeMetadata>
-      <binaryMimeTypes>application/.*(?&lt;!json|xml)$|image/.*|video/.*|audio/.*</binaryMimeTypes>
-      <binaryMimeTypesRegex>true</binaryMimeTypesRegex>
-      <responseContentType>text/plain</responseContentType>
+      <binaryMimeTypes></binaryMimeTypes>
+      <binaryMimeTypesRegex>false</binaryMimeTypesRegex>
+      <responseContentType>application/json</responseContentType>
       <responseDataTypeBinary>false</responseDataTypeBinary>
-      <responseStatusCode></responseStatusCode>
+      <responseStatusCode>200</responseStatusCode>
       <responseHeaders class="linked-hash-map">
         <entry>
           <string>Access-Control-Allow-Origin</string>
@@ -49,27 +49,27 @@
         <entry>
           <string>Access-Control-Allow-Methods</string>
           <list>
-            <string>GET, POST, OPTIONS </string>
+            <string>POST</string>
           </list>
         </entry>
         <entry>
           <string>Access-Control-Allow-Headers</string>
           <list>
-            <string>Content-Type, Authorization, X-TechBD-Base-FHIR-URL, X-TechBD-Tenant-ID, User-Agent, X-TechBD-REMOTE-IP, X-TechBD-Override-Request-URI, X-Correlation-ID, accept </string>
+            <string>Content-Type, Authorization, X-TechBD-Base-FHIR-URL, X-TechBD-Tenant-ID, User-Agent, X-TechBD-REMOTE-IP, X-TechBD-Override-Request-URI, X-Correlation-ID, accept</string>
           </list>
         </entry>
         <entry>
           <string>Access-Control-Expose-Headers</string>
           <list>
-            <string>Location, X-TechBD-Tenant-ID, User-Agent, X-TechBD-REMOTE-IP, X-TechBD-Override-Request-URI,X-Correlation-ID,X-TechBD-HealthCheck</string>
+            <string>X-TechBD-Tenant-ID, User-Agent, X-TechBD-REMOTE-IP, X-TechBD-Override-Request-URI</string>
           </list>
         </entry>
       </responseHeaders>
       <responseHeadersVariable></responseHeadersVariable>
       <useResponseHeadersVariable>false</useResponseHeadersVariable>
-      <charset>UTF-8</charset>
-      <contextPath>/Bundle/$validate/</contextPath>
-      <timeout>30000</timeout>
+      <charset>DEFAULT_ENCODING</charset>
+      <contextPath>/Bundle/</contextPath>
+      <timeout>10000</timeout>
       <staticResources/>
     </properties>
     <transformer version="4.5.0">
@@ -85,7 +85,6 @@ var logError = globalMap.get(&quot;logError&quot;);
 var processFHIRBundle = globalMap.get(&quot;processFHIRBundle&quot;);
 if (processFHIRBundle) {
     var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
-    channelMap.put(&quot;requestUri&quot;,&quot;/Bundle&quot;);
     var validationResults = processFHIRBundle(tenantId, channelMap, connectorMessage, responseMap);
     responseMap.put(&quot;resultJSON&quot;,validationResults);
 } else {
@@ -257,7 +256,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1742452317207</time>
+        <time>1748426609117</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>
@@ -266,6 +265,5 @@ return;</undeployScript>
       </pruningSettings>
       <userId>1</userId>
     </metadata>
-    <channelTags/>
   </exportData>
 </channel>

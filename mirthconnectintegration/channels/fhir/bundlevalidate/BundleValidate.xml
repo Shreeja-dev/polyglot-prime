@@ -3,7 +3,7 @@
   <nextMetaDataId>2</nextMetaDataId>
   <name>BundleValidate</name>
   <description></description>
-  <revision>56</revision>
+  <revision>57</revision>
   <sourceConnector version="4.5.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -22,54 +22,29 @@
         <respondAfterProcessing>true</respondAfterProcessing>
         <processBatch>false</processBatch>
         <firstResponse>false</firstResponse>
-        <processingThreads>1</processingThreads>
+        <processingThreads>0</processingThreads>
         <resourceIds class="linked-hash-map">
           <entry>
             <string>Default Resource</string>
             <string>[Default Resource]</string>
           </entry>
         </resourceIds>
-        <queueBufferSize>1000</queueBufferSize>
+        <queueBufferSize>0</queueBufferSize>
       </sourceConnectorProperties>
       <xmlBody>false</xmlBody>
       <parseMultipart>false</parseMultipart>
       <includeMetadata>false</includeMetadata>
       <binaryMimeTypes></binaryMimeTypes>
       <binaryMimeTypesRegex>false</binaryMimeTypesRegex>
-      <responseContentType>application/json</responseContentType>
+      <responseContentType></responseContentType>
       <responseDataTypeBinary>false</responseDataTypeBinary>
-      <responseStatusCode>200</responseStatusCode>
-      <responseHeaders class="linked-hash-map">
-        <entry>
-          <string>Access-Control-Allow-Origin</string>
-          <list>
-            <string>*</string>
-          </list>
-        </entry>
-        <entry>
-          <string>Access-Control-Allow-Methods</string>
-          <list>
-            <string>POST</string>
-          </list>
-        </entry>
-        <entry>
-          <string>Access-Control-Allow-Headers</string>
-          <list>
-            <string>Content-Type, Authorization, X-TechBD-Base-FHIR-URL, X-TechBD-Tenant-ID, User-Agent, X-TechBD-REMOTE-IP, X-TechBD-Override-Request-URI, X-Correlation-ID, accept</string>
-          </list>
-        </entry>
-        <entry>
-          <string>Access-Control-Expose-Headers</string>
-          <list>
-            <string>X-TechBD-Tenant-ID, User-Agent, X-TechBD-REMOTE-IP, X-TechBD-Override-Request-URI</string>
-          </list>
-        </entry>
-      </responseHeaders>
+      <responseStatusCode></responseStatusCode>
+      <responseHeaders class="linked-hash-map"/>
       <responseHeadersVariable></responseHeadersVariable>
       <useResponseHeadersVariable>false</useResponseHeadersVariable>
       <charset>DEFAULT_ENCODING</charset>
-      <contextPath>/Bundle/</contextPath>
-      <timeout>10000</timeout>
+      <contextPath></contextPath>
+      <timeout></timeout>
       <staticResources/>
     </properties>
     <transformer version="4.5.0">
@@ -81,6 +56,7 @@
           <script>var logInfo = globalMap.get(&quot;logInfo&quot;);
 var logError = globalMap.get(&quot;logError&quot;);
 var logDebug = globalMap.get(&quot;logDebug&quot;);
+ logError(&quot;processFHIRBundle function not found in globalMap.&quot;,channelMap);
 var processFHIRBundle = globalMap.get(&quot;processFHIRBundle&quot;);
 if (processFHIRBundle) {
     var tenantId = $(&apos;headers&apos;).getHeader(&apos;X-TechBD-Tenant-ID&apos;);
@@ -250,7 +226,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1742372556091</time>
+        <time>1745303198349</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>
