@@ -57,13 +57,15 @@ public class CsvService {
         try {
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
-            saveArchiveInteraction(jooqCfg, request, file, tenantId,origin,sftpSessionId);
+            final var zipFileInteractionId = requestParameters.get(Constants.MASTER_INTERACTION_ID);
+            saveArchiveInteraction(zipFileInteractionId,jooqCfg, requestParameters, headerParameters, file);
             session = engine.session()
-                    .withMasterInteractionId(getBundleInteractionId(request))
+                    .withMasterInteractionId(zipFileInteractionId)
                     .withSessionId(UUID.randomUUID().toString())
-                    .withTenantId(tenantId)
+                    .withTenantId(requestParameters.get(Constants.TENANT_ID))
                     .withFile(file)
-                    .withRequest(request)
+                    .withRequestParameters(requestParameters)
+                    .withHeaderParameters(headerParameters)
                     .build();
             engine.orchestrate(session);
             return session.getValidationResults();
@@ -79,16 +81,16 @@ public class CsvService {
                 .toString();
     }
 
-    private void saveArchiveInteraction(String interactionId,final org.jooq.Configuration jooqCfg, final Map<String,String> requestParameters,Map<String,String> headerParameters,
-    Map<String,Object> resonseParameters, final MultipartFile file) {
+    private void saveArchiveInteraction(String zipFileInteractionId,final org.jooq.Configuration jooqCfg, final Map<String,String> requestParameters,Map<String,String> headerParameters,
+    final MultipartFile file) {
         final var tenantId = requestParameters.get(Constants.TENANT_ID  );
         LOG.info("REGISTER State NONE : BEGIN for inteaction id  : {} tenant id : {}",
-                interactionId, r);
+                zipFileInteractionId, requestParameters.get(Constants.TENANT_ID));
         final var forwardedAt = OffsetDateTime.now();
         final var initRIHR = new RegisterInteractionHttpRequest();
         try {
             initRIHR.setOrigin(null == requestParameters.get(Constants.ORIGIN) ? Origin.HTTP.name():requestParameters.get(Constants.ORIGIN));
-            initRIHR.setInteractionId(interactionId);
+            initRIHR.setInteractionId(zipFileInteractionId);
             initRIHR.setInteractionKey(requestParameters.get(Constants.REQUEST_URI));
             initRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
                     Map.of("nature", "Original CSV Zip Archive", "tenant_id",
@@ -104,7 +106,7 @@ public class CsvService {
             initRIHR.setCreatedBy(CsvService.class.getName());
             final var provenance = "%s.saveArchiveInteraction".formatted(CsvService.class.getName());
             initRIHR.setProvenance(provenance);
-            initRIHR.setCsvGroupId(interactionId);
+            initRIHR.setCsvGroupId(zipFileInteractionId);
             if (saveUserDataToInteractions) {
                 setUserDetails(initRIHR, requestParameters);
             }
@@ -114,11 +116,11 @@ public class CsvService {
             LOG.info(
                     "REGISTER State NONE : END for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
                             + execResult,
-                    interactionId, tenantId,
+                    zipFileInteractionId, tenantId,
                     Duration.between(start, end).toMillis());
         } catch (final Exception e) {
             LOG.error("ERROR:: REGISTER State NONE CALL for interaction id : {} tenant id : {}"
-                    + initRIHR.getName() + " initRIHR error", interactionId,
+                    + initRIHR.getName() + " initRIHR error", zipFileInteractionId,
                     tenantId,
                     e);
         }
@@ -128,45 +130,50 @@ public class CsvService {
         rihr.setUserName(StringUtils.isEmpty(requestParameters.get(Constants.USER_NAME)) ? Constants.DEFAULT_USER_NAME : requestParameters.get(Constants.USER_NAME));
         rihr.setUserId(StringUtils.isEmpty(requestParameters.get(Constants.USER_ID)) ? Constants.DEFAULT_USER_ID : requestParameters.get(Constants.USER_ID));
         rihr.setUserSession(UUID.randomUUID().toString());
-        rihr.setUserRole(StringUtils.isEmpty(requestParameters.get(Constants.USER_ROLE)) ? Constants.DEFAULT_USER_ROLE : requestParameters.get(Constants.USER_ROLE);
+        rihr.setUserRole(StringUtils.isEmpty(requestParameters.get(Constants.USER_ROLE)) ? Constants.DEFAULT_USER_ROLE : requestParameters.get(Constants.USER_ROLE));
     }    
 
-    /**
-     * Processes a Zip file uploaded as a MultipartFile and extracts data into
-     * corresponding lists.
-     *
-     * @param file The uploaded zip file (MultipartFile).
-     * @throws Exception If an error occurs during processing the zip file or CSV
-     *                   parsing.
-     */
-    public List<Object> processZipFile(final MultipartFile file,final HttpServletRequest request ,HttpServletResponse response ,final String tenantId,String origin,String sftpSessionId,String baseFHIRUrl) throws Exception {
-        CsvOrchestrationEngine.OrchestrationSession session = null;
-        try {
-            final String masterInteractionId = getBundleInteractionId(request);
-             DataLedgerPayload dataLedgerPayload = DataLedgerPayload.create(tenantId, DataLedgerApiClient.Action.RECEIVED.getValue(), DataLedgerApiClient.Actor.TECHBD.getValue(), masterInteractionId
-			);
-			final var dataLedgerProvenance = "%s.processZipFile".formatted(CsvService.class.getName());
-            dataLedgerApiClient.processRequest(dataLedgerPayload,masterInteractionId,dataLedgerProvenance,SourceType.CSV.name(),null);
-            final var dslContext = udiPrimeJpaConfig.dsl();
-            final var jooqCfg = dslContext.configuration();
-            saveArchiveInteraction(jooqCfg, request, file, tenantId,origin,sftpSessionId);
-            session = engine.session()
-                    .withMasterInteractionId(masterInteractionId)
-                    .withSessionId(UUID.randomUUID().toString())
-                    .withTenantId(tenantId)
-                    .withGenerateBundle(true)
-                    .withFile(file)
-                    .withRequest(request)
-                    .build();
-            engine.orchestrate(session);
-            return csvBundleProcessorService.processPayload(masterInteractionId,
-            session.getPayloadAndValidationOutcomes(), session.getFilesNotProcessed(),request,
-             response,tenantId,file.getOriginalFilename(),baseFHIRUrl);
-        } finally {
-            if (null == session) {
-                engine.clear(session);
-            }
-        }
-    }
+    // /**
+    //  * Processes a Zip file uploaded as a MultipartFile and extracts data into
+    //  * corresponding lists.
+    //  *
+    //  * @param file The uploaded zip file (MultipartFile).
+    //  * @throws Exception If an error occurs during processing the zip file or CSV
+    //  *                   parsing.
+    //  */
+    // public List<Object> processZipFile(final MultipartFile file,final Map<String,String> requestParameters , Map<String,String> headerParameters, Map<String,Object> responseParameters ) throws Exception {
+    //     // public List<Object> processZipFile(final MultipartFile file,final HttpServletRequest request ,HttpServletResponse response ,final String tenantId,String origin,String sftpSessionId,String baseFHIRUrl) throws Exception {
+    
+    //     CsvOrchestrationEngine.OrchestrationSession session = null;
+    //     try {
+    //         final var zipFileInteractionId = requestParameters.get(Constants.MASTER_INTERACTION_ID);
+    //         final var tenantId = requestParameters.get(Constants.TENANT_ID);
+
+    //          DataLedgerPayload dataLedgerPayload = DataLedgerPayload.create(tenantId, DataLedgerApiClient.Action.RECEIVED.getValue(), DataLedgerApiClient.Actor.TECHBD.getValue(), masterInteractionId
+	// 		);
+	// 		final var dataLedgerProvenance = "%s.processZipFile".formatted(CsvService.class.getName());
+    //         dataLedgerApiClient.processRequest(dataLedgerPayload,zipFileInteractionId,dataLedgerProvenance,SourceType.CSV.name(),null);
+    //         final var dslContext = udiPrimeJpaConfig.dsl();
+    //         final var jooqCfg = dslContext.configuration();
+    //         saveArchiveInteraction(zipFileInteractionId,jooqCfg, requestParameters,headerParameters ,file);
+    //         session = engine.session()
+    //                 .withMasterInteractionId(zipFileInteractionId)
+    //                 .withSessionId(UUID.randomUUID().toString())
+    //                 .withTenantId(tenantId)
+    //                 .withGenerateBundle(true)
+    //                 .withFile(file)
+    //                 .withRequestParameters(requestParameters)
+    //                 .withHeaderParameters(headerParameters)
+    //                 .build();
+    //         engine.orchestrate(session);
+    //         return csvBundleProcessorService.processPayload(zipFileInteractionId,
+    //         session.getPayloadAndValidationOutcomes(), session.getFilesNotProcessed(),requestParameters, headerParameters,
+    //          response,tenantId,file.getOriginalFilename(),baseFHIRUrl);
+    //     } finally {
+    //         if (null == session) {
+    //             engine.clear(session);
+    //         }
+    //     }
+    // }
     
 }
