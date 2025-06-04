@@ -201,7 +201,7 @@ public class FhirController {
                         Map<String, String> headers = CoreFHIRUtil.buildHeaderParametersMap(tenantId, customDataLakeApi,
                                         dataLakeApiContentType,
                                         requestUriToBeOverridden, validationSeverityLevel, healthCheck, coRrelationId,
-                                        provenance, request.getRequestURI());
+                                        provenance);
                         Map<String, String> requestParameters = CoreFHIRUtil.buildRequestParametersMap(deleteSessionCookie,
                                         mtlsStrategy, source, null, null);
                         requestParameters.put(Constants.INTERACTION_ID,UUID.randomUUID().toString()); 

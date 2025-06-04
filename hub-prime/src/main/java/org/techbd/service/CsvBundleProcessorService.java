@@ -68,8 +68,9 @@ public class CsvBundleProcessorService {
     public List<Object> processPayload(final String masterInteractionId,
             final Map<String, PayloadAndValidationOutcome> payloadAndValidationOutcomes,
             final List<FileDetail> filesNotProcessed,
-            final HttpServletRequest request,
-            final HttpServletResponse response,
+            final Map<String,String> requestParameters,
+            final Map<String,String> headerParameters,
+            final Map<String,Object> responseParameters,
             final String tenantId, final String originalFileName,String baseFHIRUrl) {
         final List<Object> resultBundles = new ArrayList<>();
         final List<Object> miscErrors = new ArrayList<>();
@@ -106,7 +107,7 @@ public class CsvBundleProcessorService {
                             screeningObservationData);
                     if (screeningProfileData != null) {
                         resultBundles.addAll(processScreening(groupKey, demographicData, screeningProfileData,
-                                qeAdminData, screeningObservationData, request, response, groupInteractionId,
+                                qeAdminData, screeningObservationData, requestParameters, headerParameters, responseParameters, groupInteractionId,
                                 masterInteractionId,
                                 tenantId, outcome.isValid(), outcome, isAllCsvConvertedToFhir,baseFHIRUrl));
                     }
@@ -316,8 +317,9 @@ private List<Object> processScreening(final String groupKey,
             final Map<String, List<ScreeningProfileData>> screeningProfileData,
             final Map<String, List<QeAdminData>> qeAdminData,
             final Map<String, List<ScreeningObservationData>> screeningObservationData,
-            final HttpServletRequest request,
-            final HttpServletResponse response,
+            final Map<String,String> requestParameters,
+            final Map<String,String> headerParameters,
+            final Map<String,Object> responseParameters,
             final String groupInteractionId,
             final String masterInteractionId,
             final String tenantId, final boolean isValid, final PayloadAndValidationOutcome payloadAndValidationOutcome,
@@ -359,12 +361,12 @@ private List<Object> processScreening(final String groupKey,
                                 getFileNames(payloadAndValidationOutcome.fileDetails()),
                                 profile.getPatientMrIdValue(), profile.getEncounterId(), initiatedAt, completedAt);
                         saveFhirConversionStatus(isValid, masterInteractionId, groupKey, groupInteractionId,
-                                interactionId, request,
+                                interactionId, requestParameters,
                                 bundle, null, tenantId);
                         Map<String,String> headers = org.techbd.util.fhir.CoreFHIRUtil.buildHeaderParametersMap(
                             tenantId, null, null, null, null, null,
                             null, updatedProvenance, request.getRequestURI());    
-                        Map<String,String> requestParameters = org.techbd.util.fhir.CoreFHIRUtil.buildRequestParametersMap(
+                        Map<String,String> requestParameters = org.techbd.util.fhir.CoreFHIRUtil.buildRequestParametersMap(requestParameters,
                             false, null, SourceType.CSV.name(),  groupInteractionId, masterInteractionId);
                         Map<String,Object> responseParameters = new HashMap<>();      
                         results.add(fhirService.processBundle(

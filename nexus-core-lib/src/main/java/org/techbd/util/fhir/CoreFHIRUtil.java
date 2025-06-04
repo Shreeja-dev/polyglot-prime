@@ -164,10 +164,9 @@ public class CoreFHIRUtil {
         return headers;
     }
 
-    public static Map<String, String> buildRequestParametersMap(Boolean deleteSessionCookie,
+    public static Map<String, String> buildRequestParametersMap(Map<String,String> requestParameters ,Boolean deleteSessionCookie,
             String mtlsStrategy, String source, String groupInteractionId, String masterInteractionId,
             String requestUri) {
-        Map<String, String> requestParameters = new HashMap<>();
         addIfNotEmpty(requestParameters, Constants.MTLS_STRATEGY, mtlsStrategy);
         addIfNotEmpty(requestParameters, Constants.SOURCE_TYPE, source);
         addIfNotEmpty(requestParameters, Constants.GROUP_INTERACTION_ID, groupInteractionId);
