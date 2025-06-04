@@ -55,42 +55,42 @@ public class CsvController {
     }
   }
 
-  @PostMapping(value = { "/flatfile/csv/Bundle/$validate",
-      "/flatfile/csv/Bundle/$validate/" }, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  @ResponseBody
-  public Object handleCsvUpload(
-      @Parameter(description = "ZIP file containing CSV data. Must not be null.", required = true) @RequestPart("file") @Nonnull MultipartFile file,
-      @Parameter(description = "Tenant ID, a mandatory parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID) String tenantId,
-      @Parameter(hidden = true, description = "Parameter to specify origin of the request.", required = false) @RequestParam(value = "origin", required = false,defaultValue = "HTTP") String origin,
-      @Parameter(hidden = true, description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
-      HttpServletRequest request,
-      HttpServletResponse response)
-      throws Exception {
+  // @PostMapping(value = { "/flatfile/csv/Bundle/$validate",
+  //     "/flatfile/csv/Bundle/$validate/" }, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  // @ResponseBody
+  // public Object handleCsvUpload(
+  //     @Parameter(description = "ZIP file containing CSV data. Must not be null.", required = true) @RequestPart("file") @Nonnull MultipartFile file,
+  //     @Parameter(description = "Tenant ID, a mandatory parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID) String tenantId,
+  //     @Parameter(hidden = true, description = "Parameter to specify origin of the request.", required = false) @RequestParam(value = "origin", required = false,defaultValue = "HTTP") String origin,
+  //     @Parameter(hidden = true, description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
+  //     HttpServletRequest request,
+  //     HttpServletResponse response)
+  //     throws Exception {
 
-    validateFile(file);
-    validateTenantId(tenantId);
-    return csvService.validateCsvFile(file, request, response, tenantId, origin, sftpSessionId);
-  }
+  //   validateFile(file);
+  //   validateTenantId(tenantId);
+  //   return csvService.validateCsvFile(file, request, response, tenantId, origin, sftpSessionId);
+  // }
 
-  @PostMapping(value = { "/flatfile/csv/Bundle", "/flatfile/csv/Bundle/" }, consumes = {
-      MediaType.MULTIPART_FORM_DATA_VALUE })
-  @ResponseBody
-  @Async
-  public ResponseEntity<Object> handleCsvUploadAndConversion(
-      @Parameter(description = "ZIP file containing CSV data. Must not be null.", required = true) @RequestPart("file") @Nonnull MultipartFile file,
-      @Parameter(description = "Parameter to specify the Tenant ID. This is a <b>mandatory</b> parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID, required = true) String tenantId,
-      @Parameter(description = "Optional header to specify the base FHIR URL. If provided, it will be used in the generated FHIR; otherwise, the default value will be used.", required = false) @RequestHeader(value = "X-TechBD-Base-FHIR-URL", required = false) String baseFHIRURL,
-      @Parameter(hidden = true, description = "Parameter to specify origin of the request.", required = false) @RequestParam(value = "origin", required = false,defaultValue = "HTTP") String origin,
-      @Parameter(hidden = true, description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
-      @Parameter(description = "Optional header to set validation severity level (`information`, `warning`, `error`, `fatal`).", required = false) @RequestHeader(value = "X-TechBD-Validation-Severity-Level", required = false) String validationSeverityLevel,
-      HttpServletRequest request,
-      HttpServletResponse response) throws Exception {
+  // @PostMapping(value = { "/flatfile/csv/Bundle", "/flatfile/csv/Bundle/" }, consumes = {
+  //     MediaType.MULTIPART_FORM_DATA_VALUE })
+  // @ResponseBody
+  // @Async
+  // public ResponseEntity<Object> handleCsvUploadAndConversion(
+  //     @Parameter(description = "ZIP file containing CSV data. Must not be null.", required = true) @RequestPart("file") @Nonnull MultipartFile file,
+  //     @Parameter(description = "Parameter to specify the Tenant ID. This is a <b>mandatory</b> parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID, required = true) String tenantId,
+  //     @Parameter(description = "Optional header to specify the base FHIR URL. If provided, it will be used in the generated FHIR; otherwise, the default value will be used.", required = false) @RequestHeader(value = "X-TechBD-Base-FHIR-URL", required = false) String baseFHIRURL,
+  //     @Parameter(hidden = true, description = "Parameter to specify origin of the request.", required = false) @RequestParam(value = "origin", required = false,defaultValue = "HTTP") String origin,
+  //     @Parameter(hidden = true, description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
+  //     @Parameter(description = "Optional header to set validation severity level (`information`, `warning`, `error`, `fatal`).", required = false) @RequestHeader(value = "X-TechBD-Validation-Severity-Level", required = false) String validationSeverityLevel,
+  //     HttpServletRequest request,
+  //     HttpServletResponse response) throws Exception {
         
-    validateFile(file);
-    validateTenantId(tenantId);
-    FHIRUtil.validateBaseFHIRProfileUrl(appConfig, baseFHIRURL);
-    List<Object> processedFiles = csvService.processZipFile(file, request, response, tenantId, origin, sftpSessionId,baseFHIRURL);
-    return ResponseEntity.ok(processedFiles);
+  //   validateFile(file);
+  //   validateTenantId(tenantId);
+  //   FHIRUtil.validateBaseFHIRProfileUrl(appConfig, baseFHIRURL);
+  //   List<Object> processedFiles = csvService.processZipFile(file, request, response, tenantId, origin, sftpSessionId,baseFHIRURL);
+  //   return ResponseEntity.ok(processedFiles);
   
-  }
+  // }
 }
