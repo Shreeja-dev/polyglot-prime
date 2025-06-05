@@ -10,13 +10,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.techbd.conf.Configuration;
-import org.techbd.config.CoreAppConfig;
+import org.techbd.config.Constants;
 import org.techbd.service.http.hub.prime.AppConfig;
 import org.techbd.service.http.hub.prime.AppConfig.FhirV4Config;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Component
 public class FHIRUtil {
@@ -51,7 +53,7 @@ public class FHIRUtil {
         return baseFhirUrl + PROFILE_MAP.getOrDefault(key, "");
     }
 
-    public static List<String> getAllowedProfileUrls(C appConfig) {
+    public static List<String> getAllowedProfileUrls(AppConfig appConfig) {
         List<String> allowedProfileUrls = new ArrayList<>();
     
         if (appConfig.getIgPackages() != null && appConfig.getIgPackages().containsKey("fhir-v4")) {
@@ -67,7 +69,7 @@ public class FHIRUtil {
         return allowedProfileUrls;
     }
 
-    public static void validateBaseFHIRProfileUrl(CoreAppConfig appConfig, String baseFHIRProfileUrl) {
+    public static void validateBaseFHIRProfileUrl(AppConfig appConfig, String baseFHIRProfileUrl) {
         if (StringUtils.isNotEmpty(baseFHIRProfileUrl)) {
             String profileUrl = getProfileUrl(baseFHIRProfileUrl, BUNDLE);
             List<String> allowedUrls = getAllowedProfileUrls(appConfig);
@@ -89,6 +91,32 @@ public class FHIRUtil {
         } catch (Exception e) {
             LOG.error("Exception fetching bundle Id for interactionId :  ",interactionId , e.getMessage());
             return StringUtils.EMPTY;
+        }
+    }
+
+    public static void addCookieAndHeadersToResponse(HttpServletResponse response, Map<String, Object> responseParameters,
+            Map<String, String> requestParameters) {
+        if (responseParameters.get(Constants.METRIC_COOKIE) != null) {
+            response.addCookie((Cookie) responseParameters.get(Constants.METRIC_COOKIE));
+        }
+        if (responseParameters.get(Constants.HEADER) != null) {
+            response.addHeader(Constants.HEADER, responseParameters.get(Constants.HEADER).toString());
+        }
+        if (requestParameters.get(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME) != null) {
+            response.addHeader(Constants.START_TIME_ATTRIBUTE,
+                    requestParameters.get(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME));
+        }
+        if (responseParameters.get(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME) != null) {
+            response.addHeader(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME,
+                    responseParameters.get(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME).toString());
+        }
+        if (responseParameters.get(Constants.OBSERVABILITY_METRIC_INTERACTION_FINISH_TIME) != null) {
+            response.addHeader(Constants.OBSERVABILITY_METRIC_INTERACTION_FINISH_TIME,
+                    responseParameters.get(Constants.OBSERVABILITY_METRIC_INTERACTION_FINISH_TIME).toString());
+        }
+        if (responseParameters.get(Constants.OBSERVABILITY_METRIC_INTERACTION_DURATION_NANOSECS) != null) {
+            response.addHeader(Constants.OBSERVABILITY_METRIC_INTERACTION_DURATION_NANOSECS,
+                    responseParameters.get(Constants.OBSERVABILITY_METRIC_INTERACTION_DURATION_NANOSECS).toString());
         }
     }
 }

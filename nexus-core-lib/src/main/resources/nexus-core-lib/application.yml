@@ -73,3 +73,11 @@ org:
         cmd: /usr/bin/post-stdin-payload-to-nyec-datalake-qa-endpoint-via-mtls.sh
         # Wait time to receive response from scoring engine
         timeout: 180
+    csv:
+      validation:
+        pythonScriptPath: ../support/specifications/flat-file/validate-nyher-fhir-ig-equivalent.py
+        pythonExecutable: python3
+        packagePath: ../support/specifications/flat-file/datapackage-nyher-fhir-ig-equivalent.json
+        inboundPath: /app/techbyDesign/flatFile/inbound
+        outputPath: /app/techbyDesign/flatFile/outbound
+        ingessHomePath: /app/techbyDesign/flatFile/ingress       

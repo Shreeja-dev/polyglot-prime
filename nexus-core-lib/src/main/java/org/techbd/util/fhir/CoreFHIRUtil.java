@@ -23,7 +23,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 public class CoreFHIRUtil {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(CoreFHIRUtil.class);
     private final CoreAppConfig coreAppConfig;
-    private static Map<String, String> PROFILE_MAP;
+    public static Map<String, String> PROFILE_MAP;
     private static String BASE_FHIR_URL;
     public static final String BUNDLE = "bundle";
 
