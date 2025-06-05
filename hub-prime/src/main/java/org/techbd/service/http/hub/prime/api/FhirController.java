@@ -285,6 +285,7 @@ public class FhirController {
                         CoreFHIRUtil.buildRequestParametersMap(requestParameters,deleteSessionCookie,
                                         null, null,
                                         null, null, request.getRequestURI());
+                                        null, null, request.getRequestURI());
                         requestParameters.put(Constants.INTERACTION_ID,UUID.randomUUID().toString());
                         requestParameters.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
                         Map<String, Object> responseParameters = new HashMap<>();
