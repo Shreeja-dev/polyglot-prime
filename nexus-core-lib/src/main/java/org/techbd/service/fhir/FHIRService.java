@@ -210,11 +210,9 @@ public class FHIRService {
                 Map<String, Object> immediateResult = validate(requestParameters, payload, interactionId, provenance,
                         sourceType);
                 final var result = Map.of("OperationOutcome", immediateResult);
-
-				payloadWithDisposition = registerBundleInteraction(jooqCfg, headerParameters, requestParameters,
-						responseParameters,
-						payload, result, interactionId, groupInteractionId, masterInteractionId,
-						sourceType, requestUriToBeOverriden, coRrelationId);
+                payloadWithDisposition = registerBundleInteraction(jooqCfg, headerParameters, requestParameters,responseParameters,
+                         payload, result, interactionId, groupInteractionId, masterInteractionId,
+                        sourceType, requestUriToBeOverriden, coRrelationId);
                 if (StringUtils.isNotEmpty(requestUri)
                         && (requestUri.equals("/Bundle/$validate") || requestUri.equals("/Bundle/$validate/"))) {
                     return result;

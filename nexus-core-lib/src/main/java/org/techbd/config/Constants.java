@@ -57,4 +57,6 @@ public interface Constants {
     public static final String HEALTH_CHECK_HEADER = "X-TechBD-HealthCheck";
     public static final String START_TIME_ATTRIBUTE = "startTime";
     public static final String BASE_FHIR_URL = "BASE_FHIR_URL";
+    public static final String METRIC_COOKIE = "METRIC_COOKIE";
+    public static final String HEADER = "X-Observability-Metric-Interaction-Duration-Millisecs";
 }
