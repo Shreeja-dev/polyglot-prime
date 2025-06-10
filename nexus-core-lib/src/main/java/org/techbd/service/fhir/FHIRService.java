@@ -61,6 +61,7 @@ import org.techbd.service.dataledger.CoreDataLedgerApiClient;
 import org.techbd.service.dataledger.CoreDataLedgerApiClient.DataLedgerPayload;
 import org.techbd.service.fhir.engine.OrchestrationEngine;
 import org.techbd.service.fhir.engine.OrchestrationEngine.Device;
+import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionFhirRequest;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 import org.techbd.util.AWSUtil;
 import org.techbd.util.fhir.CoreFHIRUtil;
@@ -397,7 +398,7 @@ public class FHIRService {
             String groupInteractionId, String masterInteractionId, String sourceType,
             String requestUriToBeOverriden, String coRrelationId)
             throws IOException {
-        Span span = tracer.spanBuilder("FHIRMapService.registerBundleInteraction").startSpan();
+        Span span = tracer.spanBuilder("FHIRService.registerBundleInteraction").startSpan();
         try {
             final Interactions interactions = new Interactions();
             // final var mutatableReq = new ContentCachingRequestWrapper(requestParameters);
@@ -430,7 +431,7 @@ public class FHIRService {
             interactions.addHistory(rre);
             setActiveInteraction(requestParameters, rre);
             final var provenance = "%s.doFilterInternal".formatted(FHIRService.class.getName());
-            final var rihr = new RegisterInteractionHttpRequest();
+            final var rihr = new RegisterInteractionFhirRequest();
 
             try {
                 prepareRequest(rihr, rre, provenance, requestParameters, interactionId, groupInteractionId,
@@ -439,7 +440,7 @@ public class FHIRService {
                 int i = rihr.execute(jooqCfg);
                 final var end = Instant.now();
                 LOG.info(
-                        "FHIRMapService  - Time taken : {} milliseconds for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
+                        "FHIRService  - Time taken : {} milliseconds for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
                         Duration.between(start, end).toMillis(),
                         rre.interactionId().toString());
                 JsonNode payloadWithDisposition = rihr.getReturnValue();
@@ -461,37 +462,37 @@ public class FHIRService {
         }
     }
 
-    private void prepareRequest(RegisterInteractionHttpRequest rihr, RequestResponseEncountered rre,
+    private void prepareRequest(RegisterInteractionFhirRequest rihr, RequestResponseEncountered rre,
             String provenance, Map<String, String> requestParameters, String interactionId, String groupInteractionId,
             String masterInteractionId, String sourceType, String requestUriToBeOverriden) {
         LOG.info("REGISTER State None, Accept, Disposition: BEGIN for interaction id: {} tenant id: {}",
                 rre.interactionId().toString(), rre.tenant());
-        rihr.setInteractionId(interactionId != null ? interactionId : rre.interactionId().toString());
-        rihr.setGroupHubInteractionId(groupInteractionId);
-        rihr.setSourceHubInteractionId(masterInteractionId);
-        rihr.setNature((JsonNode) Configuration.objectMapper.valueToTree(
+        rihr.setPInteractionId(interactionId != null ? interactionId : rre.interactionId().toString());
+        rihr.setPGroupHubInteractionId(groupInteractionId);
+        rihr.setPSourceHubInteractionId(masterInteractionId);
+        rihr.setPNature((JsonNode) Configuration.objectMapper.valueToTree(
                 Map.of("nature", "org.techbd.service.http.Interactions$RequestResponseEncountered",
                         "tenant_id",
                         rre.tenant() != null ? (rre.tenant().tenantId() != null
                         ? rre.tenant().tenantId()
                         : "N/A") : "N/A")));
-        rihr.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
-        rihr.setInteractionKey(StringUtils.isNotEmpty(requestUriToBeOverriden) ? requestUriToBeOverriden
+        rihr.setPContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
+        rihr.setPInteractionKey(StringUtils.isNotEmpty(requestUriToBeOverriden) ? requestUriToBeOverriden
                 : requestParameters.get(Constants.REQUEST_URI));
-        rihr.setPayload((JsonNode) Configuration.objectMapper.valueToTree(rre));
-        rihr.setCreatedAt(OffsetDateTime.now());
-        rihr.setCreatedBy(FHIRService.class.getName());
-        rihr.setSourceType(sourceType);
-        rihr.setProvenance(provenance);
+        rihr.setPPayload((JsonNode) Configuration.objectMapper.valueToTree(rre));
+        //rihr.setPCreatedAt(OffsetDateTime.now());
+        rihr.setPCreatedBy(FHIRService.class.getName());
+        rihr.setPSourceType(sourceType);
+        rihr.setPProvenance(provenance);
         setUserDetails(rihr, requestParameters);
     }
 
-    private void setUserDetails(RegisterInteractionHttpRequest rihr, Map<String, String> requestParameters) {
+    private void setUserDetails(RegisterInteractionFhirRequest rihr, Map<String, String> requestParameters) {
         // final var sessionId = requestParameters.get(Constants.REQUESTED_SESSION_ID);
-        rihr.setUserName(requestParameters.get(Constants.USER_NAME));
-        rihr.setUserId(requestParameters.get(Constants.USER_ID));
-        rihr.setUserSession(UUID.randomUUID().toString());// TODO -check and add from mirth
-        rihr.setUserRole(requestParameters.get(Constants.USER_ROLE));
+        rihr.setPUserName(requestParameters.get(Constants.USER_NAME));
+        rihr.setPUserId(requestParameters.get(Constants.USER_ID));
+        rihr.setPUserSession(UUID.randomUUID().toString());// TODO -check and add from mirth
+        rihr.setPUserRole(requestParameters.get(Constants.USER_ROLE));
     }
 
     protected static final void setActiveRequestTenant(final @NonNull HttpServletRequest request,
