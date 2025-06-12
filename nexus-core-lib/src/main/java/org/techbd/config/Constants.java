@@ -52,4 +52,8 @@ public interface Constants {
     public static final String DATALAKE_API_CONTENT_TYPE = "DataLake-API-Content-Type";
     public static final String HEALTH_CHECK_HEADER = "X-TechBD-HealthCheck";
     public static final String START_TIME_ATTRIBUTE = "startTime";
+    public static final String KEY_ERROR = "error";
+    public static final String KEY_INTERACTION_ID = "interaction_id";
+    public static final String KEY_HUB_NEXUS_INTERACTION_ID = "hub_nexus_interaction_id";
+    public static final String KEY_PAYLOAD = "payload";
 }

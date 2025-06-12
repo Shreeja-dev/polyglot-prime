@@ -62,7 +62,6 @@ import org.techbd.service.dataledger.CoreDataLedgerApiClient.DataLedgerPayload;
 import org.techbd.service.fhir.engine.OrchestrationEngine;
 import org.techbd.service.fhir.engine.OrchestrationEngine.Device;
 import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionFhirRequest;
-import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
 import org.techbd.util.AWSUtil;
 import org.techbd.util.fhir.CoreFHIRUtil;
 
@@ -179,7 +178,22 @@ public class FHIRService {
 						SourceType.FHIR.name(), null);
 			}
             LOG.info("Bundle processing start at {} for interaction id {}.", interactionId);
-
+			final var dslContext = MirthJooqConfig.dsl();
+            final var jooqCfg = dslContext.configuration();
+			 registerOriginalPayload(jooqCfg, headerParameters, requestParameters,
+						responseParameters,
+						payload, result, interactionId, groupInteractionId, masterInteractionId,
+						sourceType, requestUriToBeOverriden, coRrelationId);
+						registerOriginalPayload(org.jooq.Configuration jooqCfg,
+			Map<String, String> headerParameters,
+			Map<String, String> requestParameters,
+			String payload,
+			String interactionId,
+			String groupInteractionId,
+			String masterInteractionId,
+			String sourceType,
+			String requestUriToBeOverriden,
+			String coRrelationId) t
             var dataLakeApiContentType = headerParameters.get(Constants.DATA_LAKE_API_CONTENT_TYPE);
           
             var origin = requestParameters.get(Constants.ORIGIN);
@@ -198,8 +212,7 @@ public class FHIRService {
             if (StringUtils.isNotEmpty(headerParameters.get(Constants.CORRELATION_ID))) {
                 interactionId = headerParameters.get(Constants.CORRELATION_ID);
             }
-            final var dslContext = MirthJooqConfig.dsl();
-            final var jooqCfg = dslContext.configuration();
+
             Map<String, Object> payloadWithDisposition = null;
             try {
                 validateJson(payload, interactionId);
@@ -391,109 +404,141 @@ public class FHIRService {
 		}
 	}
 
-    private Map<String, Object> registerBundleInteraction(org.jooq.Configuration jooqCfg,
-            Map<String, String> headerParameters,
-            Map<String, String> requestParameters, Map<String, Object> responseParameters,
-            String payload, Map<String, Map<String, Object>> validationResult, String interactionId,
-            String groupInteractionId, String masterInteractionId, String sourceType,
-            String requestUriToBeOverriden, String coRrelationId)
-            throws IOException {
-        Span span = tracer.spanBuilder("FHIRService.registerBundleInteraction").startSpan();
-        try {
-            final Interactions interactions = new Interactions();
-            // final var mutatableReq = new ContentCachingRequestWrapper(requestParameters);
-            RequestEncountered requestEncountered = null;
-            if (StringUtils.isNotEmpty(coRrelationId)) {
-                requestEncountered = new Interactions.RequestEncountered(requestParameters,
-                        payload.getBytes(),
-                        UUID.fromString(coRrelationId),
-                        CoreFHIRUtil.createRequestHeaders(headerParameters, requestParameters));
-            } else if (null != interactionId) {
-                // If its a converted CSV payload ,it will already have an interaction id.hence
-                // do not create new interactionId
-                requestEncountered = new Interactions.RequestEncountered(requestParameters,
-                        payload.getBytes(),
-                        UUID.fromString(interactionId),
-                        CoreFHIRUtil.createRequestHeaders(headerParameters, requestParameters));
-            } else {
-                requestEncountered = new Interactions.RequestEncountered(requestParameters,
-                        payload.getBytes());
-            }
-            // final var mutatableResp = new
-            // ContentCachingResponseWrapper(responseParameters);
-            setActiveRequestEnc(requestParameters, requestEncountered);
-            final var rre = new Interactions.RequestResponseEncountered(requestEncountered,
-                    new Interactions.ResponseEncountered(responseParameters, requestEncountered,
-                            Configuration.objectMapper
-                                    .writeValueAsBytes(validationResult),
-                            CoreFHIRUtil.createResponseHeaders(headerParameters, requestParameters)));
+	private Map<String, Object> registerOriginalPayload(org.jooq.Configuration jooqCfg,
+			Map<String, String> headerParameters,
+			Map<String, String> requestParameters,
+			String payload,
+			String interactionId,
+			String groupInteractionId,
+			String masterInteractionId,
+			String sourceType,
+			String requestUriToBeOverriden,
+			String coRrelationId) throws IOException {
+		Span span = tracer.spanBuilder("FHIRService.registerOriginalPayload").startSpan();
+		try {
+			final var rihr = new RegisterInteractionFhirRequest();
+			final var provenance = "%s.doFilterInternal".formatted(FHIRService.class.getName());
+			final var start = Instant.now();
 
-            interactions.addHistory(rre);
-            setActiveInteraction(requestParameters, rre);
-            final var provenance = "%s.doFilterInternal".formatted(FHIRService.class.getName());
-            final var rihr = new RegisterInteractionFhirRequest();
+			prepareRequestBase(
+					rihr,
+					interactionId != null ? interactionId : UUID.randomUUID().toString(),
+					groupInteractionId,
+					masterInteractionId,
+					sourceType,
+					requestUriToBeOverriden,
+					requestParameters,
+					provenance,
+					"Original FHIR payload",
+					Configuration.objectMapper.readTree(payload));
 
-            try {
-                prepareRequest(rihr, rre, provenance, requestParameters, interactionId, groupInteractionId,
-                        masterInteractionId, sourceType, requestUriToBeOverriden);
-                final var start = Instant.now();
-                int i = rihr.execute(jooqCfg);
-                final var end = Instant.now();
-                LOG.info(
-                        "FHIRService  - Time taken : {} milliseconds for DB call to REGISTER State None, Accept, Disposition: for interaction id: {} ",
-                        Duration.between(start, end).toMillis(),
-                        rre.interactionId().toString());
-                JsonNode payloadWithDisposition = rihr.getReturnValue();
-                LOG.info("REGISTER State None, Accept, Disposition: END for interaction id: {} ",
-                        rre.interactionId().toString());
-                return Configuration.objectMapper.convertValue(payloadWithDisposition,
-                        new TypeReference<Map<String, Object>>() {
-                });
-            } catch (Exception e) {
-                LOG.error(
-                        "ERROR:: REGISTER State None, Accept, Disposition: for interaction id: {} tenant id: {}: CALL "
-                        + rihr.getName() + " error",
-                        rre.interactionId().toString(),
-                        rre.tenant(), e);
-            }
-            return null;
-        } finally {
-            span.end();
-        }
-    }
+			int i = rihr.execute(jooqCfg);
+			final var end = Instant.now();
+			JsonNode response = rihr.getReturnValue();
+			Map<String, Object> responseAttributes = CoreFHIRUtil.extractFields(response);
 
-    private void prepareRequest(RegisterInteractionFhirRequest rihr, RequestResponseEncountered rre,
-            String provenance, Map<String, String> requestParameters, String interactionId, String groupInteractionId,
-            String masterInteractionId, String sourceType, String requestUriToBeOverriden) {
-        LOG.info("REGISTER State None, Accept, Disposition: BEGIN for interaction id: {} tenant id: {}",
-                rre.interactionId().toString(), rre.tenant());
-        rihr.setPInteractionId(interactionId != null ? interactionId : rre.interactionId().toString());
-        rihr.setPGroupHubInteractionId(groupInteractionId);
-        rihr.setPSourceHubInteractionId(masterInteractionId);
-        rihr.setPNature((JsonNode) Configuration.objectMapper.valueToTree(
-                Map.of("nature", "org.techbd.service.http.Interactions$RequestResponseEncountered",
-                        "tenant_id",
-                        rre.tenant() != null ? (rre.tenant().tenantId() != null
-                        ? rre.tenant().tenantId()
-                        : "N/A") : "N/A")));
-        rihr.setPContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
-        rihr.setPInteractionKey(StringUtils.isNotEmpty(requestUriToBeOverriden) ? requestUriToBeOverriden
-                : requestParameters.get(Constants.REQUEST_URI));
-        rihr.setPPayload((JsonNode) Configuration.objectMapper.valueToTree(rre));
-        //rihr.setPCreatedAt(OffsetDateTime.now());
-        rihr.setPCreatedBy(FHIRService.class.getName());
-        rihr.setPSourceType(sourceType);
-        rihr.setPProvenance(provenance);
-        setUserDetails(rihr, requestParameters);
-    }
+			LOG.info(
+					"FHIRService - Time taken: {} ms for DB call to REGISTER Original Payload, interaction id: {}, error: {}, hub_nexus_interaction_id: {}",
+					Duration.between(start, end).toMillis(),
+					interactionId,
+					responseAttributes.getOrDefault(Constants.KEY_ERROR, "N/A"),
+					responseAttributes.getOrDefault(Constants.KEY_HUB_NEXUS_INTERACTION_ID, "N/A"));
 
-    private void setUserDetails(RegisterInteractionFhirRequest rihr, Map<String, String> requestParameters) {
-        // final var sessionId = requestParameters.get(Constants.REQUESTED_SESSION_ID);
-        rihr.setPUserName(requestParameters.get(Constants.USER_NAME));
-        rihr.setPUserId(requestParameters.get(Constants.USER_ID));
-        rihr.setPUserSession(UUID.randomUUID().toString());// TODO -check and add from mirth
-        rihr.setPUserRole(requestParameters.get(Constants.USER_ROLE));
-    }
+			return (Map<String, Object>) responseAttributes.get(Constants.KEY_PAYLOAD);
+		} catch (Exception e) {
+			LOG.error("ERROR:: REGISTER Original Payload for interaction id: {}: {}",
+					interactionId, e.getMessage(), e);
+			return null;
+		} finally {
+			span.end();
+		}
+	}
+
+	private Map<String, Object> registerValidationResults(org.jooq.Configuration jooqCfg,
+			Map<String, String> headerParameters,
+			Map<String, String> requestParameters,
+			Map<String, Object> immediateResult,
+			String interactionId,
+			String groupInteractionId,
+			String masterInteractionId,
+			String sourceType,
+			String requestUriToBeOverriden) throws IOException {
+		Span span = tracer.spanBuilder("FHIRService.registerValidationResults").startSpan();
+		try {
+			final var rihr = new RegisterInteractionFhirRequest();
+			final var provenance = "%s.doFilterInternal".formatted(FHIRService.class.getName());
+			final var start = Instant.now();
+
+			prepareRequestBase(
+					rihr,
+					interactionId,
+					groupInteractionId,
+					masterInteractionId,
+					sourceType,
+					requestUriToBeOverriden,
+					requestParameters,
+					provenance,
+					"TechByDisposistion",
+					Configuration.objectMapper.valueToTree(immediateResult));
+
+			int i = rihr.execute(jooqCfg);
+			final var end = Instant.now();
+			JsonNode response = rihr.getReturnValue();
+			Map<String, Object> responseAttributes = CoreFHIRUtil.extractFields(response);
+
+			LOG.info(
+					"FHIRService - Time taken: {} ms for DB call to REGISTER Validation Results, interaction id: {}, error: {}, hub_nexus_interaction_id: {}",
+					Duration.between(start, end).toMillis(),
+					interactionId,
+					responseAttributes.getOrDefault(Constants.KEY_ERROR, "N/A"),
+					responseAttributes.getOrDefault(Constants.KEY_HUB_NEXUS_INTERACTION_ID, "N/A"));
+
+			return (Map<String, Object>) responseAttributes.get(Constants.KEY_PAYLOAD);
+		} catch (Exception e) {
+			LOG.error("ERROR:: REGISTER Validation Results for interaction id: {}: {}",
+					interactionId, e.getMessage(), e);
+			return null;
+		} finally {
+			span.end();
+		}
+	}
+
+	private void prepareRequestBase(RegisterInteractionFhirRequest rihr,
+			String interactionId,
+			String groupInteractionId,
+			String masterInteractionId,
+			String sourceType,
+			String requestUriToBeOverriden,
+			Map<String, String> requestParameters,
+			String provenance,
+			String nature,
+			JsonNode payloadNode) {
+		LOG.info("REGISTER {}: BEGIN for interaction id: {} tenant id: {}",
+				nature, interactionId, requestParameters.get(Constants.TENANT_ID));
+
+		rihr.setPInteractionId(interactionId);
+		rihr.setPGroupHubInteractionId(groupInteractionId);
+		rihr.setPSourceHubInteractionId(masterInteractionId);
+		rihr.setPNature((JsonNode)Configuration.objectMapper.valueToTree(Map.of(
+				"nature", nature,
+				"tenant_id", requestParameters.getOrDefault(Constants.TENANT_ID, "N/A"))));
+		rihr.setPContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
+		rihr.setPInteractionKey(StringUtils.isNotEmpty(requestUriToBeOverriden)
+				? requestUriToBeOverriden
+				: requestParameters.get(Constants.REQUEST_URI));
+		rihr.setPPayload(payloadNode);
+		rihr.setPCreatedBy(FHIRService.class.getName());
+		rihr.setPSourceType(sourceType);
+		rihr.setPProvenance(provenance);
+		setUserDetails(rihr, requestParameters);
+	}
+
+	private void setUserDetails(RegisterInteractionFhirRequest rihr, Map<String, String> requestParameters) {
+		rihr.setPUserName(requestParameters.get(Constants.USER_NAME));
+		rihr.setPUserId(requestParameters.get(Constants.USER_ID));
+		rihr.setPUserSession(UUID.randomUUID().toString());
+		rihr.setPUserRole(requestParameters.get(Constants.USER_ROLE));
+	}
 
     protected static final void setActiveRequestTenant(final @NonNull HttpServletRequest request,
             final @NonNull Interactions.Tenant tenant) {
@@ -1632,7 +1677,7 @@ public class FHIRService {
 			LOG.info("REGISTER State Forward : BEGIN for inteaction id  : {} tenant id : {}",
 					bundleAsyncInteractionId, tenantId);
 			final var forwardedAt = OffsetDateTime.now();
-			final var initRIHR = new RegisterInteractionHttpRequest();
+			final var initRIHR = new RegisterInteractionFhirRequest();
 			try {
 				// TODO -check the need of includeIncomingPayloadInDB and add this later if
 				// needed
@@ -1643,31 +1688,37 @@ public class FHIRService {
 				// error or warning just an FYI - if you'd like to see the incoming FHIR payload
 				// `?include-incoming-payload-in-db=true` to request payload storage for each
 				// request that you'd like to store."));
-				initRIHR.setInteractionId(bundleAsyncInteractionId);
-				initRIHR.setGroupHubInteractionId(groupInteractionId);
-				initRIHR.setSourceHubInteractionId(masterInteractionId);
-				initRIHR.setInteractionKey(requestURI);
-				initRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
+				initRIHR.setPInteractionId(bundleAsyncInteractionId);
+				initRIHR.setPGroupHubInteractionId(groupInteractionId);
+				initRIHR.setPSourceHubInteractionId(masterInteractionId);
+				initRIHR.setPInteractionKey(requestURI);
+				initRIHR.setPNature((JsonNode) Configuration.objectMapper.valueToTree(
 						Map.of("nature", "Forward HTTP Request", "tenant_id",
 								tenantId)));
-				initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
-				initRIHR.setPayload((JsonNode) Configuration.objectMapper
+				initRIHR.setPContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
+				initRIHR.setPPayload((JsonNode) Configuration.objectMapper
 						.valueToTree(payloadWithDisposition));
-				initRIHR.setFromState("DISPOSITION");
-				initRIHR.setToState("FORWARD");
-				initRIHR.setSourceType(sourceType);
-				initRIHR.setCreatedAt(forwardedAt); // don't let DB set this, use app
+				initRIHR.setPFromState("DISPOSITION");
+				initRIHR.setPToState("FORWARD");
+				initRIHR.setPSourceType(sourceType);
+				//initRIHR.setPCreatedAt(forwardedAt); // don't let DB set this, use app
 				// time
-				initRIHR.setCreatedBy(FHIRService.class.getName());
-				initRIHR.setProvenance(provenance);
+				initRIHR.setPCreatedBy(FHIRService.class.getName());
+				initRIHR.setPProvenance(provenance);
 				final var start = Instant.now();
 				final var execResult = initRIHR.execute(jooqCfg);
 				final var end = Instant.now();
+				JsonNode response = initRIHR.getReturnValue();
+				Map<String,Object> responseAttributes = CoreFHIRUtil.extractFields(response);
 				LOG.info(
-						"REGISTER State Forward : END for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
-								+ execResult,
-						bundleAsyncInteractionId, tenantId,
-						Duration.between(start, end).toMillis());
+						"REGISTER State Forward : END for interaction id: {} tenant id: {}. Time taken: {} milliseconds | payload -> error: {}, interaction_id: {}, hub_nexus_interaction_id: {} | execResult: {}",
+						bundleAsyncInteractionId,
+						tenantId,
+						Duration.between(start, end).toMillis(),
+						responseAttributes.getOrDefault(Constants.KEY_ERROR, "N/A"),
+						responseAttributes.getOrDefault(Constants.KEY_INTERACTION_ID, "N/A"),
+						responseAttributes.getOrDefault(Constants.KEY_HUB_NEXUS_INTERACTION_ID, "N/A"),
+						execResult);
 			} catch (Exception e) {
 				LOG.error("ERROR:: REGISTER State Forward CALL for interaction id : {} tenant id : {}"
 						+ initRIHR.getName() + " initRIHR error", bundleAsyncInteractionId,
@@ -1687,40 +1738,46 @@ public class FHIRService {
 		try {
 			LOG.info("REGISTER State Complete : BEGIN for interaction id :  {} tenant id : {}",
 					bundleAsyncInteractionId, tenantId);
-			final var forwardRIHR = new RegisterInteractionHttpRequest();
+			final var forwardRIHR = new RegisterInteractionFhirRequest();
 			try {
-				forwardRIHR.setInteractionId(bundleAsyncInteractionId);
-				forwardRIHR.setSourceHubInteractionId(masterInteractionId);
-				forwardRIHR.setGroupHubInteractionId(groupInteractionId);
-				forwardRIHR.setInteractionKey(requestURI);
-				forwardRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
+				forwardRIHR.setPInteractionId(bundleAsyncInteractionId);
+				forwardRIHR.setPSourceHubInteractionId(masterInteractionId);
+				forwardRIHR.setPGroupHubInteractionId(groupInteractionId);
+				forwardRIHR.setPInteractionKey(requestURI);
+				forwardRIHR.setPNature((JsonNode) Configuration.objectMapper.valueToTree(
 						Map.of("nature", "Forwarded HTTP Response",
 								"tenant_id", tenantId)));
-				forwardRIHR.setContentType(
+				forwardRIHR.setPContentType(
 						MimeTypeUtils.APPLICATION_JSON_VALUE);
 				try {
 					// expecting a JSON payload from the server
-					forwardRIHR.setPayload(Configuration.objectMapper
+					forwardRIHR.setPPayload(Configuration.objectMapper
 							.readTree(response));
 				} catch (JsonProcessingException jpe) {
 					// in case the payload is not JSON store the string
-					forwardRIHR.setPayload((JsonNode) Configuration.objectMapper
+					forwardRIHR.setPPayload((JsonNode) Configuration.objectMapper
 							.valueToTree(response));
 				}
-				forwardRIHR.setFromState("FORWARD");
-				forwardRIHR.setToState("COMPLETE");
-				forwardRIHR.setSourceType(sourceType);
-				forwardRIHR.setCreatedAt(OffsetDateTime.now()); // don't let DB
-				forwardRIHR.setCreatedBy(FHIRService.class.getName());
-				forwardRIHR.setProvenance(provenance);
+				forwardRIHR.setPFromState("FORWARD");
+				forwardRIHR.setPToState("COMPLETE");
+				forwardRIHR.setPSourceType(sourceType);
+				//forwardRIHR.setPCreatedAt(OffsetDateTime.now()); // don't let DB
+				forwardRIHR.setPCreatedBy(FHIRService.class.getName());
+				forwardRIHR.setPProvenance(provenance);
 				final var start = Instant.now();
 				final var execResult = forwardRIHR.execute(jooqCfg);
 				final var end = Instant.now();
+				JsonNode responseFromDB = forwardRIHR.getReturnValue();
+				Map<String,Object> responseAttributes = CoreFHIRUtil.extractFields(responseFromDB);
 				LOG.info(
-						"REGISTER State Complete : END for interaction id : {} tenant id : {} .Time Taken : {} milliseconds"
-								+ execResult,
-						bundleAsyncInteractionId, tenantId,
-						Duration.between(start, end).toMillis());
+						"REGISTER State Complete : END for interaction id: {} tenant id: {}. Time Taken: {} milliseconds | payload -> error: {}, interaction_id: {}, hub_nexus_interaction_id: {} | execResult: {}",
+						bundleAsyncInteractionId,
+						tenantId,
+						Duration.between(start, end).toMillis(),
+						responseAttributes.getOrDefault(Constants.KEY_ERROR, "N/A"),
+						responseAttributes.getOrDefault(Constants.KEY_INTERACTION_ID, "N/A"),
+						responseAttributes.getOrDefault(Constants.KEY_HUB_NEXUS_INTERACTION_ID, "N/A"),
+						execResult);
 			} catch (Exception e) {
 				LOG.error("ERROR:: REGISTER State Complete CALL for interaction id : {} tenant id : {} "
 						+ forwardRIHR.getName()
@@ -1739,37 +1796,46 @@ public class FHIRService {
 		try {
 			LOG.info("REGISTER State Fail : BEGIN for interaction id :  {} tenant id : {}",
 					bundleAsyncInteractionId, tenantId);
-			final var forwardRIHR = new RegisterInteractionHttpRequest();
+			final var forwardRIHR = new RegisterInteractionFhirRequest();
 			try {
-				forwardRIHR.setInteractionId(bundleAsyncInteractionId);
-				forwardRIHR.setInteractionKey(requestURI);
-				forwardRIHR.setGroupHubInteractionId(groupInteractionId);
-				forwardRIHR.setSourceHubInteractionId(masterInteractionId);
-				forwardRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
+				forwardRIHR.setPInteractionId(bundleAsyncInteractionId);
+				forwardRIHR.setPInteractionKey(requestURI);
+				forwardRIHR.setPGroupHubInteractionId(groupInteractionId);
+				forwardRIHR.setPSourceHubInteractionId(masterInteractionId);
+				forwardRIHR.setPNature((JsonNode) Configuration.objectMapper.valueToTree(
 						Map.of("nature", "Forwarded HTTP Response Error",
 								"tenant_id", tenantId)));
-				forwardRIHR.setContentType(
+				forwardRIHR.setPContentType(
 						MimeTypeUtils.APPLICATION_JSON_VALUE);
 				try {
 					// expecting a JSON payload from the server
-					forwardRIHR.setPayload(Configuration.objectMapper
+					forwardRIHR.setPPayload(Configuration.objectMapper
 							.readTree(response));
 				} catch (JsonProcessingException jpe) {
 					// in case the payload is not JSON store the string
-					forwardRIHR.setPayload((JsonNode) Configuration.objectMapper
+					forwardRIHR.setPPayload((JsonNode) Configuration.objectMapper
 							.valueToTree(response));
 				}
-				forwardRIHR.setFromState("FORWARD");
-				forwardRIHR.setToState("FAIL");
-				forwardRIHR.setSourceType(sourceType);
-				forwardRIHR.setCreatedAt(OffsetDateTime.now()); // don't let DB
+				forwardRIHR.setPFromState("FORWARD");
+				forwardRIHR.setPToState("FAIL");
+				forwardRIHR.setPSourceType(sourceType);
+				//forwardRIHR.setPCreatedAt(OffsetDateTime.now()); // don't let DB
 				// set this, use
 				// app time
-				forwardRIHR.setCreatedBy(FHIRService.class.getName());
-				forwardRIHR.setProvenance(provenance);
+				forwardRIHR.setPCreatedBy(FHIRService.class.getName());
+				forwardRIHR.setPProvenance(provenance);
 				final var start = Instant.now();
 				final var execResult = forwardRIHR.execute(jooqCfg);
 				final var end = Instant.now();
+                JsonNode responseFromDB = forwardRIHR.getReturnValue();
+				Map<String,Object> responseAttributes = CoreFHIRUtil.extractFields(responseFromDB);
+				LOG.info(
+					"FHIRService - Time taken: {} milliseconds for DB call to REGISTER State None, Accept, Disposition for interaction id: {}  error: {}, hub_nexus_interaction_id: {}",
+					Duration.between(start, end).toMillis(),
+					responseAttributes.getOrDefault(Constants.KEY_INTERACTION_ID, "N/A"),
+					responseAttributes.getOrDefault(Constants.KEY_ERROR, "N/A"),					
+					responseAttributes.getOrDefault(Constants.KEY_HUB_NEXUS_INTERACTION_ID, "N/A")
+				);
 				LOG.info(
 						"REGISTER State Fail : END for interaction id : {} tenant id : {} .Time Taken : {} milliseconds"
 								+ execResult,
@@ -1779,6 +1845,7 @@ public class FHIRService {
 				LOG.error("ERROR:: REGISTER State Fail CALL for interaction id : {} tenant id : {} "
 						+ forwardRIHR.getName()
 						+ " forwardRIHR error", bundleAsyncInteractionId, tenantId, e);
+						
 			}
 		} finally {
 			span.end();
@@ -1794,17 +1861,17 @@ public class FHIRService {
 			LOG.error(
 					"Register State Failure - Exception while sending FHIR payload to datalake URL {} for interaction id {}",
 					dataLakeApiBaseURL, bundleAsyncInteractionId, error);
-			final var errorRIHR = new RegisterInteractionHttpRequest();
+			final var errorRIHR = new RegisterInteractionFhirRequest();
 			try {
-				errorRIHR.setInteractionId(bundleAsyncInteractionId);
-				errorRIHR.setGroupHubInteractionId(groupInteractionId);
-				errorRIHR.setSourceHubInteractionId(masterInteractionId);
-				errorRIHR.setInteractionKey(requestURI);
-				errorRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
+				errorRIHR.setPInteractionId(bundleAsyncInteractionId);
+				errorRIHR.setPGroupHubInteractionId(groupInteractionId);
+				errorRIHR.setPSourceHubInteractionId(masterInteractionId);
+				errorRIHR.setPInteractionKey(requestURI);
+				errorRIHR.setPNature((JsonNode) Configuration.objectMapper.valueToTree(
 						Map.of("nature", "Forwarded HTTP Response Error",
 								"tenant_id", tenantId)));
-				errorRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
-				errorRIHR.setSourceType(sourceType);
+				errorRIHR.setPContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
+				errorRIHR.setPSourceType(sourceType);
 				final var rootCauseThrowable = NestedExceptionUtils
 						.getRootCause(error);
 				final var rootCause = rootCauseThrowable != null
@@ -1858,20 +1925,29 @@ public class FHIRService {
 					errorMap.put("statusText", webClientResponseException
 							.getStatusText());
 				}
-				errorRIHR.setPayload((JsonNode) Configuration.objectMapper
+				errorRIHR.setPPayload((JsonNode) Configuration.objectMapper
 						.valueToTree(errorMap));
-				errorRIHR.setFromState("FORWARD");
-				errorRIHR.setToState("FAIL");
-				errorRIHR.setCreatedAt(OffsetDateTime.now()); // don't let DB set this, use app time
-				errorRIHR.setCreatedBy(FHIRService.class.getName());
-				errorRIHR.setProvenance(provenance);
+				errorRIHR.setPFromState("FORWARD");
+				errorRIHR.setPToState("FAIL");
+				//errorRIHR.setPCreatedAt(OffsetDateTime.now()); // don't let DB set this, use app time
+				errorRIHR.setPCreatedBy(FHIRService.class.getName());
+				errorRIHR.setPProvenance(provenance);
 				final var start = Instant.now();
 				final var execResult = errorRIHR.execute(jooqCfg);
 				final var end = Instant.now();
-				LOG.error("Register State Failure - END for interaction id : {} tenant id : {} forwardRIHR execResult"
-						+ execResult + ". Time Taken : {} milliseconds ",
+
+				JsonNode responseFromDB = errorRIHR.getReturnValue();
+				Map<String, Object> responseAttributes = CoreFHIRUtil.extractFields(responseFromDB);
+
+				LOG.info(
+						"Register State Failure - END for interaction id: {} tenant id: {} forwardRIHR execResult: {}. Time Taken: {} milliseconds  error: {}, interaction_id: {}, hub_nexus_interaction_id: {}",
 						bundleAsyncInteractionId,
-						tenantId, Duration.between(start, end).toMillis());
+						tenantId,
+						execResult,
+						Duration.between(start, end).toMillis(),
+						responseAttributes.getOrDefault(Constants.KEY_ERROR, "N/A"),
+						responseAttributes.getOrDefault(Constants.KEY_INTERACTION_ID, "N/A"),
+						responseAttributes.getOrDefault(Constants.KEY_HUB_NEXUS_INTERACTION_ID, "N/A"));
 			} catch (Exception e) {
 				LOG.error("ERROR :: Register State Failure - for interaction id : {} tenant id : {} CALL "
 						+ errorRIHR.getName() + " errorRIHR error", bundleAsyncInteractionId,

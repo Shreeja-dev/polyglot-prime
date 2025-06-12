@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.techbd.conf.Configuration;
+import org.techbd.config.Constants;
 import org.techbd.orchestrate.csv.CsvOrchestrationEngine;
 import org.techbd.service.DataLedgerApiClient.DataLedgerPayload;
 import org.techbd.service.constants.Origin;
@@ -22,7 +23,8 @@ import org.techbd.service.constants.SourceType;
 import org.techbd.service.http.Interactions;
 import org.techbd.service.http.InteractionsFilter;
 import org.techbd.udi.UdiPrimeJpaConfig;
-import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionHttpRequest;
+import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionCsvRequest;
+import org.techbd.util.fhir.CoreFHIRUtil;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -83,40 +85,45 @@ public class CsvService {
         LOG.info("REGISTER State NONE : BEGIN for inteaction id  : {} tenant id : {}",
                 interactionId, tenantId);
         final var forwardedAt = OffsetDateTime.now();
-        final var initRIHR = new RegisterInteractionHttpRequest();
+        final var initRIHR = new RegisterInteractionCsvRequest();
         try {
-            initRIHR.setOrigin(StringUtils.isEmpty(origin) ? Origin.HTTP.name():origin);
-            initRIHR.setInteractionId(interactionId);
-            initRIHR.setInteractionKey(request.getRequestURI());
+            initRIHR.setPOrigin(StringUtils.isEmpty(origin) ? Origin.HTTP.name():origin);
+            initRIHR.setPInteractionId(interactionId);
+            initRIHR.setPInteractionKey(request.getRequestURI());
             if(StringUtils.isNotEmpty(sftpSessionId)) {
-                initRIHR.setSftpSessionId(sftpSessionId);
+                initRIHR.setPSftpSessionId(sftpSessionId);
             }
-            initRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
+            initRIHR.setPNature((JsonNode) Configuration.objectMapper.valueToTree(
                     Map.of("nature", "Original CSV Zip Archive", "tenant_id",
                             tenantId)));
-            initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
-            initRIHR.setCsvZipFileContent(file.getBytes());
-            initRIHR.setCsvZipFileName(file.getOriginalFilename());
-            initRIHR.setCreatedAt(forwardedAt);
+            initRIHR.setPContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
+            initRIHR.setPCsvZipFileContent(file.getBytes());
+            initRIHR.setPCsvZipFileName(file.getOriginalFilename());
+           // initRIHR.setPCreatedAt(forwardedAt);
             final InetAddress localHost = InetAddress.getLocalHost();
             final String ipAddress = localHost.getHostAddress();
-            initRIHR.setClientIpAddress(ipAddress);
-            initRIHR.setUserAgent(request.getHeader("User-Agent"));
-            initRIHR.setCreatedBy(CsvService.class.getName());
+            initRIHR.setPClientIpAddress(ipAddress);
+            initRIHR.setPUserAgent(request.getHeader("User-Agent"));
+            initRIHR.setPCreatedBy(CsvService.class.getName());
             final var provenance = "%s.saveArchiveInteraction".formatted(CsvService.class.getName());
-            initRIHR.setProvenance(provenance);
-            initRIHR.setCsvGroupId(interactionId);
+            initRIHR.setPProvenance(provenance);
+            initRIHR.setPCsvGroupId(interactionId);
             if (saveUserDataToInteractions) {
                 Interactions.setUserDetails(initRIHR, request);
             }
             final var start = Instant.now();
             final var execResult = initRIHR.execute(jooqCfg);
             final var end = Instant.now();
+            JsonNode response = initRIHR.getReturnValue();
+            Map<String, Object> responseAttributes = CoreFHIRUtil.extractFields(response);
             LOG.info(
-                    "REGISTER State NONE : END for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
-                            + execResult,
-                    interactionId, tenantId,
-                    Duration.between(start, end).toMillis());
+                    "REGISTER State NONE : END for interaction id: {} tenant id: {}. Time taken: {} milliseconds error: {}, hub_nexus_interaction_id: {} | execResult: {}",
+                    interactionId,
+                    tenantId,
+                    Duration.between(start, end).toMillis(),
+                    responseAttributes.getOrDefault(Constants.KEY_ERROR, "N/A"),
+                    responseAttributes.getOrDefault(Constants.KEY_HUB_NEXUS_INTERACTION_ID, "N/A"),
+                    execResult);
         } catch (final Exception e) {
             LOG.error("ERROR:: REGISTER State NONE CALL for interaction id : {} tenant id : {}"
                     + initRIHR.getName() + " initRIHR error", interactionId,

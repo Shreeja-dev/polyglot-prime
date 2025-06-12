@@ -145,9 +145,7 @@ public class CoreFHIRUtil {
             return StringUtils.EMPTY;
         }
     }
-
     
-   
     public static Map<String, String> buildHeaderParametersMap(String tenantId, String customDataLakeApi,
             String dataLakeApiContentType, String requestUriToBeOverridden,
             String validationSeverityLevel, String healthCheck, String correlationId, String provenance) {
@@ -159,8 +157,7 @@ public class CoreFHIRUtil {
         addIfNotEmpty(headers, Constants.VALIDATION_SEVERITY_LEVEL, validationSeverityLevel);
         addIfNotEmpty(headers, Constants.HEALTH_CHECK, healthCheck);
         addIfNotEmpty(headers, Constants.CORRELATION_ID, correlationId);
-        addIfNotEmpty(headers, Constants.PROVENANCE, provenance);
-        
+        addIfNotEmpty(headers, Constants.PROVENANCE, provenance);        
         return headers;
     }
 
@@ -183,5 +180,26 @@ public class CoreFHIRUtil {
         if (StringUtils.isNotEmpty(value)) {
             headers.put(key, value);
         }
+    }
+
+    public static Map<String, Object> extractFields(JsonNode payload) {
+        var result = new HashMap<String, Object>();
+        for (var key : new String[]{"error", "interaction_id", "hub_nexus_interaction_id"}) {
+            if (payload.has(key)) {
+                result.put(key, payload.get(key).asText());
+            }
+        }
+        if (payload.has("payload") && payload.get("payload").isObject()) {
+            var nestedPayload = payload.get("payload");
+            var nestedMap = new HashMap<String, Object>();
+
+            nestedPayload.fields().forEachRemaining(field ->
+                nestedMap.put(field.getKey(), field.getValue().isValueNode()
+                    ? field.getValue().asText()
+                    : field.getValue())
+            );
+            result.put("payload", nestedMap);
+        }
+        return result;
     }
 }
