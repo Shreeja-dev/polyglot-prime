@@ -52,7 +52,7 @@ public class CsvService {
         try {
             final var dslContext = MirthJooqConfig.dsl();
             final var jooqCfg = dslContext.configuration();
-            final var zipFileInteractionId = requestParameters.get(Constants.MASTER_INTERACTION_ID);
+            final var zipFileInteractionId = requestParameters.get(Constants.INTERACTION_ID);
             saveArchiveInteraction(zipFileInteractionId,jooqCfg, requestParameters, headerParameters, file);
             session = engine.session()
                     .withMasterInteractionId(zipFileInteractionId)
@@ -71,51 +71,51 @@ public class CsvService {
         }
     }
 
-    private void saveArchiveInteraction(String zipFileInteractionId,final org.jooq.Configuration jooqCfg, final Map<String,String> requestParameters,Map<String,String> headerParameters,
-    final MultipartFile file) {
-        final var tenantId = requestParameters.get(Constants.TENANT_ID  );
-        LOG.info("REGISTER State NONE : BEGIN for inteaction id  : {} tenant id : {}",
-                zipFileInteractionId, requestParameters.get(Constants.TENANT_ID));
-        final var forwardedAt = OffsetDateTime.now();
-        final var initRIHR = new RegisterInteractionHttpRequest();
-        try {
-            initRIHR.setOrigin(null == requestParameters.get(Constants.ORIGIN) ? Origin.HTTP.name():requestParameters.get(Constants.ORIGIN));
-            initRIHR.setInteractionId(zipFileInteractionId);
-            initRIHR.setInteractionKey(requestParameters.get(Constants.REQUEST_URI));
-            initRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
-                    Map.of("nature", "Original CSV Zip Archive", "tenant_id",
-                            tenantId)));
-            initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
-            initRIHR.setCsvZipFileContent(file.getBytes());
-            initRIHR.setCsvZipFileName(file.getOriginalFilename());
-            initRIHR.setCreatedAt(forwardedAt);
-            final InetAddress localHost = InetAddress.getLocalHost();
-            final String ipAddress = localHost.getHostAddress();
-            initRIHR.setClientIpAddress(ipAddress);
-            initRIHR.setUserAgent(headerParameters.get(Constants.USER_AGENT));
-            initRIHR.setCreatedBy(CsvService.class.getName());
-            final var provenance = "%s.saveArchiveInteraction".formatted(CsvService.class.getName());
-            initRIHR.setProvenance(provenance);
-            initRIHR.setCsvGroupId(zipFileInteractionId);
-            if (saveUserDataToInteractions) {
-                setUserDetails(initRIHR, requestParameters);
-            }
-            final var start = Instant.now();
-            final var execResult = initRIHR.execute(jooqCfg);
-            final var end = Instant.now();
-            LOG.info(
-                    "REGISTER State NONE : END for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
-                            + execResult,
-                    zipFileInteractionId, tenantId,
-                    Duration.between(start, end).toMillis());
-        } catch (final Exception e) {
-            LOG.error("ERROR:: REGISTER State NONE CALL for interaction id : {} tenant id : {}"
-                    + initRIHR.getName() + " initRIHR error", zipFileInteractionId,
-                    tenantId,
-                    e);
+private void saveArchiveInteraction(String zipFileInteractionId,final org.jooq.Configuration jooqCfg, final Map<String,String> requestParameters,Map<String,String> headerParameters,
+final MultipartFile file) {
+    final var tenantId = requestParameters.get(Constants.TENANT_ID  );
+    LOG.info("REGISTER State NONE : BEGIN for inteaction id  : {} tenant id : {}",
+            zipFileInteractionId, requestParameters.get(Constants.TENANT_ID));
+    final var forwardedAt = OffsetDateTime.now();
+    final var initRIHR = new RegisterInteractionHttpRequest();
+    try {
+        initRIHR.setOrigin(null == requestParameters.get(Constants.ORIGIN) ? Origin.HTTP.name():requestParameters.get(Constants.ORIGIN));
+        initRIHR.setInteractionId(zipFileInteractionId);
+        initRIHR.setInteractionKey(requestParameters.get(Constants.REQUEST_URI));
+        initRIHR.setNature((JsonNode) Configuration.objectMapper.valueToTree(
+                Map.of("nature", "Original CSV Zip Archive", "tenant_id",
+                        tenantId)));
+        initRIHR.setContentType(MimeTypeUtils.APPLICATION_JSON_VALUE);
+        initRIHR.setCsvZipFileContent(file.getBytes());
+        initRIHR.setCsvZipFileName(file.getOriginalFilename());
+        initRIHR.setCreatedAt(forwardedAt);
+        final InetAddress localHost = InetAddress.getLocalHost();
+        final String ipAddress = localHost.getHostAddress();
+        initRIHR.setClientIpAddress(ipAddress);
+        initRIHR.setUserAgent(headerParameters.get(Constants.USER_AGENT));
+        initRIHR.setCreatedBy(CsvService.class.getName());
+        final var provenance = "%s.saveArchiveInteraction".formatted(CsvService.class.getName());
+        initRIHR.setProvenance(provenance);
+        initRIHR.setCsvGroupId(zipFileInteractionId);
+        if (saveUserDataToInteractions) {
+            setUserDetails(initRIHR, requestParameters);
         }
+        final var start = Instant.now();
+        final var execResult = initRIHR.execute(jooqCfg);
+        final var end = Instant.now();
+        LOG.info(
+                "REGISTER State NONE : END for interaction id : {} tenant id : {} .Time taken : {} milliseconds"
+                        + execResult,
+                zipFileInteractionId, tenantId,
+                Duration.between(start, end).toMillis());
+    } catch (final Exception e) {
+        LOG.error("ERROR:: REGISTER State NONE CALL for interaction id : {} tenant id : {}"
+                + initRIHR.getName() + " initRIHR error", zipFileInteractionId,
+                tenantId,
+                e);
     }
-
+}
+   
     private void setUserDetails(RegisterInteractionHttpRequest rihr, Map<String, String> requestParameters) {
         rihr.setUserName(StringUtils.isEmpty(requestParameters.get(Constants.USER_NAME)) ? Constants.DEFAULT_USER_NAME : requestParameters.get(Constants.USER_NAME));
         rihr.setUserId(StringUtils.isEmpty(requestParameters.get(Constants.USER_ID)) ? Constants.DEFAULT_USER_ID : requestParameters.get(Constants.USER_ID));
@@ -136,7 +136,7 @@ public class CsvService {
     
         CsvOrchestrationEngine.OrchestrationSession session = null;
         try {
-            final var zipFileInteractionId = requestParameters.get(Constants.MASTER_INTERACTION_ID);
+            final var zipFileInteractionId = requestParameters.get(Constants.INTERACTION_ID);
             final var tenantId = requestParameters.get(Constants.TENANT_ID);
 
              DataLedgerPayload dataLedgerPayload = DataLedgerPayload.create(tenantId, CoreDataLedgerApiClient.Action.RECEIVED.getValue(), CoreDataLedgerApiClient.Actor.TECHBD.getValue(), zipFileInteractionId

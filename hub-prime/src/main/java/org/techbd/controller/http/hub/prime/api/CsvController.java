@@ -83,6 +83,7 @@ public class CsvController {
     CoreFHIRUtil.buildRequestParametersMap(requestParameters,null,
         null, null, null, null, request.getRequestURI());
     requestParameters.put(Constants.INTERACTION_ID, UUID.randomUUID().toString());
+    requestParameters.put(Constants.TENANT_ID, tenantId);
     requestParameters.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
     Map<String, Object> responseParameters = new HashMap<>();
     final var result  = csvService.validateCsvFile(file, requestParameters, headerParameters,responseParameters);
@@ -115,6 +116,7 @@ public class CsvController {
     CoreFHIRUtil.buildRequestParametersMap(requestParameters,null,
         null, null, null, null, request.getRequestURI());
     requestParameters.put(Constants.INTERACTION_ID, UUID.randomUUID().toString());
+    requestParameters.put(Constants.TENANT_ID, tenantId);
     requestParameters.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
     if (validationSeverityLevel != null) {
       requestParameters.put(Constants.VALIDATION_SEVERITY_LEVEL, validationSeverityLevel);

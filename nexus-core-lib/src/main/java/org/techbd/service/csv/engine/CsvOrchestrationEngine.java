@@ -219,7 +219,7 @@ public class CsvOrchestrationEngine {
         }
 
         public String getTenantId() {
-            return sessionId;
+            return tenantId;
         }
 
         public Device getDevice() {
