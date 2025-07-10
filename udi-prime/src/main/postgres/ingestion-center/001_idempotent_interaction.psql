@@ -135,6 +135,7 @@ AS SELECT hub_interaction_id AS interaction_id,
     CASE 
     	WHEN (source_type = 'CSV') then 'CSV'
         WHEN (source_type = 'CCDA') then 'CCDA'
+        WHEN (source_type = 'HL7V2') then 'HL7V2'
     	WHEN (source_type = 'fhir') then 'FHIR'
     	WHEN (source_type = 'FHIR') then 'FHIR'
     	ELSE 'FHIR'
@@ -173,7 +174,7 @@ AS SELECT  created_at AS interaction_created_at,
     resource_type_set AS resource_types,
     source_hub_interaction_id,
         CASE
-            WHEN source_type = ANY (ARRAY['CSV'::text, 'CCDA'::text]) THEN source_type
+            WHEN source_type = ANY (ARRAY['CSV'::text, 'CCDA'::text, 'HL7V2'::text]) THEN source_type
             ELSE 'FHIR'::text
         END AS source_type,
         CASE
@@ -1188,7 +1189,7 @@ WITH combined_counts AS (
                 END) AS shinny_datalake_submissions,
             max(sihr.created_at) AS recently_created_at
            FROM techbd_udi_ingress.sat_interaction_fhir_request sihr
-          WHERE sihr.created_at >= (CURRENT_DATE - '7 days'::interval) AND (sihr.uri = ANY (ARRAY['/Bundle/', '/Bundle','/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/'])) AND (sihr.tenant_id_lower = ANY (ARRAY['healthelink'::text, 'healtheconn'::text, 'healthix'::text, 'grrhio'::text, 'hixny'::text]))
+          WHERE sihr.created_at >= (CURRENT_DATE - '7 days'::interval) AND (sihr.uri = ANY (ARRAY['/Bundle/', '/Bundle','/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/', '/hl7v2/Bundle', '/hl7v2/Bundle/'])) AND (sihr.tenant_id_lower = ANY (ARRAY['healthelink'::text, 'healtheconn'::text, 'healthix'::text, 'grrhio'::text, 'hixny'::text]))
           GROUP BY sihr.tenant_id_lower
         )
  SELECT  
@@ -2022,7 +2023,7 @@ BEGIN
     ) RETURNING sat_interaction_fhir_request_id INTO v_return;  -- Return the generated UUID
 
     IF (v_return IS NOT NULL) THEN
-        IF(p_uri='/Bundle' OR p_uri='/Bundle/' OR p_uri='/flatfile/csv/Bundle' OR p_uri='/flatfile/csv/Bundle/' OR p_uri='/ccda/Bundle' OR p_uri='/ccda/Bundle/') THEN
+        IF(p_uri='/Bundle' OR p_uri='/Bundle/' OR p_uri='/flatfile/csv/Bundle' OR p_uri='/flatfile/csv/Bundle/' OR p_uri='/ccda/Bundle' OR p_uri='/ccda/Bundle/' OR p_uri='/hl7v2/Bundle' OR p_uri='/hl7v2/Bundle/') THEN
             IF(LOWER(p_nature) = LOWER('techByDesignDisposition')) THEN
                 CALL techbd_udi_ingress.insert_fhir_session_diagnostic(
                     p_hub_interaction_id, 
@@ -2170,6 +2171,7 @@ AS SELECT sat_interaction_fhir_request_id,
     case 
     	when (source_type = 'CSV') then 'CSV'
         WHEN (source_type = 'CCDA') then 'CCDA'
+        WHEN (source_type = 'HL7V2') then 'HL7V2'
     	when (source_type = 'fhir') then 'FHIR'
     	when (source_type = 'FHIR') then 'FHIR'
     	else 'FHIR'
@@ -3728,7 +3730,7 @@ BEGIN
             max(sihr.created_at)::TIMESTAMP AS recently_created_at
         FROM techbd_udi_ingress.sat_interaction_fhir_request sihr
         WHERE 
-            sihr.uri = ANY (ARRAY['/Bundle/', '/Bundle', '/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/'])  
+            sihr.uri = ANY (ARRAY['/Bundle/', '/Bundle', '/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/', '/hl7v2/Bundle', '/hl7v2/Bundle/'])  
             AND sihr.created_at >= TO_TIMESTAMP(start_date::text, 'YYYY-MM-DD') 
             AND sihr.created_at < TO_TIMESTAMP(end_date::text, 'YYYY-MM-DD') + INTERVAL '1 day'
             AND sihr.tenant_id <> 'N/A' 
@@ -3784,7 +3786,7 @@ BEGIN
             max(sihr.created_at) AS recently_created_at
         FROM techbd_udi_ingress.sat_interaction_fhir_request sihr
         WHERE 
-            sihr.uri = ANY (ARRAY['/Bundle', '/Bundle/','/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/'])
+            sihr.uri = ANY (ARRAY['/Bundle', '/Bundle/','/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/', '/hl7v2/Bundle', '/hl7v2/Bundle/'])
             AND sihr.created_at >= TO_TIMESTAMP(start_date::text, 'YYYY-MM-DD') 
             AND sihr.created_at < TO_TIMESTAMP(end_date::text, 'YYYY-MM-DD') + INTERVAL '1 day'
             AND sihr.tenant_id <> 'N/A'
@@ -3941,7 +3943,7 @@ BEGIN
             techbd_udi_ingress.sat_interaction_fhir_request sihr
          WHERE 
             sihr.nature = ''Forwarded HTTP Response Error''
-            AND sihr.uri = ANY (ARRAY[''/Bundle/'', ''/Bundle'', ''/flatfile/csv/Bundle'', ''/flatfile/csv/Bundle/'', ''/ccda/Bundle'', ''/ccda/Bundle/''])
+            AND sihr.uri = ANY (ARRAY[''/Bundle/'', ''/Bundle'', ''/flatfile/csv/Bundle'', ''/flatfile/csv/Bundle/'', ''/ccda/Bundle'', ''/ccda/Bundle/'', ''/hl7v2/Bundle'', ''/hl7v2/Bundle/''])
             AND sihr.created_at >= TO_TIMESTAMP($1::text, ''YYYY-MM-DD'') 
 	        AND sihr.created_at < TO_TIMESTAMP($2::text, ''YYYY-MM-DD'') + INTERVAL ''1 day''
             AND sihr.tenant_id_lower = $3
@@ -3974,7 +3976,7 @@ BEGIN
     WHERE 
         sihr.tenant_id_lower = tenant_id_param
         AND sihr.nature = 'Original FHIR Payload'
-        AND sihr.uri = ANY (ARRAY['/Bundle/', '/Bundle','/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/'])
+        AND sihr.uri = ANY (ARRAY['/Bundle/', '/Bundle','/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/', '/hl7v2/Bundle', '/hl7v2/Bundle/'])
         AND sihr.created_at >= TO_TIMESTAMP(start_date_param::text, 'YYYY-MM-DD') 
         AND sihr.created_at < TO_TIMESTAMP(end_date_param::text, 'YYYY-MM-DD') + INTERVAL '1 day'
         AND NOT EXISTS (
@@ -4014,7 +4016,7 @@ BEGIN
              FROM 
                 techbd_udi_ingress.sat_interaction_fhir_request sihr
              WHERE 
-                sihr.uri = ANY (ARRAY[''/Bundle/'', ''/Bundle'',''/flatfile/csv/Bundle'', ''/flatfile/csv/Bundle/'', ''/ccda/Bundle'', ''/ccda/Bundle/''])
+                sihr.uri = ANY (ARRAY[''/Bundle/'', ''/Bundle'',''/flatfile/csv/Bundle'', ''/flatfile/csv/Bundle/'', ''/ccda/Bundle'', ''/ccda/Bundle/'', ''/hl7v2/Bundle'', ''/hl7v2/Bundle/''])
 	            AND sihr.created_at >= TO_TIMESTAMP($2::text, ''YYYY-MM-DD'') 
 		        AND sihr.created_at < TO_TIMESTAMP($3::text, ''YYYY-MM-DD'') + INTERVAL ''1 day'' -- Parameters shifted by one
                 AND sihr.tenant_id <> ''N/A''
@@ -4412,7 +4414,7 @@ Results are grouped by key fields and sorted in ascending order.
     COUNT(*) AS count
 FROM techbd_udi_ingress.sat_interaction_fhir_request htt_req
 WHERE 
-    htt_req.uri =  ANY (ARRAY['/Bundle/', '/Bundle', '/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/']) 
+    htt_req.uri =  ANY (ARRAY['/Bundle/', '/Bundle', '/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/ccda/Bundle', '/ccda/Bundle/', '/hl7v2/Bundle', '/hl7v2/Bundle/']) 
     AND htt_req.is_bundle_valid = true  
     AND htt_req.nature = 'Forwarded HTTP Response'
 GROUP BY 
@@ -4483,6 +4485,43 @@ SELECT
 FROM ranked_sicr sicr
 JOIN fhir_summary ON sicr.hub_interaction_id = fhir_summary.hub_interaction_id
 WHERE sicr.rn = 1
+ORDER BY sicr.created_at DESC;
+
+/*******************************************************************************************
+This view retrieves the most recent HL7V2 interaction per `hub_interaction_id` from the 
+`sat_interaction_fhir_request` table. It includes metadata and payload details, along with 
+a derived FHIR conversion status indicating whether a corresponding FHIR payload exists. 
+Only the latest record per interaction is retained, and interactions are filtered by 
+`source_type = 'HL7V2'`.
+*******************************************************************************************/
+
+
+DROP VIEW IF EXISTS techbd_udi_ingress.interaction_hl7v2_request CASCADE;
+CREATE OR REPLACE VIEW techbd_udi_ingress.interaction_hl7v2_request
+AS 
+SELECT
+    sicr.sat_interaction_fhir_request_id AS sat_interaction_fhir_request_id,
+    sicr.hub_interaction_id,
+    sicr.tenant_id,
+    sicr.tenant_id_lower,
+    sicr.uri,
+    sicr.nature,
+    sicr.payload,
+    'true' AS fhir_conversion_status,
+    sicr.payload AS ccda_payload_text,
+    sicr.client_ip_address,
+    sicr.user_agent,
+    sicr.from_state,
+    sicr.to_state,
+    sicr.state_transition_reason,
+    sicr.elaboration,
+    'HL7V2' AS origin,
+    sicr.created_at,
+    sicr.created_by,
+    sicr.provenance
+FROM techbd_udi_ingress.sat_interaction_fhir_request sicr  
+WHERE  
+  source_type = 'HL7V2'::text
 ORDER BY sicr.created_at DESC;
 
     
@@ -6885,7 +6924,7 @@ BEGIN
         /*------------------------------*/
 
        	--1) Call the function with the defined parameters to upsert user info
-       	IF(v_nature_denorm = 'org.techbd.service.http.Interactions$RequestResponseEncountered' AND trim(p_interaction_key) NOT IN ('/Hl7/v2', '/Hl7/v2/', '/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/flatfile/csv/Bundle/$validate', '/flatfile/csv/Bundle/$validate/', '/ccda/Bundle', '/ccda/Bundle/', '/ccda/Bundle/$validate', '/ccda/Bundle/$validate/')) THEN     		       	
+       	IF(v_nature_denorm = 'org.techbd.service.http.Interactions$RequestResponseEncountered' AND trim(p_interaction_key) NOT IN ('/Hl7/v2', '/Hl7/v2/', '/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/flatfile/csv/Bundle/$validate', '/flatfile/csv/Bundle/$validate/', '/ccda/Bundle', '/ccda/Bundle/', '/ccda/Bundle/$validate', '/ccda/Bundle/$validate/', '/hl7v2/Bundle', '/hl7v2/Bundle/','/hl7v2/Bundle/$validate', '/hl7v2/Bundle/$validate/')) THEN     		       	
 			PERFORM techbd_udi_ingress.sat_interaction_user_upserted(
 		        hub_interaction_id 			=> p_interaction_id,
 		        hub_interaction_key			=> p_interaction_key, 
