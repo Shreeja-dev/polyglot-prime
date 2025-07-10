@@ -1,18 +1,18 @@
 package org.techbd.nexusingestionapi.controller;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.mock;
 
 import java.time.ZonedDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.techbd.nexusingestionapi.service.AwsService;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import software.amazon.awssdk.services.sqs.SqsClient;
 

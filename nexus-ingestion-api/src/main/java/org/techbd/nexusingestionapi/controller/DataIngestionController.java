@@ -4,6 +4,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,10 +34,6 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 @RestController
 @Slf4j
 public class DataIngestionController {
-
-    private static final String JSON_EXTENSION = ".json";
-    private static final String XML_EXTENSION = ".xml";
-    private static final String METADATA_SUFFIX = "metadata.json";
     private static final String S3_PREFIX = "s3://";
     private static final DateTimeFormatter DATE_PATH_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd");
 
@@ -48,17 +47,55 @@ public class DataIngestionController {
         this.objectMapper = objectMapper;
     }
 
+    @PostMapping("/test")
+    public ResponseEntity<String> testEndpoint() {
+        return ResponseEntity.ok("{\"status\":\"success\"}");
+    }
+
     @PostMapping(value ="/ingest")
     public ResponseEntity<String> handleCSVBundle(
             @RequestParam("file") @Nonnull MultipartFile file,
             @RequestHeader Map<String, String> headers,
             HttpServletRequest request) {
        // validateFile(file);
+       logRequestDetails(request, headers);
         RequestContext context = createRequestContext(
                 headers, request, file.getSize(), file.getOriginalFilename());
         return processMultipartFileRequest(file, context);
     }
+   private void logRequestDetails(HttpServletRequest request, Map<String, String> headerMap) {
+        // 1. Log attributes
+        log.info("=== Request Attributes ===");
+        Enumeration<String> attributeNames = request.getAttributeNames();
+        while (attributeNames.hasMoreElements()) {
+            String attr = attributeNames.nextElement();
+            Object value = request.getAttribute(attr);
+            log.info("Attribute: {} = {}", attr, value);
+        }
 
+        // 2. Log parameters
+        log.info("=== Request Parameters ===");
+        Map<String, String[]> paramMap = request.getParameterMap();
+        for (Map.Entry<String, String[]> entry : paramMap.entrySet()) {
+            log.info("Parameter: {} = {}", entry.getKey(), Arrays.toString(entry.getValue()));
+        }
+
+        // 3. Log headers (as Enumeration)
+        log.info("=== Request Headers (from request object) ===");
+        Enumeration<String> headerNames = request.getHeaderNames();
+        while (headerNames.hasMoreElements()) {
+            String name = headerNames.nextElement();
+            Enumeration<String> values = request.getHeaders(name);
+            List<String> allValues = Collections.list(values);
+            log.info("Header: {} = {}", name, allValues);
+        }
+
+        // 4. Log headers as Map (already injected by Spring)
+        log.info("=== Request Headers (as Map) ===");
+        for (Map.Entry<String, String> entry : headerMap.entrySet()) {
+            log.info("Header Map Entry: {} = {}", entry.getKey(), entry.getValue());
+        }
+    }
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleException(Exception e) {
         log.error("Error processing request", e);
@@ -103,50 +140,6 @@ public class DataIngestionController {
             throw new RuntimeException("Failed to process file: " + e.getMessage(), e);
         }
     }
- private ResponseEntity<String> processJsonRequest(String body, RequestContext context) {
-        try {
-            // Upload data to S3
-            String bucketName = Constants.BUCKET_NAME;
-
-            // Build metadata for the S3 object (2kb limit)
-            Map<String, String> s3Metadata = buildS3Metadata(context);
-
-            // Build metadata for the _metadata.json file
-            // The detailed metadata will be saved in a separate file with the suffix "_metadata.json"
-            Map<String, Object> metadataJson = buildMetadataJson(context);
-
-            // Convert metadata to JSON string with a single line, as AWS Athena does not support pretty print
-            String metadataContent = objectMapper.writeValueAsString(metadataJson);
-
-            System.out.println("Metadata Content: " + metadataContent);
-
-            // Save to S3
-            s3Service.saveToS3(bucketName, context.objectKey(), body, s3Metadata);
-            s3Service.saveToS3(bucketName, context.metadataKey(), metadataContent, null);
-
-            // Send to SQS
-            String messageId = sendToSqs(context, null);
-
-            // Create response
-            return createSuccessResponse(messageId, context);
-
-        } catch (Exception e) {
-            log.error("Error processing JSON request", e);
-            throw new RuntimeException("Failed to process request: " + e.getMessage(), e);
-        }
-    }
-    private void validateFile(MultipartFile file) {
-        if (file == null || file.isEmpty() || file.getOriginalFilename() == null
-                || file.getOriginalFilename().trim().isEmpty()) {
-            throw new IllegalArgumentException("Uploaded file is missing or empty.");
-        }
-
-        String originalFilename = file.getOriginalFilename();
-        if (!originalFilename.toLowerCase().endsWith(".zip")) {
-            throw new IllegalArgumentException("Uploaded file must have a .zip extension.");
-        }
-    }
-
     private RequestContext createRequestContext(
             Map<String, String> headers,
             HttpServletRequest request,
@@ -217,22 +210,6 @@ public class DataIngestionController {
                 remoteAddress);
     }
 
-    private String extractOriginalFileName(Map<String, String> headers, String interactionId, String extension) {
-        return headers.entrySet().stream()
-                .filter(e -> e.getKey().equalsIgnoreCase(Constants.REQ_HEADER_CONTENT_DISPOSITION))
-                .map(Map.Entry::getValue)
-                .map(v -> {
-                    int start = v.indexOf("filename=");
-                    if (start >= 0) {
-                        String name = v.substring(start + 9).replaceAll("\"", "").trim();
-                        return name.isEmpty() ? interactionId + extension : name;
-                    }
-                    return interactionId + extension;
-                })
-                .findFirst()
-                .orElse(interactionId + extension);
-    }
-
     /**
      * This function generates the metadata for the S3 object, as there is a 2kb
      * size limit. The detailed metadata will be saved in a separate file with
@@ -288,22 +265,6 @@ public class DataIngestionController {
 
         return wrapper;
         // return jsonMetadata;
-    }
-
-    /**
-     * This function generates the SQS message content.
-     */
-    private Map<String, Object> buildSqsMessage(RequestContext context) {
-        Map<String, Object> message = new HashMap<>();
-        message.put("tenantId", context.tenantId());
-        message.put("interactionId", context.interactionId());
-        message.put("requestUrl", context.requestUrl());
-        // message.put("msgType", context.msgType());
-        message.put("timestamp", context.timestamp());
-        message.put("fileName", context.fileName());
-        message.put("fileSize", String.valueOf(context.fileSize()));
-        message.put("s3ObjectPath", context.fullS3Path());
-        return message;
     }
 
     private ResponseEntity<String> createSuccessResponse(String messageId, RequestContext context) {
