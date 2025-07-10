@@ -1,34 +1,36 @@
 package org.techbd.nexusingestionapi.controller;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.mock;
 
 import java.time.ZonedDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.techbd.config.AppConfig;
 import org.techbd.nexusingestionapi.service.AwsService;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import software.amazon.awssdk.services.sqs.SqsClient;
 
-public class ApiControllerTest {
+public class DataIngestionControllerTest {
 
     private AwsService s3Service;
     private SqsClient sqsClient;
     private ObjectMapper objectMapper;
-    private ApiController controller;
-
+    private DataIngestionController controller;
+    private AppConfig appConfig;
     @BeforeEach
     void setup() {
         s3Service = mock(AwsService.class);
         sqsClient = mock(SqsClient.class);
         objectMapper = new ObjectMapper();
-        controller = new ApiController(s3Service, sqsClient, objectMapper);
+        appConfig = mock(AppConfig.class);
+        controller = new DataIngestionController(s3Service, sqsClient, objectMapper, appConfig);
     }
 
     @Test
@@ -38,12 +40,11 @@ public class ApiControllerTest {
             "X-Tenant-Id", "testTenant"
         );
 
-        ApiController.RequestContext context = new ApiController.RequestContext(
+        DataIngestionController.RequestContext context = new DataIngestionController.RequestContext(
             headers,
             "/Bundle",
             "testTenant",
             "12345",
-            "fhir",
             ZonedDateTime.now(),
             "1716899999999",
             "testFile.json",
@@ -78,12 +79,11 @@ public class ApiControllerTest {
             "Content-Type", "application/json"
         );
 
-        ApiController.RequestContext context = new ApiController.RequestContext(
+        DataIngestionController.RequestContext context = new DataIngestionController.RequestContext(
             headers,
             "/Bundle",
             "testTenant",
             "abcde-12345",
-            "fhir",
             ZonedDateTime.parse("2025-05-28T12:00:00Z"),
             "1716899999999",
             "example.json",
