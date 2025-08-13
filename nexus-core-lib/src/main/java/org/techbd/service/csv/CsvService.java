@@ -87,36 +87,43 @@ public class CsvService {
         }
     }
 
-    private void saveArchiveInteractionStatus(
+    private void saveArchiveInteractionStatusAndFullOperationOutcome(
             String zipFileInteractionId,
             org.jooq.Configuration jooqCfg,
-            CsvProcessingState state,Map<String,Object> requestParameters) {
+            CsvProcessingState state,Map<String,Object> requestParameters , List<Object> fullOperationOutcome) {
 
-        LOG.info("CsvService saveArchiveInteraction - STATUS UPDATE ONLY | zipFileInteractionId: {}, newState: {}",
+        LOG.info("CsvService saveArchiveInteractionStatusAndFullOperationOutcome - STATUS UPDATE ONLY | zipFileInteractionId: {}, newState: {}",
                 zipFileInteractionId, state.name());
-
         final var updateRIHR = new SatInteractionCsvRequestUpserted();
-
         try {
             updateRIHR.setInteractionId(zipFileInteractionId);
             updateRIHR.setUri((String) requestParameters.get(Constants.REQUEST_URI));
             updateRIHR.setStatus(state.name());
             updateRIHR.setNature(Nature.UPDATE_ZIP_FILE_PROCESSING_DETAILS.getDescription());
-            final var start = Instant.now();
-            final var execResult = updateRIHR.execute(jooqCfg);
-            final var end = Instant.now();
-            // final JsonNode responseFromDB = updateRIHR.getReturnValue();
-            // final Map<String, Object> responseAttributes =
-            // CoreFHIRUtil.extractFields(responseFromDB);
-            // LOG.info("CsvService - STATUS UPDATE END | zipFileInteractionId: {},
-            // newState: {}, timeTaken: {} ms, error: {}, hub_nexus_interaction_id: {}{}",
-            // zipFileInteractionId,
-            // state.name(),
-            // Duration.between(start, end).toMillis(),
-            // responseAttributes.getOrDefault(Constants.KEY_ERROR, "N/A"),
-            // responseAttributes.getOrDefault(Constants.KEY_HUB_NEXUS_INTERACTION_ID,
-            // "N/A"),
-            // execResult);
+            updateRIHR.setValidationResultPayload(
+                        (JsonNode) Configuration.objectMapper.valueToTree(fullOperationOutcome));
+            updateRIHR.execute(jooqCfg);    
+                LOG.info("CsvService saveArchiveInteractionStatusAndFullOperationOutcome - COMPLETED | zipFileInteractionId: {} state: {}", zipFileInteractionId, state.name());
+           } catch (Exception e) {
+            LOG.error("ERROR:: Status update failed for interactionId: {}, state: {}", zipFileInteractionId,
+                    state.name(), e);
+        }
+    }
+
+     private void saveArchiveInteractionStatus(
+            String zipFileInteractionId,
+            org.jooq.Configuration jooqCfg,
+            CsvProcessingState state,Map<String,Object> requestParameters) {
+        LOG.info("CsvService saveArchiveInteraction - STATUS UPDATE ONLY | zipFileInteractionId: {}, newState: {}",
+                zipFileInteractionId, state.name());
+        final var updateRIHR = new SatInteractionCsvRequestUpserted();
+        try {
+            updateRIHR.setInteractionId(zipFileInteractionId);
+            updateRIHR.setUri((String) requestParameters.get(Constants.REQUEST_URI));
+            updateRIHR.setStatus(state.name());
+            updateRIHR.setNature(Nature.UPDATE_ZIP_FILE_PROCESSING_DETAILS.getDescription());
+            updateRIHR.execute(jooqCfg);   
+        LOG.info("CsvService saveArchiveInteraction - STATUS UPDATE COMPLETED | zipFileInteractionId: {} state: {}", zipFileInteractionId, state.name());
         } catch (Exception e) {
             LOG.error("ERROR:: Status update failed for interactionId: {}, state: {}", zipFileInteractionId,
                     state.name(), e);
@@ -239,7 +246,7 @@ public class CsvService {
                     file.getOriginalFilename(),
                     (String) requestParams.get(Constants.BASE_FHIR_URL));
 
-            saveArchiveInteractionStatus(interactionId, jooqCfg, CsvProcessingState.PROCESSING_COMPLETED, requestParams);
+            saveArchiveInteractionStatusAndFullOperationOutcome(interactionId, jooqCfg, CsvProcessingState.PROCESSING_COMPLETED, requestParams,result);
             LOG.info("Synchronous processing completed for zipFileInteractionId: {}", interactionId);
             return result;
         } catch (Exception ex) {
@@ -284,7 +291,7 @@ public class CsvService {
 
                 engine.orchestrate(session);
 
-                csvBundleProcessorService.processPayload(
+                List<Object> fullOperationOutcome = csvBundleProcessorService.processPayload(
                         interactionId,
                         session.getPayloadAndValidationOutcomes(),
                         session.getFilesNotProcessed(),
@@ -294,8 +301,8 @@ public class CsvService {
                         file.getOriginalFilename(),
                         (String) requestParams.get(Constants.BASE_FHIR_URL));
 
-                saveArchiveInteractionStatus(interactionId, jooqCfg,
-                        CsvProcessingState.PROCESSING_COMPLETED, requestParams);
+                saveArchiveInteractionStatusAndFullOperationOutcome(interactionId, jooqCfg,
+                        CsvProcessingState.PROCESSING_COMPLETED, requestParams, fullOperationOutcome);
                 LOG.info("Asynchronous processing completed for zipFileInteractionId: {}",
                         interactionId);
             } catch (Exception ex) {
