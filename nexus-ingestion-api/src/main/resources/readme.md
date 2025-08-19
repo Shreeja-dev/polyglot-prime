@@ -73,7 +73,7 @@ rm -rf aws awscliv2.zip  # Clean up
 
 ---
 
-## 🪣 5. Create S3 Bucket in LocalStack 
+## 🪣 5. Create S3 Bucket in LocalStack
 
 ```bash
 export LOCALSTACK_ENDPOINT=http://localhost:4566
