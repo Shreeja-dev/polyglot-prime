@@ -1,10 +1,10 @@
 
 package org.techbd.ingest.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.techbd.ingest.commons.AppLogger;
 import org.techbd.ingest.commons.Constants;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.model.RequestContext;
 /**
  * Service responsible for generating a unique message group ID
@@ -22,8 +22,11 @@ import org.techbd.ingest.model.RequestContext;
 @Service
 public class MessageGroupService {
 
-    private static final Logger logger = LoggerFactory.getLogger(MessageGroupService.class);
+    private final TemplateLogger log;
 
+    public MessageGroupService(AppLogger appLogger) {
+        this.log = appLogger.getLogger(MessageGroupService.class);
+    }
     /**
      * Creates a message group ID by combining the source IP, destination IP,
      * and destination port from the given {@link RequestContext}.
@@ -38,14 +41,14 @@ public class MessageGroupService {
         String destinationPort = context.getDestinationPort();
         var messageGroupId =Constants.DEFAULT_MESSAGE_GROUP_ID;
         if (isBlank(sourceIp) || isBlank(destinationIp) || isBlank(destinationPort)) {
-            logger.warn("Incomplete request context. Using default message group. "
-                      + "sourceIp='{}', destinationIp='{}', destinationPort='{}', interactionId='{}'",
-                      sourceIp, destinationIp, destinationPort, interactionId);
+            log.warn(interactionId,"MessageGroupService::createMessageGroupId","Incomplete request context. Using default message group. "
+                      + "sourceIp='{}', destinationIp='{}', destinationPort='{}'",
+                      sourceIp, destinationIp, destinationPort);
             context.setMessageGroupId(messageGroupId);
             return messageGroupId;
         }
         messageGroupId =String.format("%s_%s_%s", sourceIp.trim(), destinationIp.trim(), destinationPort.trim());
-        logger.debug("Generated message group ID: {} for interactionId: {}", messageGroupId, interactionId);
+        log.info(interactionId,"MessageGroupService::createMessageGroupId","Generated message group ID: {}", messageGroupId);
         context.setMessageGroupId(messageGroupId);
         return messageGroupId;
     }

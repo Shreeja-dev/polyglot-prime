@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
+import org.techbd.ingest.commons.AppLogger;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MessageGroupService;
@@ -40,29 +42,31 @@ public class SqsPublishStep implements MessageProcessingStep {
     private final MetadataBuilderService metadataBuilderService;
     private final AppConfig appConfig;
     private final MessageGroupService messageGroupService;
-
+    private final TemplateLogger log;
+    
     public SqsPublishStep(SqsClient sqsClient, ObjectMapper objectMapper, MetadataBuilderService metadataBuilderService,
-            AppConfig appConfig, MessageGroupService messageGroupService) {
+            AppConfig appConfig, MessageGroupService messageGroupService,AppLogger appLogger) {
         this.sqsClient = sqsClient;
         this.objectMapper = objectMapper;
         this.metadataBuilderService = metadataBuilderService;
         this.messageGroupService = messageGroupService;
         this.appConfig = appConfig;
+        this.log = appLogger.getLogger(SqsPublishStep.class);
         LOG.info("SqsPublishStep initialized");
     }
 
     @Override
     public void process(RequestContext context, MultipartFile file) {
         String interactionId = context != null ? context.getInteractionId() : "unknown";
-        LOG.info("SqsPublishStep:: process called with MultipartFile. interactionId={}, filename={}", interactionId,
-                file != null ? file.getOriginalFilename() : "null");
+         log.info(interactionId, "SqsPublishStep::process",
+                "Called with MultipartFile. filename={}", file != null ? file.getOriginalFilename() : "null");
+        
         try {
             final var messageGroupId = messageGroupService.createMessageGroupId(context,interactionId);
             Map<String, Object> message = metadataBuilderService.buildSqsMessage(context);
             String messageJson = objectMapper.writeValueAsString(message);
             String queueUrl = appConfig.getAws().getSqs().getFifoQueueUrl();
-            LOG.info("SqsPublishStep:: Sending message to SQS. interactionId={}, queueUrl={}", interactionId, queueUrl);
-
+            log.info(interactionId, "SqsPublishStep::process","Sending message to SQS. queueUrl={}", queueUrl);
             String messageId = sqsClient.sendMessage(SendMessageRequest.builder()
                     .queueUrl(queueUrl)
                     .messageBody(messageJson)
@@ -70,23 +74,22 @@ public class SqsPublishStep implements MessageProcessingStep {
                     .build())
                     .messageId();
             context.setMessageId(messageId);
-            LOG.info("SqsPublishStep:: Message sent to SQS successfully. interactionId={}, messageId={}", interactionId,
-                    messageId);
+            log.info(interactionId, "SqsPublishStep::process", "Message sent to SQS successfully. messageId={}", messageId);
         } catch (Exception e) {
-            LOG.error("SqsPublishStep:: SQS Publish Step Failed. interactionId={}", interactionId, e);
+            log.error(interactionId, "SqsPublishStep::process", "SQS Publish Step Failed", e);
             // throw new RuntimeException("SQS Publish Step Failed", e);
         }
     }
 
     public void process(RequestContext context, String content,String ackMessage) {
         String interactionId = context != null ? context.getInteractionId() : "unknown";
-        LOG.info("SqsPublishStep:: process called with String content. interactionId={}", interactionId);
+        log.info(interactionId, "SqsPublishStep::process", "Called with String content.");
         try {
             final var messageGroupId = messageGroupService.createMessageGroupId(context,interactionId);
             Map<String, Object> message = metadataBuilderService.buildSqsMessage(context);
             String messageJson = objectMapper.writeValueAsString(message);
             String queueUrl = appConfig.getAws().getSqs().getFifoQueueUrl();
-            LOG.info("SqsPublishStep:: Sending message to SQS. interactionId={}, queueUrl={}", interactionId, queueUrl);
+            log.info(interactionId, "SqsPublishStep::process", "Sending message to SQS. queueUrl={}", queueUrl);
 
             String messageId = sqsClient.sendMessage(SendMessageRequest.builder()
                     .queueUrl(queueUrl)
@@ -95,10 +98,9 @@ public class SqsPublishStep implements MessageProcessingStep {
                     .build())
                     .messageId();
             context.setMessageId(messageId);
-            LOG.info("SqsPublishStep:: Message sent to SQS successfully. interactionId={}, messageId={}", interactionId,
-                    messageId);
+            log.info(interactionId, "SqsPublishStep::process", "Message sent to SQS successfully. messageId={}", messageId);
         } catch (Exception e) {
-            LOG.error("SqsPublishStep:: SQS Publish Step Failed. interactionId={}", interactionId, e);
+            log.error(interactionId, "SqsPublishStep::process", "SQS Publish Step Failed", e);
             // throw new RuntimeException("SQS Publish Step Failed", e);
         }
     }

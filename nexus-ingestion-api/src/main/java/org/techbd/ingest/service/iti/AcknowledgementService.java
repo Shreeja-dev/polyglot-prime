@@ -1,10 +1,5 @@
 package org.techbd.ingest.service.iti;
 
-import org.techbd.iti.schema.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.GregorianCalendar;
@@ -13,10 +8,34 @@ import java.util.UUID;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 
+import org.springframework.stereotype.Service;
+import org.techbd.ingest.commons.AppLogger;
+import org.techbd.ingest.commons.TemplateLogger;
+import org.techbd.iti.schema.AcknowledgementDetailType;
+import org.techbd.iti.schema.CS;
+import org.techbd.iti.schema.CommunicationFunctionType;
+import org.techbd.iti.schema.ED;
+import org.techbd.iti.schema.II;
+import org.techbd.iti.schema.MCCIIN000002UV01;
+import org.techbd.iti.schema.MCCIMT000100UV01Device;
+import org.techbd.iti.schema.MCCIMT000200UV01Acknowledgement;
+import org.techbd.iti.schema.MCCIMT000200UV01AcknowledgementDetail;
+import org.techbd.iti.schema.MCCIMT000200UV01Device;
+import org.techbd.iti.schema.MCCIMT000200UV01Receiver;
+import org.techbd.iti.schema.MCCIMT000200UV01Sender;
+import org.techbd.iti.schema.MCCIMT000200UV01TargetMessage;
+import org.techbd.iti.schema.ObjectFactory;
+import org.techbd.iti.schema.RegistryResponseType;
+import org.techbd.iti.schema.TEL;
+import org.techbd.iti.schema.TS;
+
 @Service
 public class AcknowledgementService {
+    private final TemplateLogger log;
 
-    private static final Logger logger = LoggerFactory.getLogger(AcknowledgementService.class);
+    public AcknowledgementService(AppLogger appLogger) {
+        this.log = appLogger.getLogger(AcknowledgementService.class);
+    }
 
     public MCCIIN000002UV01 createPixAcknowledgement(
             II originalRequestId,
@@ -25,8 +44,7 @@ public class AcknowledgementService {
             String senderTelecomURL,
             String techBDInteractionId) {
 
-        logger.info("AcknowledgementService:: Creating HL7 acknowledgement response for interactionId: {}",
-                techBDInteractionId);
+        log.info(techBDInteractionId,"AcknowledgementService::createPixAcknowledgement","Creating HL7 acknowledgement response");
 
         MCCIIN000002UV01 ack = new MCCIIN000002UV01();
 
@@ -34,8 +52,7 @@ public class AcknowledgementService {
         II id = new II();
         id.setRoot(UUID.randomUUID().toString());
         ack.setId(id);
-        logger.debug("AcknowledgementService:: Assigned response ID: {} for interaction id :{}", id.getRoot(),
-                techBDInteractionId);
+        log.debug(techBDInteractionId,"AcknowledgementService::createPixAcknowledgement","AcknowledgementService:: Assigned response ID: {}", id.getRoot());
 
         // Creation time
         TS creationTime = new TS();
@@ -91,8 +108,8 @@ public class AcknowledgementService {
         // Attach device to sender
         sender.setDevice(senderDevice);
 
-// Add sender to ack
-ack.setSender(sender);
+        // Add sender to ack
+        ack.setSender(sender);
 
 
         // Acknowledgement
@@ -108,15 +125,12 @@ ack.setSender(sender);
         ackBlock.setTargetMessage(targetMessage);
         ack.getAcknowledgement().add(ackBlock);
 
-        logger.info("AcknowledgementService:: HL7 acknowledgement created successfully for interactionId: {}",
-                techBDInteractionId);
+        log.info(techBDInteractionId,"AcknowledgementService::createPixAcknowledgement","HL7 acknowledgement created successfully");
         return ack;
     }
 
     public MCCIIN000002UV01 createPixAcknowledgmentError(String errorMessage, String techBDInteractionId) {
-        logger.warn(
-                "AcknowledgementService:: Creating HL7 error acknowledgment for interactionId: {}, errorMessage: {}",
-                techBDInteractionId, errorMessage);
+        log.warn(techBDInteractionId,"AcknowledgementService::createPixAcknowledgmentError","Creating HL7 error acknowledgment , errorMessage: {}", errorMessage);
 
         MCCIIN000002UV01 ack = new MCCIIN000002UV01();
 
@@ -133,9 +147,7 @@ ack.setSender(sender);
             creationTime.setValue(xmlCal.toXMLFormat());
             ack.setCreationTime(creationTime);
         } catch (Exception e) {
-            logger.error(
-                    "AcknowledgementService:: Error setting creationTime in error acknowledgment for interactionId: {}",
-                    techBDInteractionId, e);
+            log.error(techBDInteractionId,"AcknowledgementService::createPixAcknowledgmentError","Error setting creationTime in error acknowledgment", e);
         }
 
         // Interaction ID
@@ -174,15 +186,12 @@ ack.setSender(sender);
         acknowledgement.getAcknowledgementDetail().add(detail);
         ack.getAcknowledgement().add(acknowledgement);
 
-        logger.warn("AcknowledgementService:: HL7 error acknowledgment created successfully for interactionId: {}",
-                techBDInteractionId);
+        log.warn(techBDInteractionId,"AcknowledgementService::createPixAcknowledgmentError","HL7 error acknowledgment created successfully");
         return ack;
     }
 
     public RegistryResponseType createPnrAcknowledgement(String status, String techBDInteractionId) {
-        logger.info("AcknowledgementService:: Creating PnR acknowledgement with status: {} for interactionId: {}",
-                status, techBDInteractionId);
-
+        log.info(techBDInteractionId,"AcknowledgementService::createPnrAcknowledgement","Creating PnR acknowledgement with status: {}", status);
         ObjectFactory factory = new ObjectFactory();
         RegistryResponseType response = factory.createRegistryResponseType();
 
@@ -191,10 +200,6 @@ ack.setSender(sender);
         } else {
             response.setStatus("urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure");
         }
-
-        logger.debug(
-                "AcknowledgementService:: techbdGeneratedInteractionId: urn:uuid:techbd-generated-interactionid:{} for interactionId: {}",
-                techBDInteractionId, UUID.randomUUID());
         return response;
     }
 }

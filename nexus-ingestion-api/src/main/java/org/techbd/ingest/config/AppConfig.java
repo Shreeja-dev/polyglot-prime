@@ -13,6 +13,7 @@ public class AppConfig {
 
     private Aws aws;
     private Soap soap;
+    private Build build;
 
     @Data
     public static class Aws {
@@ -56,5 +57,9 @@ public class AppConfig {
             private String namespace;
             private String prefix;
         }
+    }
+    @Data
+    public static class Build {
+        private String version;
     }
 }

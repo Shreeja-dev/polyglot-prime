@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.techbd.ingest.commons.AppLogger;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.processor.MessageProcessingStep;
 
@@ -36,8 +38,11 @@ public class MessageProcessorService {
 
     private final List<MessageProcessingStep> processingSteps;
 
-    public MessageProcessorService(List<MessageProcessingStep> processingSteps) {
+    private final TemplateLogger log;
+
+    public MessageProcessorService(List<MessageProcessingStep> processingSteps, AppLogger appLogger) {
         this.processingSteps = processingSteps;
+        this.log = appLogger.getLogger(MessageProcessorService.class);
         LOG.info("MessageProcessorService:: initialized");
     }
 
@@ -52,17 +57,15 @@ public class MessageProcessorService {
      */
     public Map<String, String> processMessage(RequestContext context, MultipartFile file) {
         String interactionId = context != null ? context.getInteractionId() : "unknown";
-        LOG.info(
-                "MessageProcessorService:: processMessage called with MultipartFile. interactionId={}, filename={}, filesize={}",
-                interactionId,
+        log.info(interactionId,"MessageProcessorService:: processMessage","MultipartFile filename={}, filesize={}",
                 file != null ? file.getOriginalFilename() : "null",
                 file != null ? file.getSize() : 0);
         for (MessageProcessingStep step : processingSteps) {
-            LOG.info("MessageProcessorService:: Processing step {} for interactionId={}",
-                    step.getClass().getSimpleName(), interactionId);
+            log.info(interactionId,"MessageProcessorService:: processMessage","Processing step {}",
+                    step.getClass().getSimpleName());
             step.process(context, file);
         }
-        LOG.info("MessageProcessorService:: All processing steps completed for interactionId={}", interactionId);
+        log.info(interactionId,"MessageProcessorService:: processMessage","All processing steps completed");
         return createSuccessResponse(context.getMessageId(), context);
     }
 
@@ -90,14 +93,13 @@ public class MessageProcessorService {
      */
     public Map<String, String> processMessage(RequestContext context, String content, String ackMessage) {
         String interactionId = context != null ? context.getInteractionId() : "unknown";
-        LOG.info("MessageProcessorService:: processMessage called with String content. interactionId={}",
-                interactionId);
+        log.info(interactionId,"MessageProcessorService:: processMessage","processMessage called with String content");
         for (MessageProcessingStep step : processingSteps) {
-            LOG.info("MessageProcessorService:: Processing step {} for interactionId={}",
-                    step.getClass().getSimpleName(), interactionId);
+            log.info(interactionId,"MessageProcessorService:: processMessage","Processing step {}",
+                    step.getClass().getSimpleName());
             step.process(context, content, ackMessage);
         }
-        LOG.info("MessageProcessorService:: All processing steps completed for interactionId={}", interactionId);
+        log.info(interactionId,"MessageProcessorService:: processMessage","All processing steps completed");
         return createSuccessResponse(context.getMessageId(), context);
     }
 
@@ -112,14 +114,14 @@ public class MessageProcessorService {
     private Map<String, String> createSuccessResponse(String messageId, RequestContext context) {
         String interactionId = context != null ? context.getInteractionId() : "unknown";
         try {
-            LOG.info("MessageProcessorService:: Creating success response for interactionId={}", interactionId);
+            log.info(interactionId,"MessageProcessorService:: processMessage","Creating success response");
             return Map.of(
                     "messageId", messageId,
                     "interactionId", context.getInteractionId(),
                     "fullS3Path", context.getFullS3DataPath(),
                     "timestamp", context.getTimestamp());
         } catch (Exception e) {
-            LOG.error("MessageProcessorService:: Error creating success response for interactionId={}", interactionId,
+            log.error(interactionId,"MessageProcessorService:: processMessage","Error creating success response",
                     e);
             // throw new RuntimeException("Failed to create response: " + e.getMessage(),
             // e);

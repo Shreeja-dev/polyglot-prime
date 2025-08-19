@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 
 import org.junit.jupiter.api.Test;
+import org.techbd.ingest.commons.AppLogger;
 import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.service.MessageProcessorService;
 
@@ -13,7 +14,8 @@ public class MllpRouteFactoryTest {
     public void testFactoryCreatesMllpRoute() {
         MessageProcessorService messageProcessorService = mock(MessageProcessorService.class);
         AppConfig appConfig = mock(AppConfig.class);
-        MllpRouteFactory factory = new MllpRouteFactory(messageProcessorService, appConfig);
+        AppLogger appLogger = mock(AppLogger.class);
+        MllpRouteFactory factory = new MllpRouteFactory(messageProcessorService, appConfig, appLogger);
 
         MllpRoute route = factory.create(2575);
 

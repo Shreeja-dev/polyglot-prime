@@ -10,21 +10,25 @@ import org.springframework.ws.context.MessageContext;
 import org.springframework.ws.soap.SoapHeader;
 import org.springframework.ws.soap.SoapHeaderElement;
 import org.springframework.ws.soap.SoapMessage;
+import org.techbd.ingest.commons.AppLogger;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.config.AppConfig;
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
 @Component
-@RequiredArgsConstructor
 public class SoapResponseUtil {
 
     private final AppConfig appConfig;
 
+    private final TemplateLogger log;
+
+    public SoapResponseUtil(AppConfig appConfig, AppLogger appLogger) {
+        this.appConfig = appConfig;
+        this.log = appLogger.getLogger(SoapResponseUtil.class);
+    }
+
     public SoapMessage buildSoapResponse(String interactionId,
                                          MessageContext messageContext) {
-        log.info("Building SOAP response for interactionId={}", interactionId);
+        log.info(interactionId,"SoapResponseUtil::buildSoapResponse","Building SOAP response");
 
         try {
             SoapMessage soapResponse = (SoapMessage) messageContext.getResponse();
@@ -36,7 +40,7 @@ public class SoapResponseUtil {
 
             if (relatesTo == null) {
                 relatesTo = "urn:uuid:unknown-incoming-message-id";
-                log.warn("RelatesTo header not found in request. Using fallback: {}", relatesTo);
+                log.warn(interactionId,"SoapResponseUtil::buildSoapResponse","RelatesTo header not found in request. Using fallback: {}", relatesTo);
             }
 
             var wsa = appConfig.getSoap().getWsa();
@@ -55,11 +59,11 @@ public class SoapResponseUtil {
 
            // marshaller.marshal(payload, soapResponse.getPayloadResult());
 
-            log.info("SOAP response built successfully for interactionId={}", interactionId);
+            log.info(interactionId,"SoapResponseUtil::buildSoapResponse","SOAP response built successfully");
             return soapResponse;
 
         } catch (Exception e) {
-            log.error("Failed to build SOAP response for interactionId={}", interactionId, e);
+            log.error(interactionId,"SoapResponseUtil::buildSoapResponse","Failed to build SOAP response", e);
             throw new RuntimeException("Error creating SOAP response", e);
         }
     }

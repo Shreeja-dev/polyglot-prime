@@ -20,6 +20,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.techbd.ingest.commons.AppLogger;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MessageProcessorService;
@@ -39,6 +41,12 @@ class DataIngestionControllerTest {
     @Mock
     private HttpServletRequest servletRequest;
 
+    @Mock
+    private AppLogger appLogger;
+
+    @Mock
+    private TemplateLogger log;
+
     private ObjectMapper objectMapper;
 
     @InjectMocks
@@ -47,8 +55,9 @@ class DataIngestionControllerTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        objectMapper = new ObjectMapper();
-        controller = new DataIngestionController(messageProcessorService, objectMapper,appConfig);
+        objectMapper = new ObjectMapper();        
+        when(appLogger.getLogger(DataIngestionController.class)).thenReturn(log);
+        controller = new DataIngestionController(messageProcessorService, objectMapper,appConfig,appLogger);
         when(servletRequest.getRequestURL()).thenReturn(new StringBuffer("http://localhost:8080/ingest"));
         when(servletRequest.getQueryString()).thenReturn("param=value");
         when(servletRequest.getProtocol()).thenReturn("HTTP/1.1");

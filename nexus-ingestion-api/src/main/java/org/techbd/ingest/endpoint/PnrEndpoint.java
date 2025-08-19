@@ -7,8 +7,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.ws.context.MessageContext;
 import org.springframework.ws.server.endpoint.annotation.Endpoint;
 import org.springframework.ws.server.endpoint.annotation.PayloadRoot;
@@ -16,7 +14,9 @@ import org.springframework.ws.server.endpoint.annotation.RequestPayload;
 import org.springframework.ws.server.endpoint.annotation.ResponsePayload;
 import org.springframework.ws.transport.context.TransportContextHolder;
 import org.springframework.ws.transport.http.HttpServletConnection;
+import org.techbd.ingest.commons.AppLogger;
 import org.techbd.ingest.commons.Constants;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MessageProcessorService;
@@ -49,17 +49,15 @@ import jakarta.xml.bind.JAXBElement;
  */
 @Endpoint
 public class PnrEndpoint {
-
-    private static final Logger log = LoggerFactory.getLogger(PnrEndpoint.class);
     private static final String NAMESPACE_URI = "urn:ihe:iti:xds-b:2007";
 
     private final AcknowledgementService ackService;
     private final AppConfig appConfig;
-
-    public PnrEndpoint(AcknowledgementService ackService, AppConfig appConfig) {
+    private final TemplateLogger log;
+    public PnrEndpoint(AcknowledgementService ackService, AppConfig appConfig, AppLogger appLogger) {
         this.ackService = ackService;
         this.appConfig = appConfig;
-        log.info("PnrEndpoint constructor called - bean is being created!");
+        this.log = appLogger.getLogger(PnrEndpoint.class);
     }
 
     @PayloadRoot(namespace = NAMESPACE_URI, localPart = "ProvideAndRegisterDocumentSetRequest")
@@ -74,8 +72,7 @@ public class PnrEndpoint {
             interactionId = UUID.randomUUID().toString();
         }
         try {
-             log.info("PnrEndpoint:: Received ProvideAndRegisterDocumentSet-b (ITI-41) request. interactionId={}",
-            interactionId);
+            log.info(interactionId,"PnrEndpoint::handleProvideAndRegister","Received ProvideAndRegisterDocumentSet-b (ITI-41) request");
             // Get raw SOAP message and build context
             String rawSoapMessage = (String) messageContext.getProperty("RAW_SOAP_MESSAGE");
             RequestContext context = buildRequestContext(rawSoapMessage, interactionId);        
@@ -86,7 +83,7 @@ public class PnrEndpoint {
             httpRequest.setAttribute(Constants.REQUEST_CONTEXT, context);
             return jaxbResponse;
         } catch (Exception e) {
-            log.error("PnrEndpoint:: Exception processing ITI-41 request. interactionId={}, error={}", interactionId, e.getMessage(), e);
+            log.error(interactionId,"PnrEndpoint::handleProvideAndRegister","Exception processing ITI-41 request error={}", e.getMessage(), e);
             RegistryResponseType response = ackService.createPnrAcknowledgement("Failure", interactionId);
             ObjectFactory factory = new ObjectFactory();
             return factory.createRegistryResponse(response);

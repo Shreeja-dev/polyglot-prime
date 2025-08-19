@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.techbd.ingest.commons.AppLogger;
 import org.techbd.ingest.commons.Constants;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MessageProcessorService;
@@ -28,25 +30,25 @@ import org.techbd.ingest.service.MessageProcessorService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * Controller for handling data ingestion requests.
  * This controller processes file uploads and string content ingestion.
  */
 @RestController
-@Slf4j
 public class DataIngestionController {
     private static final Logger LOG = LoggerFactory.getLogger(DataIngestionController.class.getName()); 
     private static final DateTimeFormatter DATE_PATH_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd");
     private final MessageProcessorService messageProcessorService;
     private final ObjectMapper objectMapper;
     private final AppConfig appConfig;
+    private final TemplateLogger log;
 
-    public DataIngestionController(MessageProcessorService messageProcessorService, ObjectMapper objectMapper, AppConfig appConfig) {
+    public DataIngestionController(MessageProcessorService messageProcessorService, ObjectMapper objectMapper, AppConfig appConfig,AppLogger appLogger) {
         this.messageProcessorService = messageProcessorService;
         this.objectMapper = objectMapper;
         this.appConfig = appConfig;
+        this.log = appLogger.getLogger(DataIngestionController.class);
         LOG.info("DataIngestionController initialized");
     }
 
@@ -90,13 +92,13 @@ public class DataIngestionController {
             @RequestHeader Map<String, String> headers,
             HttpServletRequest request) throws Exception {
         String interactionId = (String) request.getAttribute(Constants.INTERACTION_ID);
-        LOG.info("DataIngestionController:: Received ingest request. interactionId={}", interactionId);
+        log.info(interactionId ,"DataIngestionController::ingest","Received ingest request");
 
         Map<String, String> responseMap;
 
         if (file != null && !file.isEmpty()) {
-            LOG.info("DataIngestionController:: File received: {} ({} bytes). interactionId={}",
-                    file.getOriginalFilename(), file.getSize(), interactionId);
+            log.info(interactionId ,"DataIngestionController::ingest","File received: {} ({} bytes)",
+                    file.getOriginalFilename(), file.getSize());
             RequestContext context = createRequestContext(interactionId,
                     headers, request, file.getSize(), file.getOriginalFilename());
             responseMap = messageProcessorService.processMessage(context, file);
@@ -105,19 +107,20 @@ public class DataIngestionController {
             String contentType = request.getContentType();
            // String extension = resolveExtension(contentType);
            // String generatedFileName = interactionId + extension;
-            LOG.info("DataIngestionController:: Raw body received (Content-Type={}): {}... interactionId={}",
-                    contentType, body.substring(0, Math.min(200, body.length())), interactionId);
+           log.info(interactionId,"DataIngestionController::ingest","Raw body received (Content-Type={}): {}...",
+                   contentType);
             RequestContext context = createRequestContext(interactionId,
                     headers, request, body.length(), null);
             responseMap = messageProcessorService.processMessage(context, body);
 
         } else {
-            LOG.warn("DataIngestionController:: Neither file nor body provided. interactionId={}", interactionId);
+            log.warn(interactionId, "DataIngestionController::ingest", "Neither file nor body provided.");
+
             throw new IllegalArgumentException("Request must contain either a file or body data");
         }
-        LOG.info("DataIngestionController:: Ingestion processed successfully. interactionId={}", interactionId);
+        log.info(interactionId, "DataIngestionController::ingest", "Ingestion processed successfully.");
         String responseJson = objectMapper.writeValueAsString(responseMap);
-        LOG.info("DataIngestionController:: Returning response for interactionId={}", interactionId);
+        log.info(interactionId, "DataIngestionController::ingest","Returning response ");
         return ResponseEntity.ok(responseJson);
     }
 
@@ -141,16 +144,17 @@ private String resolveExtension(String contentType) {
     public ResponseEntity<String> handleException(Exception e) {
         // Try to extract interactionId from exception or context if possible
         String interactionId = "unknown";
-        LOG.error("DataIngestionController:: Error processing request. interactionId={}", interactionId, e);
+       log.error(interactionId, "DataIngestionController::handleException", 
+          "Error processing request.", e);
         Map<String, String> error = Map.of("error", e.getMessage());
         try {
             String errorJson = objectMapper.writeValueAsString(error);
-            LOG.info("DataIngestionController:: Returning BAD_REQUEST for interactionId={}", interactionId);
+            log.info(interactionId, "DataIngestionController::handleException","Returning BAD_REQUEST");
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(errorJson);
         } catch (Exception ex) {
-            LOG.error("DataIngestionController:: Error serializing error response. interactionId={}", interactionId, ex);
+            log.error(interactionId, "DataIngestionController::handleException","Error serializing error response.", ex);
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("{\"error\":\"Internal server error\"}");
@@ -171,8 +175,7 @@ private String resolveExtension(String contentType) {
             HttpServletRequest request,
             long fileSize,
             String originalFileName) {
-        LOG.info("DataIngestionController:: Creating RequestContext. interactionId={}", interactionId);
-
+        log.info(interactionId, "DataIngestionController::createRequestContext", "Creating RequestContext.");
         String sourceIp = null;
         var tenantId = headers.get(Constants.REQ_HEADER_TENANT_ID);
         final var xForwardedFor = headers.get(Constants.REQ_HEADER_X_FORWARDED_FOR);
@@ -191,7 +194,7 @@ private String resolveExtension(String contentType) {
         if (tenantId == null || tenantId.trim().isEmpty()) {
             tenantId = Constants.DEFAULT_TENANT_ID;
         }
-        log.info("Request Headers - tenantId: {}, xForwardedFor: {}, xRealIp: {}, sourceIp: {}, destinationIp: {}, destinationPort: {}, interactionId: {}",
+        log.info(interactionId, "DataIngestionController::createRequestContext", "Request Headers - tenantId: {}, xForwardedFor: {}, xRealIp: {}, sourceIp: {}, destinationIp: {}, destinationPort: {}, interactionId: {}",
         headers.get(Constants.REQ_HEADER_TENANT_ID),
         headers.get(Constants.REQ_HEADER_X_FORWARDED_FOR),
         headers.get(Constants.REQ_HEADER_X_REAL_IP),
@@ -216,7 +219,7 @@ private String resolveExtension(String contentType) {
         String localAddress = request.getLocalAddr();
         String remoteAddress = request.getRemoteAddr();
 
-        LOG.info("DataIngestionController:: RequestContext built for interactionId={}: tenantId={}, objectKey={}", interactionId, tenantId, objectKey);
+        log.info(interactionId,"DataIngestionController::RequestContext" ,"RequestContext built");
 
         return new RequestContext(
                 headers,

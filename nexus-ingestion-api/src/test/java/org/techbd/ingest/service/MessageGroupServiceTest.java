@@ -1,22 +1,35 @@
 package org.techbd.ingest.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.when;
 
 import java.time.ZonedDateTime;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.techbd.ingest.commons.AppLogger;
 import org.techbd.ingest.commons.Constants;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.model.RequestContext;
 
 class MessageGroupServiceTest {
 
     private MessageGroupService messageGroupService;
 
+    @Mock
+    private AppLogger appLogger;
+
+    @Mock
+    private TemplateLogger log;
+
     @BeforeEach
     void setUp() {
-        messageGroupService = new MessageGroupService();
+        MockitoAnnotations.openMocks(this);
+        when(appLogger.getLogger(MessageGroupService.class)).thenReturn(log);
+        messageGroupService = new MessageGroupService(appLogger);
     }
 
     @Test

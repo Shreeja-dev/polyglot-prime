@@ -8,9 +8,9 @@ import java.util.UUID;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.builder.RouteBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.techbd.ingest.commons.AppLogger;
 import org.techbd.ingest.commons.Constants;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.feature.FeatureEnum;
 import org.techbd.ingest.model.RequestContext;
@@ -24,17 +24,16 @@ import ca.uhn.hl7v2.parser.PipeParser;
 import ca.uhn.hl7v2.util.Terser;
 
 public class MllpRoute extends RouteBuilder {
-
-    private static final Logger logger = LoggerFactory.getLogger(MllpRoute.class);
-
     private final int port;
     private final MessageProcessorService messageProcessorService;
     private final AppConfig appConfig;
+    private final TemplateLogger log;
 
-    public MllpRoute(int port, MessageProcessorService messageProcessorService, AppConfig appConfig) {
+    public MllpRoute(int port, MessageProcessorService messageProcessorService, AppConfig appConfig, AppLogger appLogger) {
         this.port = port;
         this.messageProcessorService = messageProcessorService;
         this.appConfig = appConfig;
+        this.log = appLogger.getLogger(MllpRoute.class);
     }
 
     @Override
@@ -52,18 +51,17 @@ public class MllpRoute extends RouteBuilder {
                         Message ack = hapiMsg.generateACK();
                         String ackMessage = addNteWithInteractionId(ack, interactionId);
                         messageProcessorService.processMessage(buildRequestContext(exchange, hl7Message, interactionId), hl7Message, ackMessage);
-                        logger.info("[PORT {}] Ack message  : {} interactionId= {}", port, ackMessage, interactionId);
                         exchange.setProperty("CamelMllpAcknowledgementString", ackMessage);
                         exchange.getMessage().setBody(ackMessage);
-                        logger.info("[PORT {}] Processed HL7 message successfully. Ack message  : {} interactionId= {}", port, ackMessage, interactionId);
+                        log.info(interactionId,"MllpRoute::configure","[PORT {}] Processed HL7 message successfully", port);
                     } catch (Exception e) {
-                        logger.error("[PORT {}] Error processing HL7 message. interactionId= {} reason={}", port, interactionId, e.getMessage(),e);
+                        log.error(interactionId,"MllpRoute::configure","[PORT {}] Error processing HL7 message. reason={}", port,e.getMessage(),e);
                         try {
                             Message partial = parser.parse(hl7Message);
                             Message generatedNack  = partial.generateACK(AcknowledgmentCode.AE, new HL7Exception(e.getMessage()));
                             nack = addNteWithInteractionId(generatedNack, interactionId);
                         } catch (Exception ex2) {
-                            logger.error("[PORT {}] Error generating NACK. interactionId= {} reason={}", port, interactionId, ex2.getMessage(),ex2);
+                            log.error(interactionId,"MllpRoute::configure","[PORT {}] Error generating NACK. reason={}", port, ex2.getMessage(),ex2);
                             nack = "MSH|^~\\&|UNKNOWN|UNKNOWN|UNKNOWN|UNKNOWN|202507181500||ACK^O01|1|P|2.3\r" +
                             "MSA|AE|1|Error: Unexpected failure\r" +
                             "NTE|1||InteractionID: " + interactionId + "\r";
@@ -92,7 +90,7 @@ public class MllpRoute extends RouteBuilder {
             if (v instanceof String) {
                 headers.put(k, (String) v);
                 if (FeatureEnum.isEnabled(FeatureEnum.DEBUG_LOG_REQUEST_HEADERS)) {
-                    log.info("{} -Header for the InteractionId {} :  {} = {}", FeatureEnum.DEBUG_LOG_REQUEST_HEADERS,interactionId , k, v);
+                    log.info(interactionId,"MllpRoute::buildRequestContext","{} -Header :  {} = {}", FeatureEnum.DEBUG_LOG_REQUEST_HEADERS, k, v);
                 }
             }
         });
@@ -106,13 +104,13 @@ public class MllpRoute extends RouteBuilder {
         if (tenantId == null || tenantId.trim().isEmpty()) {
             tenantId = Constants.DEFAULT_TENANT_ID;
         }
-        log.info("Request Headers - tenantId: {}, xForwardedFor: {}, xRealIp: {}, sourceIp: {}, destinationIp: {}, destinationPort: {}, interactionId: {}",
+        log.info(interactionId,"MllpRoute::buildRequestContext","Request Headers - tenantId: {}, xForwardedFor: {}, xRealIp: {}, sourceIp: {}, destinationIp: {}, destinationPort: {}",
         headers.get(Constants.REQ_HEADER_TENANT_ID),
         headers.get(Constants.REQ_HEADER_X_FORWARDED_FOR),
         headers.get(Constants.REQ_HEADER_X_REAL_IP),
         sourceIp,
         destinationIp,
-        destinationPort,interactionId);
+        destinationPort);
         String datePath = uploadTime.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
         // String fileBaseName = "hl7-message";
         // String ackFileBaseName = "hl7-message-ack";
@@ -239,7 +237,7 @@ public class MllpRoute extends RouteBuilder {
 
             return sendingApp + "@" + sendingFacility;
         } catch (Exception e) {
-            logger.error("Error extracting sending facility from HL7 message: {} for interaction id :{}", e.getMessage(), interactionId);
+            log.error(interactionId,"MllpRoute::getUserAgentFromHL7","Error extracting sending facility from HL7 message: {}", e.getMessage());
             return "MLLP Listener";
         }
     }

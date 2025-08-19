@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.techbd.ingest.commons.AppLogger;
 import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.service.MessageProcessorService;
 public class MllpRouteRegistrarTest {
@@ -30,7 +31,8 @@ public class MllpRouteRegistrarTest {
   void setUp() {
     MessageProcessorService mockRouter = mock(MessageProcessorService.class);
     AppConfig config = mock(AppConfig.class);
-    factory = new MllpRouteFactory(mockRouter, config);
+    AppLogger appLogger = mock(AppLogger.class);
+    factory = new MllpRouteFactory(mockRouter, config, appLogger);
     beanFactory = mock(ConfigurableBeanFactory.class);
   }
 

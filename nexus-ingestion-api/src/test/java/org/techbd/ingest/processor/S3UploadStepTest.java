@@ -17,6 +17,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.mock.web.MockMultipartFile;
+import org.techbd.ingest.commons.AppLogger;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MetadataBuilderService;
@@ -47,7 +49,13 @@ class S3UploadStepTest {
     private AppConfig.Aws aws;
 
     @Mock
+    private TemplateLogger log;
+    
+    @Mock
     private AppConfig.Aws.S3 s3;
+
+    @Mock
+    private AppLogger appLogger;
 
     @InjectMocks
     private S3UploadStep s3UploadStep;
@@ -88,7 +96,8 @@ class S3UploadStepTest {
         S3ServiceClientConfiguration mockConfig = mock(S3ServiceClientConfiguration.class);
         when(s3Client.serviceClientConfiguration()).thenReturn(mockConfig);
         when(mockConfig.endpointOverride()).thenReturn(Optional.empty());
-        s3UploadStep = new S3UploadStep(metadataBuilderService, objectMapper, appConfig, s3Client);
+        when(appLogger.getLogger(S3UploadStep.class)).thenReturn(log);
+        s3UploadStep = new S3UploadStep(metadataBuilderService, objectMapper, appConfig, s3Client, appLogger);
     }
 
     @Test

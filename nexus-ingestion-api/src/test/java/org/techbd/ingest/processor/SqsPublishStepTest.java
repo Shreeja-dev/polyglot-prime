@@ -5,7 +5,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 import org.springframework.mock.web.MockMultipartFile;
+import org.techbd.ingest.commons.AppLogger;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.config.AppConfig;
+import org.techbd.ingest.controller.DataIngestionController;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MessageGroupService;
 import org.techbd.ingest.service.MetadataBuilderService;
@@ -40,6 +43,9 @@ class SqsPublishStepTest {
 
     @Mock
     private MessageGroupService messageGroupService;
+
+    @Mock
+    private AppLogger appLogger;
 
     @InjectMocks
     private SqsPublishStep sqsPublishStep;
@@ -78,9 +84,10 @@ class SqsPublishStepTest {
                 "192.168.1.1",
                 "192.168.1.2",
                 "8080",null,null);
-
+        TemplateLogger templateLogger = mock(TemplateLogger.class);
+        when(appLogger.getLogger(SqsPublishStep.class)).thenReturn(templateLogger);
         sqsPublishStep = new SqsPublishStep(sqsClient, objectMapper, metadataBuilderService, appConfig,
-                messageGroupService);
+                messageGroupService,appLogger);
     }
 
     @Test

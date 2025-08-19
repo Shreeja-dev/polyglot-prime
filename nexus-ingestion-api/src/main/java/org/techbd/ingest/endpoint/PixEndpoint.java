@@ -7,8 +7,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.ws.context.MessageContext;
 import org.springframework.ws.server.endpoint.annotation.Endpoint;
 import org.springframework.ws.server.endpoint.annotation.PayloadRoot;
@@ -16,7 +14,9 @@ import org.springframework.ws.server.endpoint.annotation.RequestPayload;
 import org.springframework.ws.server.endpoint.annotation.ResponsePayload;
 import org.springframework.ws.transport.context.TransportContextHolder;
 import org.springframework.ws.transport.http.HttpServletConnection;
+import org.techbd.ingest.commons.AppLogger;
 import org.techbd.ingest.commons.Constants;
+import org.techbd.ingest.commons.TemplateLogger;
 import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MessageProcessorService;
@@ -45,16 +45,16 @@ import jakarta.servlet.http.HttpServletRequest;
  */
 @Endpoint
 public class PixEndpoint {
-
-    private static final Logger log = LoggerFactory.getLogger(PixEndpoint.class);
     private static final String NAMESPACE_URI = "urn:hl7-org:v3";
 
     private final AcknowledgementService ackService;
     private final AppConfig appConfig;
+    private final TemplateLogger log;
 
-    public PixEndpoint(AcknowledgementService ackService, AppConfig appConfig) {
+    public PixEndpoint(AcknowledgementService ackService, AppConfig appConfig, AppLogger appLogger) {
         this.ackService = ackService;
         this.appConfig = appConfig;
+        this.log = appLogger.getLogger(PixEndpoint.class);
     }
 
     @PayloadRoot(namespace = NAMESPACE_URI, localPart = "PRPA_IN201301UV02")
@@ -69,7 +69,7 @@ public class PixEndpoint {
             interactionId = UUID.randomUUID().toString();
         }
         try {
-            log.info("PixEndpoint:: Received PRPA_IN201301UV02 request. interactionId={}", interactionId);
+            log.info(interactionId,"PixEndpoint::handlePixAdd","Received PRPA_IN201301UV02 request");
             String rawSoapMessage = (String) messageContext.getProperty("RAW_SOAP_MESSAGE");
             RequestContext context = buildRequestContext(rawSoapMessage, interactionId);
             MCCIIN000002UV01 response = ackService.createPixAcknowledgement(
@@ -80,8 +80,8 @@ public class PixEndpoint {
             httpRequest.setAttribute(Constants.REQUEST_CONTEXT, context);
             return response;
         } catch (Exception e) {
-            log.error("PixEndpoint:: Exception processing PRPA_IN201301UV02. interactionId={}, error={}",
-                interactionId, e.getMessage(), e);
+            log.error(interactionId,"PixEndpoint::handlePixAdd","Exception processing PRPA_IN201301UV02 error={}",
+                 e.getMessage(), e);
             return ackService.createPixAcknowledgmentError("Internal server error", interactionId);
         }
     }
@@ -98,7 +98,7 @@ public class PixEndpoint {
             interactionId = UUID.randomUUID().toString();
         }
         try {
-            log.info("PixEndpoint:: Received PRPA_IN201302UV02 request. interactionId={}", interactionId);
+            log.info(interactionId,"PixEndpoint:: Received PRPA_IN201302UV02 request", interactionId);
             String rawSoapMessage = (String) messageContext.getProperty("RAW_SOAP_MESSAGE");
             RequestContext context = buildRequestContext(rawSoapMessage, interactionId);
             MCCIIN000002UV01 response = ackService.createPixAcknowledgement(
@@ -109,8 +109,8 @@ public class PixEndpoint {
             httpRequest.setAttribute(Constants.REQUEST_CONTEXT, context);
             return response;
         } catch (Exception e) {
-            log.error("PixEndpoint:: Exception processing PRPA_IN201302UV02. interactionId={}, error={}",
-                interactionId, e.getMessage(), e);
+            log.error(interactionId,"PixEndpoint::handlePixUpdate","Exception processing PRPA_IN201302UV02 error={}",
+                e.getMessage(), e);
             return ackService.createPixAcknowledgmentError("Internal server error", interactionId);
         }
     }
@@ -127,7 +127,7 @@ public class PixEndpoint {
             interactionId = UUID.randomUUID().toString();
         }
         try {
-            log.info("PixEndpoint:: Received PRPA_IN201304UV02 request. interactionId={}", interactionId);
+            log.info(interactionId,"PixEndpoint::handlePixDuplicateResolved","Received PRPA_IN201304UV02 request");
             String rawSoapMessage = (String) messageContext.getProperty("RAW_SOAP_MESSAGE");
             RequestContext context = buildRequestContext(rawSoapMessage, interactionId);
             MCCIIN000002UV01 response = ackService.createPixAcknowledgement(
@@ -138,8 +138,8 @@ public class PixEndpoint {
             httpRequest.setAttribute(Constants.REQUEST_CONTEXT, context);
             return response;
         } catch (Exception e) {
-            log.error("PixEndpoint:: Exception processing PRPA_IN201304UV02. interactionId={}, error={}",
-                interactionId, e.getMessage(), e);
+            log.error(interactionId,"PixEndpoint::handlePixDuplicateResolved","Exception processing PRPA_IN201304UV02 error={}",
+                e.getMessage(), e);
             return ackService.createPixAcknowledgmentError("Internal server error", interactionId);
         }
     }
@@ -173,8 +173,8 @@ public class PixEndpoint {
         String fullS3DataPath = Constants.S3_PREFIX + appConfig.getAws().getS3().getBucket() + "/" + objectKey;
         String fullS3AckMessagePath = Constants.S3_PREFIX + appConfig.getAws().getS3().getBucket() + "/" + ackObjectKey;
         String fullMetaDataObjectPath = Constants.S3_PREFIX + appConfig.getAws().getS3().getMetadataBucket() + "/" + metadataKey;
-        log.debug("PixEndpoint:: Request context built. interactionId={}, sourceIp={}, destinationPort={}, userAgent={}",
-            interactionId, sourceIp, destinationPort, userAgent);
+        log.debug(interactionId,"PixEndpoint::buildRequestContext","Request context built. sourceIp={}, destinationPort={}, userAgent={}",
+            sourceIp, destinationPort, userAgent);
         return new RequestContext(
                 headers, request.getRequestURI(), tenantId, interactionId, uploadTime, timestamp,
                 null, hl7Message.length(), objectKey, metadataKey, fullMetaDataObjectPath, fullS3DataPath,
