@@ -73,6 +73,7 @@ class S3UploadStepTest {
                 100L,
                 "objectKey",
                 "metadataKey",
+                "s3://test-bucket/objectKeyMetaData",
                 "s3://test-bucket/objectKey",
                 "JUnit-Test",
                 "http://localhost/test",

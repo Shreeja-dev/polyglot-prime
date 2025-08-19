@@ -114,10 +114,10 @@ public class MllpRoute extends RouteBuilder {
         destinationIp,
         destinationPort,interactionId);
         String datePath = uploadTime.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        String fileBaseName = "hl7-message";
-        String ackFileBaseName = "hl7-message-ack";
-        String fileExtension = "hl7";
-        String originalFileName = fileBaseName + "." + fileExtension;
+        // String fileBaseName = "hl7-message";
+        // String ackFileBaseName = "hl7-message-ack";
+        // String fileExtension = "hl7";
+        // String originalFileName = fileBaseName + "." + fileExtension;
         String objectKey = String.format("data/%s/%s_%s",
                 datePath, interactionId, timestamp);
         String ackObjectKey = String.format("data/%s/%s_%s_ack",
@@ -126,6 +126,7 @@ public class MllpRoute extends RouteBuilder {
                 datePath, interactionId, timestamp);
         String fullS3DataPath = Constants.S3_PREFIX + appConfig.getAws().getS3().getBucket() + "/" + objectKey;
         String fullS3AckMessagePath = Constants.S3_PREFIX + appConfig.getAws().getS3().getBucket() + "/" + ackObjectKey;
+        String fullS3MetadataPath = Constants.S3_PREFIX + appConfig.getAws().getS3().getMetadataBucket() + "/" + metadataKey;
         return new RequestContext(
                 headers,
                 "/hl7",
@@ -133,10 +134,11 @@ public class MllpRoute extends RouteBuilder {
                 interactionId,
                 uploadTime,
                 timestamp,
-                originalFileName,
+                null,
                 hl7Message.length(),
                 objectKey,
                 metadataKey,
+                fullS3MetadataPath,
                 fullS3DataPath,
                 getUserAgentFromHL7(hl7Message, interactionId),
                 exchange.getFromEndpoint().getEndpointUri(),

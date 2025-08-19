@@ -38,6 +38,7 @@ public class RequestContext {
     private final long fileSize;
     private final String objectKey;
     private final String metadataKey;
+    private final String fullMetaDataObjectPath;
     private final String ackObjectKey;
     private final String fullS3DataPath;
     private final String fullS3AckMessagePath;
@@ -56,7 +57,7 @@ public class RequestContext {
 
     public RequestContext(Map<String, String> headers, String requestUrl, String tenantId, String interactionId,
                           ZonedDateTime uploadTime, String timestamp, String fileName, long fileSize,
-                          String objectKey, String metadataKey, String fullS3DataPath, String userAgent,
+                          String objectKey, String metadataKey, String fullMetaDataObjectPath, String fullS3DataPath, String userAgent,
                           String fullRequestUrl, String queryParams, String protocol,
                           String localAddress, String remoteAddress, String sourceIp, String destinationIp,
                           String destinationPort, String ackObjectKey,String fullS3AckMessagePath) {
@@ -70,6 +71,7 @@ public class RequestContext {
         this.fileSize = fileSize;
         this.objectKey = objectKey;
         this.metadataKey = metadataKey;
+        this.fullMetaDataObjectPath = fullMetaDataObjectPath;
         this.ackObjectKey = ackObjectKey;
         this.fullS3DataPath = fullS3DataPath;
         this.fullS3AckMessagePath = fullS3AckMessagePath;

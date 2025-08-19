@@ -67,6 +67,7 @@ class SqsPublishStepTest {
                 123L,
                 "objectKey",
                 "metadataKey",
+                "s3://test-bucket/objectKeyMetaData",
                 "s3://test-bucket/objectKey",
                 "JUnit-Test",
                 "http://localhost/test",

@@ -5,7 +5,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,12 +103,12 @@ public class DataIngestionController {
 
         } else if (body != null && !body.isBlank()) {
             String contentType = request.getContentType();
-            String extension = resolveExtension(contentType);
-            String generatedFileName = interactionId + extension;
+           // String extension = resolveExtension(contentType);
+           // String generatedFileName = interactionId + extension;
             LOG.info("DataIngestionController:: Raw body received (Content-Type={}): {}... interactionId={}",
                     contentType, body.substring(0, Math.min(200, body.length())), interactionId);
             RequestContext context = createRequestContext(interactionId,
-                    headers, request, body.length(), generatedFileName);
+                    headers, request, body.length(), null);
             responseMap = messageProcessorService.processMessage(context, body);
 
         } else {
@@ -204,13 +203,12 @@ private String resolveExtension(String contentType) {
         String timestamp = String.valueOf(now.toEpochMilli());
         ZonedDateTime uploadTime = now.atZone(ZoneOffset.UTC);
         String datePath = uploadTime.format(DATE_PATH_FORMATTER);
-        String fileExtension = originalFileName.substring(originalFileName.lastIndexOf('.') + 1); // e.g., csv
-        String fileBaseName = originalFileName.substring(0, originalFileName.lastIndexOf('.')); // e.g., ttest
         String objectKey = String.format("data/%s/%s_%s",
                 datePath, interactionId, timestamp);
         String metadataKey = String.format("metadata/%s/%s_%s_metadata.json",
                 datePath, interactionId, timestamp);
         String fullS3Path = Constants.S3_PREFIX + appConfig.getAws().getS3().getBucket() + "/" + objectKey;
+        String fullMetaDataObjectPath = Constants.S3_PREFIX + appConfig.getAws().getS3().getMetadataBucket() + "/" + metadataKey;
         String userAgent = headers.getOrDefault(Constants.REQ_HEADER_USER_AGENT, Constants.DEFAULT_USER_AGENT);
         String fullRequestUrl = request.getRequestURL().toString();
         String queryParams = request.getQueryString();
@@ -231,6 +229,7 @@ private String resolveExtension(String contentType) {
                 fileSize,
                 objectKey,
                 metadataKey,
+                fullMetaDataObjectPath,
                 fullS3Path,
                 userAgent,
                 fullRequestUrl,

@@ -7,8 +7,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import jakarta.servlet.http.HttpServletRequest;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ws.context.MessageContext;
@@ -23,13 +21,12 @@ import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MessageProcessorService;
 import org.techbd.ingest.service.iti.AcknowledgementService;
-import org.techbd.ingest.util.Hl7Util;
+import org.techbd.iti.schema.ObjectFactory;
 import org.techbd.iti.schema.ProvideAndRegisterDocumentSetRequestType;
 import org.techbd.iti.schema.RegistryResponseType;
 
 import io.micrometer.common.util.StringUtils;
-
-import org.techbd.iti.schema.ObjectFactory;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.xml.bind.JAXBElement;
 
 /**n
@@ -57,12 +54,10 @@ public class PnrEndpoint {
     private static final String NAMESPACE_URI = "urn:ihe:iti:xds-b:2007";
 
     private final AcknowledgementService ackService;
-    private final MessageProcessorService messageProcessorService;
     private final AppConfig appConfig;
 
-    public PnrEndpoint(AcknowledgementService ackService, MessageProcessorService messageProcessorService, AppConfig appConfig) {
+    public PnrEndpoint(AcknowledgementService ackService, AppConfig appConfig) {
         this.ackService = ackService;
-        this.messageProcessorService = messageProcessorService;
         this.appConfig = appConfig;
         log.info("PnrEndpoint constructor called - bean is being created!");
     }
@@ -121,10 +116,9 @@ public class PnrEndpoint {
         String datePath = uploadTime.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
 
         // Keep same file naming convention as PixEndpoint
-        String fileBaseName = "soap-message";
-        String fileExtension = "xml";
-        String ackFileBaseName = "soap-message-ack";
-        String originalFileName = fileBaseName + "." + fileExtension;
+        // String fileBaseName = "soap-message";
+        // String fileExtension = "xml";
+        // String originalFileName = fileBaseName + "." + fileExtension;
         String objectKey = String.format("data/%s/%s_%s",
                 datePath, interactionId, timestamp);
         String ackObjectKey = String.format("data/%s/%s_%s_ack",
@@ -133,7 +127,7 @@ public class PnrEndpoint {
                 datePath, interactionId, timestamp);
         String fullS3DataPath = Constants.S3_PREFIX + appConfig.getAws().getS3().getBucket() + "/" + objectKey;
         String fullS3AckMessagePath = Constants.S3_PREFIX + appConfig.getAws().getS3().getBucket() + "/" + ackObjectKey;
-
+        String fullS3MetadataPath = Constants.S3_PREFIX + appConfig.getAws().getS3().getMetadataBucket() + "/" + metadataKey;
         log.debug("PnrEndpoint:: Request context built with source IP {}, destination port {}, user-agent: {} for interactionId :{}",
                 sourceIp, destinationPort, userAgent, interactionId);
 
@@ -144,10 +138,11 @@ public class PnrEndpoint {
                 interactionId,
                 uploadTime,
                 timestamp,
-                originalFileName,
+                null,
                 rawSoapMessage != null ? rawSoapMessage.length() : 0, // Payload size
                 objectKey,
                 metadataKey,
+                fullS3MetadataPath,
                 fullS3DataPath,
                 userAgent,
                 request.getRequestURL().toString(),

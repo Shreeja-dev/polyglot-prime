@@ -50,12 +50,10 @@ public class PixEndpoint {
     private static final String NAMESPACE_URI = "urn:hl7-org:v3";
 
     private final AcknowledgementService ackService;
-    private final MessageProcessorService messageProcessorService;
     private final AppConfig appConfig;
 
-    public PixEndpoint(AcknowledgementService ackService, MessageProcessorService messageProcessorService, AppConfig appConfig) {
+    public PixEndpoint(AcknowledgementService ackService, AppConfig appConfig) {
         this.ackService = ackService;
-        this.messageProcessorService = messageProcessorService;
         this.appConfig = appConfig;
     }
 
@@ -166,10 +164,6 @@ public class PixEndpoint {
         String protocol = request.getProtocol();
         String userAgent = headers.getOrDefault("User-Agent", "");
         String datePath = uploadTime.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        String fileBaseName = "soap-message";
-        String ackFileBaseName = "soap-message-ack";
-        String fileExtension = "xml";
-        String originalFileName = fileBaseName + "." + fileExtension;
         String objectKey = String.format("data/%s/%s_%s",
                 datePath, interactionId, timestamp);
         String ackObjectKey = String.format("data/%s/%s_%s_ack",
@@ -178,11 +172,12 @@ public class PixEndpoint {
                 datePath, interactionId, timestamp);
         String fullS3DataPath = Constants.S3_PREFIX + appConfig.getAws().getS3().getBucket() + "/" + objectKey;
         String fullS3AckMessagePath = Constants.S3_PREFIX + appConfig.getAws().getS3().getBucket() + "/" + ackObjectKey;
+        String fullMetaDataObjectPath = Constants.S3_PREFIX + appConfig.getAws().getS3().getMetadataBucket() + "/" + metadataKey;
         log.debug("PixEndpoint:: Request context built. interactionId={}, sourceIp={}, destinationPort={}, userAgent={}",
             interactionId, sourceIp, destinationPort, userAgent);
         return new RequestContext(
                 headers, request.getRequestURI(), tenantId, interactionId, uploadTime, timestamp,
-                originalFileName, hl7Message.length(), objectKey, metadataKey, fullS3DataPath,
+                null, hl7Message.length(), objectKey, metadataKey, fullMetaDataObjectPath, fullS3DataPath,
                 userAgent, request.getRequestURL().toString(),
                 request.getQueryString() == null ? "" : request.getQueryString(),
                 protocol, destinationIp, sourceIp, sourceIp, destinationIp, destinationPort,

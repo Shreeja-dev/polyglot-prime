@@ -26,6 +26,7 @@ class MetadataBuilderServiceTest {
                 123L,
                 "objectKey",
                 "metadataKey",
+                 "s3://bucket/filemetadata.txt",
                 "s3://bucket/file.txt",
                 "JUnit-Agent",
                 "http://localhost/upload",

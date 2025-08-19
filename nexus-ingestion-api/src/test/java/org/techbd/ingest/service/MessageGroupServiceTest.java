@@ -13,7 +13,6 @@ import org.techbd.ingest.model.RequestContext;
 class MessageGroupServiceTest {
 
     private MessageGroupService messageGroupService;
-    private RequestContext context;
 
     @BeforeEach
     void setUp() {
@@ -32,7 +31,8 @@ class MessageGroupServiceTest {
                 "file.txt",
                 123L,
                 "objectKey",
-                "metadataKey",
+                "metadataKey",                
+                "s3://bucket/metadata",
                 "s3://bucket/file.txt",
                 "JUnit-Agent",
                 "http://localhost/upload",
@@ -62,6 +62,7 @@ class MessageGroupServiceTest {
                 123L,
                 "objectKey",
                 "metadataKey",
+                "s3://bucket/metadata.txt",
                 "s3://bucket/file.txt",
                 "JUnit-Agent",
                 "http://localhost/upload",
@@ -90,6 +91,7 @@ class MessageGroupServiceTest {
                 123L,
                 "objectKey",
                 "metadataKey",
+                "s3://bucket/filemetadata.txt",
                 "s3://bucket/file.txt",
                 "JUnit-Agent",
                 "http://localhost/upload",
@@ -119,6 +121,7 @@ class MessageGroupServiceTest {
                 123L,
                 "objectKey",
                 "metadataKey",
+                "s3://bucket/filemetdata.txt",
                 "s3://bucket/file.txt",
                 "JUnit-Agent",
                 "http://localhost/upload",
