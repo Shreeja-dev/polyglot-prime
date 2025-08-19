@@ -105,7 +105,7 @@ public class DataIngestionController {
         } else if (body != null && !body.isBlank()) {
             String contentType = request.getContentType();
             String extension = resolveExtension(contentType);
-            String generatedFileName = "payload-" + UUID.randomUUID() + extension;
+            String generatedFileName = interactionId + extension;
             LOG.info("DataIngestionController:: Raw body received (Content-Type={}): {}... interactionId={}",
                     contentType, body.substring(0, Math.min(200, body.length())), interactionId);
             RequestContext context = createRequestContext(interactionId,
