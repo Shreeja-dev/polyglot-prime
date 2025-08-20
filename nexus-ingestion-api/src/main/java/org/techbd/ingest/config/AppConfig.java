@@ -13,7 +13,12 @@ public class AppConfig {
 
     private Aws aws;
     private Soap soap;
+    private Build build;
 
+    @Data
+    public static class Build {
+        private String version;
+    }
     @Data
     public static class Aws {
         private String region;

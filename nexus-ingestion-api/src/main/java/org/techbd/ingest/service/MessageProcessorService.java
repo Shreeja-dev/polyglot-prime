@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.processor.MessageProcessingStep;
 
@@ -35,9 +36,11 @@ public class MessageProcessorService {
     private static final Logger LOG = LoggerFactory.getLogger(MessageProcessorService.class);
 
     private final List<MessageProcessingStep> processingSteps;
+    private final AppConfig appConfig;
 
-    public MessageProcessorService(List<MessageProcessingStep> processingSteps) {
+    public MessageProcessorService(List<MessageProcessingStep> processingSteps, AppConfig appConfig) {
         this.processingSteps = processingSteps;
+        this.appConfig = appConfig;
         LOG.info("MessageProcessorService:: initialized");
     }
 
@@ -116,6 +119,7 @@ public class MessageProcessorService {
             return Map.of(
                     "messageId", messageId,
                     "interactionId", context.getInteractionId(),
+                    "techBDVersion",appConfig.getBuild().getVersion(),
                     "fullS3Path", context.getFullS3DataPath(),
                     "timestamp", context.getTimestamp());
         } catch (Exception e) {

@@ -50,8 +50,10 @@ public class SoapResponseUtil {
                   .setText(relatesTo);
             header.addHeaderElement(new QName(wsa.getNamespace(), "To", wsa.getPrefix()))
                   .setText(wsa.getTo());
-            header.addHeaderElement(new QName(techbd.getNamespace(), "InteractionID", techbd.getPrefix()))
+            header.addHeaderElement(new QName(techbd.getNamespace(), "TechBDInteractionID", techbd.getPrefix()))
                   .setText(interactionId);
+            header.addHeaderElement(new QName(techbd.getNamespace(), "TechBDVersion", techbd.getPrefix()))
+                  .setText(appConfig.getBuild().getVersion());
 
            // marshaller.marshal(payload, soapResponse.getPayloadResult());
 

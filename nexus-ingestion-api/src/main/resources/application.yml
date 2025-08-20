@@ -2,6 +2,8 @@
 #     port: 9999
 org:
   techbd:
+    build:
+      version: @project.version@
     aws:
       region: ${ORG_TECHBD_SERVICE_AWS_REGION:us-east-1}
       secret-name: ${ORG_TECHBD_SERVICE_SECRET_NAME:default-secret}

@@ -50,7 +50,7 @@ public class MllpRoute extends RouteBuilder {
                     try {
                         Message hapiMsg = parser.parse(hl7Message);
                         Message ack = hapiMsg.generateACK();
-                        String ackMessage = addNteWithInteractionId(ack, interactionId);
+                        String ackMessage = addNteWithInteractionIdAndVersion(ack, interactionId,appConfig.getBuild().getVersion());
                         messageProcessorService.processMessage(buildRequestContext(exchange, hl7Message, interactionId), hl7Message, ackMessage);
                         logger.info("[PORT {}] Ack message  : {} interactionId= {}", port, ackMessage, interactionId);
                         exchange.setProperty("CamelMllpAcknowledgementString", ackMessage);
@@ -61,7 +61,7 @@ public class MllpRoute extends RouteBuilder {
                         try {
                             Message partial = parser.parse(hl7Message);
                             Message generatedNack  = partial.generateACK(AcknowledgmentCode.AE, new HL7Exception(e.getMessage()));
-                            nack = addNteWithInteractionId(generatedNack, interactionId);
+                            nack = addNteWithInteractionIdAndVersion(generatedNack, interactionId,appConfig.getBuild().getVersion());
                         } catch (Exception ex2) {
                             logger.error("[PORT {}] Error generating NACK. interactionId= {} reason={}", port, interactionId, ex2.getMessage(),ex2);
                             nack = "MSH|^~\\&|UNKNOWN|UNKNOWN|UNKNOWN|UNKNOWN|202507181500||ACK^O01|1|P|2.3\r" +
@@ -75,11 +75,16 @@ public class MllpRoute extends RouteBuilder {
                 .log("[PORT " + port + "] ACK/NAK sent");
     }
 
-    public static String addNteWithInteractionId(Message ackMessage, String interactionId) throws HL7Exception {
+    public static String addNteWithInteractionIdAndVersion(Message ackMessage,
+            String interactionId,
+            String techbdVersion) throws HL7Exception {
         Terser terser = new Terser(ackMessage);
         ackMessage.addNonstandardSegment("NTE");
         terser.set("/NTE(0)-1", "1");
-        terser.set("/NTE(0)-3", "InteractionID: " + interactionId);
+        terser.set("/NTE(0)-3", "InteractionID=" + interactionId);
+        ackMessage.addNonstandardSegment("NTE");
+        terser.set("/NTE(1)-1", "2");
+        terser.set("/NTE(1)-3", "TechBDVersion=" + techbdVersion);
         PipeParser parser = new PipeParser();
         return parser.encode(ackMessage);
     }

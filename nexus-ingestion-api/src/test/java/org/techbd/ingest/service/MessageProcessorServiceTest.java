@@ -11,6 +11,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.multipart.MultipartFile;
+import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.processor.MessageProcessingStep;
 
@@ -19,12 +20,17 @@ public class MessageProcessorServiceTest {
     private MessageProcessorService service;
     private MessageProcessingStep step1;
     private MessageProcessingStep step2;
+    private AppConfig appConfig;
 
     @BeforeEach
     void setUp() {
         step1 = mock(MessageProcessingStep.class);
         step2 = mock(MessageProcessingStep.class);
-        service = new MessageProcessorService(List.of(step1, step2));
+        appConfig = mock(AppConfig.class);
+        AppConfig.Build build = mock(AppConfig.Build.class);
+        when(appConfig.getBuild()).thenReturn(build);
+        when(build.getVersion()).thenReturn("1.0.0");
+        service = new MessageProcessorService(List.of(step1, step2), appConfig);
     }
 
     @Test
