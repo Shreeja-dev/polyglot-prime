@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 import org.jooq.DSLContext;
 import org.springframework.core.task.TaskExecutor;
@@ -38,28 +37,31 @@ public class CcdaReplayService {
         LOG = appLogger.getLogger(FHIRService.class);
     }
 
-    public void replayBundlesAsync(List<String> bundleIds, String replayMasterInteractionId) {
-        CompletableFuture.runAsync(() -> {
+    public String replayBundlesAsync(List<String> bundleIds, String replayMasterInteractionId) {
+    //    CompletableFuture.runAsync(() -> {
             for (String bundleId : bundleIds) {
                 final var interactionId = UUID.randomUUID().toString();
                 try {
                     LOG.info("Replaying bundle %s with replayMasterInteractionId: {} interactionid: {} bundleid: {}",
                             bundleId, replayMasterInteractionId, interactionId);
-                    getOriginalCCDPayload(bundleId, replayMasterInteractionId, interactionId);
+                    //getOriginalCCDPayload(bundleId, replayMasterInteractionId, interactionId);
                     String generatedBundle = getGeneratedBundle(
                             getOriginalCCDPayload(bundleId, replayMasterInteractionId, interactionId), bundleId,
                             replayMasterInteractionId, interactionId);
-                    Map<String,Object> correctedResponse = mergeBundleResourceIds(null, bundleId, replayMasterInteractionId, replayMasterInteractionId);
+                   // Map<String,Object> correctedResponse = mergeBundleResourceIds(null, bundleId, replayMasterInteractionId, replayMasterInteractionId);
+                   // boolean mergeSuccess = (boolean) correctedResponse.get("merge_success");
+                    //final var correctedBundle = correctedResponse.get("corrected_bundle");
                     LOG.info(
                             "Bundle %s replayed successfully with replayMasterInteractionId:{} interactionid: {} bundleid: {}",
                             replayMasterInteractionId, interactionId, bundleId);
-
+                            return generatedBundle;
                 } catch (Exception e) {
                     LOG.error("Bundle %s failed with replayMasterInteractionId: {} interactionid: {} bundleid: {}: %s",
                             replayMasterInteractionId, interactionId, bundleId, e.getMessage());
                 }
             }
-        }, asyncTaskExecutor);
+   //     }, asyncTaskExecutor);
+   return null;
     }
 
     public Map<String, Object> getReplayStatus(String replayMasterInteractionId) {
@@ -85,20 +87,24 @@ public class CcdaReplayService {
             GetXmlContentFromMirthFdw routine = new GetXmlContentFromMirthFdw();
             routine.setPBundleId(bundleId);
             routine.execute(jooqCfg);
-            final var response = routine.getReturnValue();
-            if (response == null) {
+            final var responseJson = (JsonNode) routine.getReturnValue();
+            Map<String,Object> response = new HashMap<>(3);
+            if (responseJson == null) {
                 LOG.warn("No CCDA payload found for replayMasterInteractionId: {} InteractionId: {}  bundleId={}",
                         replayMasterInteractionId, interactionId, bundleId);
             } else {
+                 response = extractFields(responseJson);
                 LOG.info(
                         "Successfully fetched CCDA payload for replayMasterInteractionId: {} InteractionId: {} bundleId={} ({} chars)",
-                        replayMasterInteractionId, interactionId, bundleId, response.length());
+                        replayMasterInteractionId, interactionId, bundleId, responseJson.size());
             }
-            return response;
+
+            final String originalCCDPayload = (String) response.get("originalCCDAPayload");
+            return originalCCDPayload;
 
         } catch (Exception e) {
             LOG.error(
-                    "Error fetching CCDA payload for bundleId={}replayMasterInteractionId: {} InteractionId: {} bundleId={}  : {}",
+                    "Error fetching CCDA payload for replayMasterInteractionId: {} InteractionId: {} bundleId={}  : {}",
                     replayMasterInteractionId, interactionId, bundleId, e.getMessage(), e);
             throw e;
         }

@@ -29,23 +29,23 @@ public class CcdaReplayController {
      * @return interim response with acknowledgement
      */
     @PostMapping("/replay")
-    public ResponseEntity<Map<String, Object>> replayBundles(@RequestBody List<String> bundleIds) {
-        if (bundleIds == null || bundleIds.isEmpty()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "bundleIds list cannot be null or empty"));
-        }
-        final var replayMasterInteractionId = UUID.randomUUID().toString()
-        replayService.replayBundlesAsync(bundleIds,replayMasterInteractionId);
+    public String replayBundles(@RequestBody List<String> bundleIds) {
+        // if (bundleIds == null || bundleIds.isEmpty()) {
+        //     return ResponseEntity.badRequest()
+        //             .body(Map.of("error", "bundleIds list cannot be null or empty"));
+        // }
+        final var replayMasterInteractionId = UUID.randomUUID().toString(); 
+        return replayService.replayBundlesAsync(bundleIds,replayMasterInteractionId);
 
         // Interim response
-        return ResponseEntity.accepted().body(
-                  Map.of(
-                "replayMasterInteractionId", replayMasterInteractionId,
-                "status", "Replay initiated",
-                "replayStatusUrl", "/ccda/Bundle/replay/status?replayMasterInteractionId=" + replayMasterInteractionId,
-                "bundleCount", bundleIds.size(),
-                "bundleIds", bundleIds
-        ));
+        // return ResponseEntity.accepted().body(
+        //           Map.of(
+        //         "replayMasterInteractionId", replayMasterInteractionId,
+        //         "status", "Replay initiated",
+        //         "replayStatusUrl", "/ccda/Bundle/replay/status?replayMasterInteractionId=" + replayMasterInteractionId,
+        //         "bundleCount", bundleIds.size(),
+        //         "bundleIds", bundleIds
+        // ));
     }
 
     /**
