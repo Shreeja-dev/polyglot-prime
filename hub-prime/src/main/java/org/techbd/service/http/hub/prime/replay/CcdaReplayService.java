@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.techbd.config.Configuration;
 import org.techbd.service.fhir.FHIRService;
 import org.techbd.udi.UdiPrimeJpaConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.GetXmlContentFromMirthFdw;
@@ -22,6 +23,7 @@ import org.techbd.util.AppLogger;
 import org.techbd.util.TemplateLogger;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import reactor.core.publisher.Mono;
 
@@ -30,42 +32,157 @@ public class CcdaReplayService {
     private final TemplateLogger LOG;
     private final TaskExecutor asyncTaskExecutor;
     private final UdiPrimeJpaConfig udiPrimeJpaConfig;
+    private final FHIRService fhirService;
 
-    public CcdaReplayService(TaskExecutor asyncTaskExecutor, AppLogger appLogger, UdiPrimeJpaConfig udiPrimeJpaConfig) {
+    public CcdaReplayService(TaskExecutor asyncTaskExecutor, AppLogger appLogger, UdiPrimeJpaConfig udiPrimeJpaConfig,FHIRService fhirService) {
         this.asyncTaskExecutor = asyncTaskExecutor;
         this.udiPrimeJpaConfig = udiPrimeJpaConfig;
-        LOG = appLogger.getLogger(FHIRService.class);
+        this.fhirService = fhirService;
+        LOG = appLogger.getLogger(CcdaReplayService.class);
     }
 
     public String replayBundlesAsync(List<String> bundleIds, String replayMasterInteractionId) {
-    //    CompletableFuture.runAsync(() -> {
-            for (String bundleId : bundleIds) {
-                final var interactionId = UUID.randomUUID().toString();
-                try {
-                    LOG.info("Replaying bundle %s with replayMasterInteractionId: {} interactionid: {} bundleid: {}",
+        Map<String, Object> processingDetails = new HashMap<>();
+        // CompletableFuture.runAsync(() -> {
+
+        for (String bundleId : bundleIds) {
+            final var interactionId = UUID.randomUUID().toString();
+            try {
+                LOG.info(
+                        "PROCESSING STARTED - Replaying bundle %s with replayMasterInteractionId: {} interactionid: {} bundleid: {}",
+                        bundleId, replayMasterInteractionId, interactionId);
+                Map<String, Object> orginalPayloadAndHeaders = getOriginalCCDPayload(bundleId,
+                        replayMasterInteractionId, interactionId);
+                LOG.info(
+                        "Successfully fetched original values for replayMasterInteractionId={} interactionId={} bundleId={} ({} entries)",
+                        replayMasterInteractionId, interactionId, bundleId, orginalPayloadAndHeaders.size());
+                logResponse(orginalPayloadAndHeaders, replayMasterInteractionId, interactionId, bundleId);
+                boolean isAlreadyResubmitted = orginalPayloadAndHeaders.get("alreadyResubmitted") != null
+                        && Boolean.parseBoolean(orginalPayloadAndHeaders.get("alreadyResubmitted").toString());
+
+                if (isAlreadyResubmitted) {
+                    LOG.warn(
+                            "PROCESSING_COMPLETED - skipping already resubmitted bundle as it has already been resubmitted. replayMasterInteractionId={} interactionId={}",
                             bundleId, replayMasterInteractionId, interactionId);
-                    //getOriginalCCDPayload(bundleId, replayMasterInteractionId, interactionId);
-                    String generatedBundle = getGeneratedBundle(
-                            getOriginalCCDPayload(bundleId, replayMasterInteractionId, interactionId), bundleId,
-                            replayMasterInteractionId, interactionId);
-                   // Map<String,Object> correctedResponse = mergeBundleResourceIds(null, bundleId, replayMasterInteractionId, replayMasterInteractionId);
-                   // boolean mergeSuccess = (boolean) correctedResponse.get("merge_success");
-                    //final var correctedBundle = correctedResponse.get("corrected_bundle");
-                    LOG.info(
-                            "Bundle %s replayed successfully with replayMasterInteractionId:{} interactionid: {} bundleid: {}",
-                            replayMasterInteractionId, interactionId, bundleId);
-                            return generatedBundle;
-                } catch (Exception e) {
-                    LOG.error("Bundle %s failed with replayMasterInteractionId: {} interactionid: {} bundleid: {}: %s",
-                            replayMasterInteractionId, interactionId, bundleId, e.getMessage());
+                    processingDetails = buildProcessingDetailsMap(
+                            processingDetails,
+                            bundleId,
+                            null, // no errorMessage in this case
+                            "Not Processed - already resubmitted",
+                            "Not Processed");
+                    continue;
                 }
+                Map<String, Object> responseJson = getGeneratedBundle(
+                        orginalPayloadAndHeaders, bundleId,
+                        replayMasterInteractionId, interactionId);
+                LOG.info(
+                        "Successfully passed original ccda payload and received response for replayMasterInteractionId={} interactionId={} bundleId={} ({} entries)",
+                        replayMasterInteractionId, interactionId, bundleId, orginalPayloadAndHeaders.size());
+                logResponse(responseJson, replayMasterInteractionId, interactionId, bundleId);
+                boolean isValid = responseJson.get("isValid") != null
+                        && Boolean.parseBoolean(responseJson.get("isValid").toString());
+                if (!isValid) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> errorMessage = (Map<String, Object>) responseJson
+                            .getOrDefault("errorMessage", Map.of("message", "Unknown error during CCDA processing"));
+                    LOG.error(
+                            "PROCESSING_COMPLETED - Bundle failed validation with replayMasterInteractionId={} interactionId={} bundleId={}\nErrorMessage: {}",
+                            replayMasterInteractionId, interactionId, bundleId, errorMessage);
+                    // Use the helper to enrich processingDetails
+                    processingDetails = buildProcessingDetailsMap(
+                            processingDetails,
+                            bundleId,
+                            errorMessage,
+                            "Failed CCDA Schema Validation",
+                            "FAILED");
+                    continue;
+                }
+                ObjectMapper mapper = new ObjectMapper();
+                String generatedBundle = mapper.writeValueAsString(responseJson.get("generatedBundle"));
+                Map<String, Object> correctedResponse = mergeBundleResourceIds(generatedBundle, bundleId,
+                        replayMasterInteractionId, replayMasterInteractionId);
+                final var correctedBundle = correctedResponse.get("corrected_bundle");
+                boolean mergeSuccess = correctedResponse.get("merge_success") != null
+                        && Boolean.parseBoolean(correctedResponse.get("merge_success").toString());
+                if (!mergeSuccess) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> errorMessage = (Map<String, Object>) correctedResponse
+                            .getOrDefault("error", Map.of("message", "Unknown error during merging bundle resource IDs"));
+                    LOG.error(
+                            "PROCESSING_COMPLETED - Bundle failed merging with replayMasterInteractionId={} interactionId={} bundleId={}\nErrorMessage: {}",
+                            replayMasterInteractionId, interactionId, bundleId, errorMessage);
+                    // Use the helper to enrich processingDetails
+                    processingDetails = buildProcessingDetailsMap(
+                            processingDetails,
+                            bundleId,
+                            errorMessage,
+                            "Failed Merging Bundle Resource IDs",
+                            "FAILED");
+                    continue;
+                }
+                LOG.info(
+                        "PROCESSING COMPLETED - Bundle successfully replayed with replayMasterInteractionId={} interactionId={} bundleId={}",
+                        replayMasterInteractionId, interactionId, bundleId);
+                        
+                fhirService.processBundle(correctedBundle,rocessingDetails, responseJson);
+                return generatedBundle;
+            } catch (Exception e) {
+                LOG.error("Bundle %s failed with replayMasterInteractionId: {} interactionid: {} bundleid: {}: %s",
+                        replayMasterInteractionId, interactionId, bundleId, e.getMessage());
             }
-   //     }, asyncTaskExecutor);
-   return null;
+        }
+        // }, asyncTaskExecutor);
+        return null;
     }
 
     public Map<String, Object> getReplayStatus(String replayMasterInteractionId) {
         return null;// replayStatusMap.get(replayMasterInteractionId);
+    }
+
+    private Map<String, Object> buildProcessingDetailsMap(Map<String, Object> processingDetails,
+            String bundleId,
+            Map<String, Object> errorMessage,
+            String message,
+            String status) {
+        if (processingDetails == null) {
+            processingDetails = new HashMap<>();
+        }
+
+        if (bundleId != null) {
+            processingDetails.put("bundleId", bundleId);
+        }
+        if (errorMessage != null && !errorMessage.isEmpty()) {
+            processingDetails.put("errorMessage", errorMessage);
+        }
+        if (message != null) {
+            processingDetails.put("message", message);
+        }
+        if (status != null) {
+            processingDetails.put("status", status);
+        }
+
+        return processingDetails;
+    }
+
+    private void logResponse(Map<String, Object> responseMap,
+            String replayMasterInteractionId,
+            String interactionId,
+            String bundleId) {
+
+        for (Map.Entry<String, Object> entry : responseMap.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+
+            if (value instanceof JsonNode jsonNode) {
+                LOG.info(
+                        "Key={} JSON Payload with {} fields | replayMasterInteractionId={} interactionId={} bundleId={}",
+                        key, jsonNode.size(), replayMasterInteractionId, interactionId, bundleId);
+            } else {
+                LOG.info(
+                        "Key={} Value={} | replayMasterInteractionId={} interactionId={} bundleId={}",
+                        key, value, replayMasterInteractionId, interactionId, bundleId);
+            }
+        }
     }
 
     /**
@@ -76,11 +193,12 @@ public class CcdaReplayService {
      * @param interactionId             individual interaction ID
      * @return CCDA XML payload as string
      */
-    private String getOriginalCCDPayload(String bundleId,
+    private Map<String, Object> getOriginalCCDPayload(String bundleId,
             String replayMasterInteractionId,
             String interactionId) {
         LOG.info("Fetching CCDA payload for replayMasterInteractionId: {} InteractionId: {} bundleId: {}",
                 replayMasterInteractionId, interactionId, bundleId);
+        Map<String, Object> response = new HashMap<>(3);
         try {
             final DSLContext dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
@@ -88,26 +206,22 @@ public class CcdaReplayService {
             routine.setPBundleId(bundleId);
             routine.execute(jooqCfg);
             final var responseJson = (JsonNode) routine.getReturnValue();
-            Map<String,Object> response = new HashMap<>(3);
             if (responseJson == null) {
                 LOG.warn("No CCDA payload found for replayMasterInteractionId: {} InteractionId: {}  bundleId={}",
                         replayMasterInteractionId, interactionId, bundleId);
             } else {
-                 response = extractFields(responseJson);
+                response.putAll(extractFields(responseJson));
                 LOG.info(
                         "Successfully fetched CCDA payload for replayMasterInteractionId: {} InteractionId: {} bundleId={} ({} chars)",
                         replayMasterInteractionId, interactionId, bundleId, responseJson.size());
             }
-
-            final String originalCCDPayload = (String) response.get("originalCCDAPayload");
-            return originalCCDPayload;
-
         } catch (Exception e) {
             LOG.error(
                     "Error fetching CCDA payload for replayMasterInteractionId: {} InteractionId: {} bundleId={}  : {}",
                     replayMasterInteractionId, interactionId, bundleId, e.getMessage(), e);
             throw e;
         }
+        return response;
     }
 
     public static Map<String, Object> extractFields(JsonNode payload) {
@@ -115,14 +229,9 @@ public class CcdaReplayService {
 
         payload.fieldNames().forEachRemaining(field -> {
             JsonNode value = payload.get(field);
-
-            // if it's a value node (string, number, boolean, null) → use .asText()
             if (value.isValueNode()) {
                 result.put(field, value.asText());
-            }
-            // if it's an object/array, you can either keep as JsonNode or serialize to
-            // string
-            else {
+            } else {
                 result.put(field, value);
             }
         });
@@ -130,28 +239,30 @@ public class CcdaReplayService {
         return result;
     }
 
-    /**
-     * Fetches a generated CCDA bundle by posting the original CCD payload to the
-     * API.
-     *
-     * @param originalCCDPayload        The CCD/CCDA payload content (string form of
-     *                                  HL7/XML)
-     * @param bundleId                  The bundle identifier
-     * @param replayMasterInteractionId The replay master interaction ID
-     * @param interactionId             The interaction ID
-     * @return JSON response string from the API, or an error message
-     */
-    private String getGeneratedBundle(String originalCCDPayload,
+    private Map<String, Object> getGeneratedBundle(Map<String, Object> response,
             String bundleId,
             String replayMasterInteractionId,
             String interactionId) {
         LOG.info("Fetching CCDA payload for replayMasterInteractionId: {} InteractionId: {} bundleId: {}",
                 replayMasterInteractionId, interactionId, bundleId);
+
+        // 🔍 Debug logs before making the API call
+        LOG.debug("bundleId: {}", bundleId);
+        LOG.debug("replayMasterInteractionId: {}", replayMasterInteractionId);
+        LOG.debug("interactionId: {}", interactionId);
+        LOG.debug("fhir_base_url: {}", response.get("fhir_base_url"));
+        LOG.debug("originalCCDAPayload is {}",
+                response.get("originalCCDAPayload") == null ? "NULL"
+                        : "NOT NULL (length=" + String.valueOf(response.get("originalCCDAPayload")).length() + ")");
+
         WebClient webClient = WebClient.builder()
                 .baseUrl(System.getenv("TECHBD_CCDA_BASEURL"))
                 .build();
+
+        ObjectMapper objectMapper = new ObjectMapper();
+
         try {
-            return webClient.post()
+            String apiResponse = webClient.post()
                     .uri("/ccda/Bundle/")
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .header("X-TechBD-Tenant-ID", "QE-123")
@@ -160,8 +271,9 @@ public class CcdaReplayService {
                     .header("X-TechBD-Facility-ID", "FacilityID-123")
                     .header("X-TechBD-Encounter-Type", "405672008")
                     .header("X-TechBD-BundleId", bundleId)
+                    .header("X-TechBD-Base-FHIR-URL", String.valueOf(response.get("fhir_base_url")))
                     .body(BodyInserters.fromMultipartData("file",
-                            originalCCDPayload.getBytes(StandardCharsets.UTF_8)))
+                            String.valueOf(response.get("originalCCDAPayload")).getBytes(StandardCharsets.UTF_8)))
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, clientResponse -> clientResponse.bodyToMono(String.class)
                             .defaultIfEmpty("Unknown error from server")
@@ -171,18 +283,32 @@ public class CcdaReplayService {
                                 return Mono.error(new RuntimeException("CCDA API error: " + errorBody));
                             }))
                     .bodyToMono(String.class)
-                    .block(); // block because we return String
+                    .block(); // raw JSON string
+
+            LOG.debug("Raw API Response: {}", apiResponse);
+
+            // Convert JSON -> Map
+            Map<String, Object> result = objectMapper.readValue(apiResponse, Map.class);
+            LOG.debug("Parsed response map keys: {}", result.keySet());
+
+            return result;
 
         } catch (WebClientResponseException e) {
             LOG.error("WebClient error: status={} body={}", e.getStatusCode(), e.getResponseBodyAsString(), e);
-            return "{\"error\":\"WebClient error: " + e.getMessage() + "\"}";
+            return Map.of(
+                    "isValid", false,
+                    "errorMessage", Map.of("message", "WebClient error: " + e.getMessage()),
+                    "generatedBundle", Map.of());
         } catch (Exception e) {
             LOG.error("Unexpected error calling CCDA API", e);
-            return "{\"error\":\"Unexpected error: " + e.getMessage() + "\"}";
+            return Map.of(
+                    "isValid", false,
+                    "errorMessage", Map.of("message", "Unexpected error: " + e.getMessage()),
+                    "generatedBundle", Map.of());
         }
     }
 
-    private Map<String, Object> mergeBundleResourceIds(JsonNode newBundle,
+    private Map<String, Object> mergeBundleResourceIds(String newBundle,
             String bundleId,
             String replayMasterInteractionId,
             String interactionId) {
@@ -193,7 +319,7 @@ public class CcdaReplayService {
             final var dslContext = udiPrimeJpaConfig.dsl();
             final var jooqCfg = dslContext.configuration();
             MergeBundleResourceIds routine = new MergeBundleResourceIds();
-            routine.setPNewBundle(newBundle);
+            routine.setPNewBundle(Configuration.objectMapper.readTree(newBundle));
             routine.setPBundleId(bundleId);
             routine.execute(jooqCfg);
             final var responseJson = routine.getReturnValue();
@@ -211,7 +337,8 @@ public class CcdaReplayService {
             LOG.error(
                     "Error merging bundle resources for replayMasterInteractionId: {} InteractionId: {} bundleId: {} error: {}",
                     replayMasterInteractionId, interactionId, bundleId, e.getMessage(), e);
-            throw e;
+            // throw e;
         }
+        return null;
     }
 }
