@@ -1,7 +1,6 @@
 package org.techbd.replay;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,9 +14,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class CcdaReplayController {
 
     private final CcdaReplayService replayService;
+    private final CcdaMirthRawReplayService mirthRawReplayService;
 
-    public CcdaReplayController(CcdaReplayService replayService) {
+    public CcdaReplayController(CcdaReplayService replayService, CcdaMirthRawReplayService mirthRawReplayService) {
         this.replayService = replayService;
+        this.mirthRawReplayService = mirthRawReplayService;
     }
 
     /**
@@ -31,9 +32,17 @@ public class CcdaReplayController {
             @RequestBody List<String> bundleIds,
             @RequestParam(name = "trialRun", required = false, defaultValue = "true") boolean trialRun,
             @RequestParam(name = "sendToNyec", required = false, defaultValue = "false") boolean sendToNyec,
-            @RequestParam(name = "immediate", required = false, defaultValue = "false") boolean immediate) {
-        final var replayMasterInteractionId = UUID.randomUUID().toString();
-        return replayService.replayBundlesAsync(bundleIds, replayMasterInteractionId, trialRun, sendToNyec, immediate);
+            @RequestParam(name = "immediate", required = false, defaultValue = "false") boolean immediate,
+            @RequestParam(name = "useMirthRaw", required = false, defaultValue = "false") boolean useMirthRaw) {
+        {
+            final var replayMasterInteractionId = UUID.randomUUID().toString();
+            if (useMirthRaw) {
+                return mirthRawReplayService.replayBundlesAsync(bundleIds, replayMasterInteractionId, trialRun,
+                        sendToNyec, immediate);
+            }
+            return replayService.replayBundlesAsync(bundleIds, replayMasterInteractionId, trialRun, sendToNyec,
+                    immediate);
+        }
+
     }
 }
-
