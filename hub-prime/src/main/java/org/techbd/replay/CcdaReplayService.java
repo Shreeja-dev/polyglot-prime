@@ -1,6 +1,5 @@
 package org.techbd.replay;
 
-import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -57,8 +56,7 @@ public class CcdaReplayService {
 			String replayMasterInteractionId,
 			boolean trialRun,
 			boolean sendToNyec,
-			boolean immediate,
-			boolean copyResourceIds) {
+			boolean immediate) {
 
 		Map<String, Object> response = new LinkedHashMap<>();
 		response.put("replayMasterInteractionId", replayMasterInteractionId);
@@ -70,7 +68,7 @@ public class CcdaReplayService {
 					replayMasterInteractionId, appConfig.getVersion(), bundleIds.size());
 
 			Map<String, Map<String, Object>> result = processBundles(bundleIds, replayMasterInteractionId, trialRun,
-					sendToNyec,copyResourceIds);
+					sendToNyec);
 			response.put("status", "Completed");
 			response.put("result", result);
 
@@ -82,7 +80,7 @@ public class CcdaReplayService {
 
 			CompletableFuture.runAsync(() -> {
 				try {
-					processBundles(bundleIds, replayMasterInteractionId, trialRun, sendToNyec,copyResourceIds);
+					processBundles(bundleIds, replayMasterInteractionId, trialRun, sendToNyec);
 					LOG.info("CCDA-REPLAY Completed asynchronous processing for replayMasterInteractionId={} TechBdVersion:{}",
 							replayMasterInteractionId, appConfig.getVersion());
 				} catch (Exception e) {
@@ -101,7 +99,7 @@ public class CcdaReplayService {
 	private Map<String, Map<String, Object>> processBundles(List<String> bundleIds,
 			String replayMasterInteractionId,
 			boolean trialRun,
-			boolean sendToNyec,boolean copyResourceIds) {
+			boolean sendToNyec) {
 
 		Map<String, Map<String, Object>> processingDetails = new HashMap<>();
 
@@ -109,31 +107,46 @@ public class CcdaReplayService {
 			final String interactionId = UUID.randomUUID().toString();
 
 			try {
-				Map<String, Object> originalPayloadAndHeaders = getOriginalCCDPayload(bundleId,
-						replayMasterInteractionId, interactionId);
-				String tenantId = (String) originalPayloadAndHeaders.get("X-TechBD-Tenant-ID");
-				String originalHubInteractionId = (String) originalPayloadAndHeaders
-						.get("original_hub_interaction_id");
-				boolean isAlreadyResubmitted = originalPayloadAndHeaders.get("alreadyResubmitted") != null
-						&& Boolean.parseBoolean(originalPayloadAndHeaders.get("alreadyResubmitted").toString());
+				// Run in parallel: getOriginalHeaders + fetchRawCcdaBundle
+				CompletableFuture<Map<String, Object>> headersFuture = CompletableFuture.supplyAsync(
+						() -> getOriginalHeaders(bundleId, replayMasterInteractionId, interactionId),
+						asyncTaskExecutor);
+
+				CompletableFuture<String> payloadFuture = CompletableFuture.supplyAsync(
+						() -> fetchRawCcdaBundle(bundleId, replayMasterInteractionId, interactionId, null),
+						asyncTaskExecutor);
+
+				// Wait for both results
+				CompletableFuture.allOf(headersFuture, payloadFuture).join();
+
+				Map<String, Object> originalHeaders = headersFuture.get();
+				String originalCCDAPayload = payloadFuture.get();
+
+				String tenantId = (String) originalHeaders.get("X-TechBD-Tenant-ID");
+				String originalHubInteractionId = (String) originalHeaders.get("original_hub_interaction_id");
+				boolean isAlreadyResubmitted = originalHeaders.get("alreadyResubmitted") != null
+						&& Boolean.parseBoolean(originalHeaders.get("alreadyResubmitted").toString());
 
 				if (isAlreadyResubmitted) {
-					handleAlreadyResubmitted(bundleId, replayMasterInteractionId, interactionId, tenantId, trialRun,
-							processingDetails, originalHubInteractionId);
+					handleAlreadyResubmitted(bundleId, replayMasterInteractionId, interactionId, tenantId,
+							trialRun, processingDetails, originalHubInteractionId);
 					continue;
-				}						
-				Object originalCCDAPayload = originalPayloadAndHeaders.get("originalCCDAPayload");
+				}
+
+				Object originalBundleObj = originalHeaders.get("originalBundle");
+				String originalBundle = Configuration.objectMapper.writeValueAsString(originalBundleObj);
+				JsonNode originalBundleNode = Configuration.objectMapper.readTree(originalBundle);
+
 				if (originalCCDAPayload == null
-						|| "null".equalsIgnoreCase(originalCCDAPayload.toString().trim())
-						|| originalCCDAPayload.toString().trim().isEmpty()) {
+						|| "null".equalsIgnoreCase(originalCCDAPayload.trim())
+						|| originalCCDAPayload.trim().isEmpty()) {
 					handleMissingPayload(bundleId, replayMasterInteractionId, interactionId, tenantId,
 							trialRun, processingDetails, originalHubInteractionId);
 					continue;
 				}
-				Object originalBundleObj = originalPayloadAndHeaders.get("originalBundle");
-				String originalBundle = Configuration.objectMapper.writeValueAsString(originalBundleObj);
-				JsonNode originalBundleNode = Configuration.objectMapper.readTree(originalBundle);
-				Map<String, Object> responseJson = getGeneratedBundle(originalPayloadAndHeaders, bundleId,
+
+				// (unchanged code for generating bundle, validation, copyResourceIds, etc.)
+				Map<String, Object> responseJson = getGeneratedBundle(originalHeaders, bundleId,
 						replayMasterInteractionId, interactionId);
 
 				boolean isValid = responseJson.get("isValid") != null
@@ -148,54 +161,33 @@ public class CcdaReplayService {
 				Object generatedBundleObj = responseJson.get("generatedBundle");
 				String generatedBundle = Configuration.objectMapper.writeValueAsString(generatedBundleObj);
 				JsonNode generatedBundleNode = Configuration.objectMapper.readTree(generatedBundle);
-				
+
 				String correctedBundle = null;
-				if (copyResourceIds) {
-					if (originalBundle == null) {
-						LOG.warn(
-								"CCDA-REPLAY COPY RESOURCE IDS SKIPPED - originalBundle is null for replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion={}",
-								replayMasterInteractionId, interactionId, bundleId, tenantId, appConfig.getVersion());
-					} else {
-						LOG.info(
-								"CCDA-REPLAY COPY RESOURCE IDS ENABLED - Copying Resource IDs, fullUrl, and request.url for replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion={}",
-								replayMasterInteractionId, interactionId, bundleId, tenantId, appConfig.getVersion());
-
-						generatedBundleNode = FhirBundleUtil.copyResourceIds(
-								originalBundleNode,
-								generatedBundleNode,
-								replayMasterInteractionId,
-								interactionId,
-								bundleId,
-								tenantId,
-								appConfig.getVersion());
-						// File outputFile = new File("src/test/resources/org/techbd/replay/correctedbundle.json");
-
-						// // Ensure parent directories exist
-						// outputFile.getParentFile().mkdirs();
-
-						// // Write pretty-printed JSON
-						// Configuration.objectMapper.writeValue(outputFile, generatedBundleNode);	
-						correctedBundle = Configuration.objectMapper.writeValueAsString(generatedBundleNode);
-						LOG.info(
-								"CCDA-REPLAY COPY RESOURCE COMPLETED - COPIED Resource IDs, fullUrl, and request.url for replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion={}",
-								replayMasterInteractionId, interactionId, bundleId, tenantId, appConfig.getVersion());
-					}
+				if (originalBundle == null) {
+					LOG.warn(
+							"CCDA-REPLAY COPY RESOURCE IDS SKIPPED - originalBundle is null for replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion={}",
+							replayMasterInteractionId, interactionId, bundleId, tenantId, appConfig.getVersion());
 				} else {
+					LOG.info(
+							"CCDA-REPLAY COPY RESOURCE IDS ENABLED - replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion={}",
+							replayMasterInteractionId, interactionId, bundleId, tenantId, appConfig.getVersion());
 
-					Map<String, Object> correctedResponse = mergeBundleResourceIds(generatedBundleNode, bundleId,
-							replayMasterInteractionId, interactionId);
-					correctedBundle = String.valueOf(correctedResponse.get("corrected_bundle"));
+					generatedBundleNode = FhirBundleUtil.copyResourceIds(
+							originalBundleNode,
+							generatedBundleNode,
+							replayMasterInteractionId,
+							interactionId,
+							bundleId,
+							tenantId,
+							appConfig.getVersion());
 
-					boolean mergeSuccess = correctedResponse.get("merge_success") != null
-							&& Boolean.parseBoolean(correctedResponse.get("merge_success").toString());
+					correctedBundle = Configuration.objectMapper.writeValueAsString(generatedBundleNode);
 
-					if (!mergeSuccess) {
-						handleMergeFailure(bundleId, replayMasterInteractionId, interactionId, tenantId, trialRun,
-								processingDetails, correctedResponse);
-						continue;
-					}
-
+					LOG.info(
+							"CCDA-REPLAY COPY RESOURCE IDS COMPLETED - replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion={}",
+							replayMasterInteractionId, interactionId, bundleId, tenantId, appConfig.getVersion());
 				}
+
 				if (sendToNyec) {
 					Map<String, Object> requestParametersMap = new HashMap<>();
 					requestParametersMap.put(Constants.SOURCE_TYPE, SourceType.CCDA.name());
@@ -203,18 +195,19 @@ public class CcdaReplayService {
 					requestParametersMap.put(Constants.TENANT_ID, tenantId);
 					requestParametersMap.put(Constants.REQUEST_URI, "/ccda/replay/");
 					Map<String, Object> responseMap = new HashMap<>();
+
 					LOG.info(
-							"CCDA-REPLAY Sending replayed bundle to NYEC FHIR endpoint for replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion:{}",
+							"CCDA-REPLAY Sending replayed bundle to NYEC FHIR endpoint for replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion={}",
 							replayMasterInteractionId, interactionId, bundleId, tenantId, appConfig.getVersion());
 					fhirService.processBundle(correctedBundle, requestParametersMap, responseMap);
 				} else {
 					LOG.info(
-							"CCDA-REPLAY sendToNyec is false. Skipping sending replayed bundle to NYEC FHIR endpoint for replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion:{}",
+							"CCDA-REPLAY sendToNyec is false. Skipping send for replayMasterInteractionId={} interactionId={} bundleId={} tenantId={} TechBdVersion={}",
 							replayMasterInteractionId, interactionId, bundleId, tenantId, appConfig.getVersion());
 				}
 
-				handleSuccess(bundleId, replayMasterInteractionId, interactionId, tenantId, trialRun, processingDetails,
-						originalHubInteractionId, correctedBundle);
+				handleSuccess(bundleId, replayMasterInteractionId, interactionId, tenantId,
+						trialRun, processingDetails, originalHubInteractionId, correctedBundle);
 
 			} catch (Exception e) {
 				handleException(bundleId, replayMasterInteractionId, interactionId, trialRun, e, processingDetails);
@@ -461,7 +454,7 @@ public class CcdaReplayService {
 	 * @param interactionId             individual interaction ID
 	 * @return CCDA XML payload as string
 	 */
-	public Map<String, Object> getOriginalCCDPayload(String bundleId,
+	public Map<String, Object> getOriginalHeaders(String bundleId,
 			String replayMasterInteractionId,
 			String interactionId) {
 		LOG.info("CCDA-REPLAY Fetching Original Payload and headers CCDA payload for replayMasterInteractionId: {} InteractionId: {} bundleId: {} TechBDVersion: {}",
@@ -608,6 +601,68 @@ public class CcdaReplayService {
 					"isValid", false,
 					"errorMessage", Map.of("message", "Unexpected error: " + e.getMessage()),
 					"generatedBundle", Map.of());
+		}
+	}
+
+   	/**
+	 * Call Mirth /ccda/bundles/{bundleid} and return raw XML payload.
+	 */
+	private String fetchRawCcdaBundle(String bundleId,
+			String replayMasterInteractionId,
+			String interactionId,
+			String tenantId) {
+		String techbdVersion = appConfig.getVersion();
+
+		LOG.info(
+				"CCDA-REPLAY INVOKE MIRTH CHANNEL /ccda/bundles BEGIN | replayMasterInteractionId={} | interactionId={} | tenantId={} | bundleId={} | TechBDVersion={}",
+				replayMasterInteractionId, interactionId, tenantId, bundleId, techbdVersion);
+
+		WebClient webClient = WebClient.builder()
+				.baseUrl(System.getenv("TECHBD_CCDA_BASEURL"))
+				.build();
+
+		try {
+			String responseXml = webClient.get()
+					.uri("/ccda/bundles/{bundleid}", bundleId)
+					.retrieve()
+					.onStatus(HttpStatusCode::isError,
+							clientResponse -> clientResponse.bodyToMono(String.class)
+									.defaultIfEmpty("Unknown error from Mirth service")
+									.flatMap(errorBody -> {
+										LOG.error(
+												"CCDA-REPLAY ERROR RESPONSE | replayMasterInteractionId={} | interactionId={} | tenantId={} | bundleId={} | TechBDVersion={} | status={} | body={}",
+												replayMasterInteractionId, interactionId, tenantId, bundleId,
+												techbdVersion,
+												clientResponse.statusCode(), errorBody);
+										return Mono.error(new RuntimeException("Mirth API error: " + errorBody));
+									}))
+					.bodyToMono(String.class)
+					.block();
+
+			if (responseXml != null) {
+				LOG.info(
+						"CCDA-REPLAY SUCCESS RESPONSE | replayMasterInteractionId={} | interactionId={} | tenantId={} | bundleId={} | TechBDVersion={} | payloadLength={}",
+						replayMasterInteractionId, interactionId, tenantId, bundleId, techbdVersion,
+						responseXml.length());
+			} else {
+				LOG.warn(
+						"CCDA-REPLAY NO DATA RETURNED | replayMasterInteractionId={} | interactionId={} | tenantId={} | bundleId={} | TechBDVersion={}",
+						replayMasterInteractionId, interactionId, tenantId, bundleId, techbdVersion);
+			}
+
+			return responseXml;
+
+		} catch (WebClientResponseException e) {
+			LOG.error(
+					"CCDA-REPLAY WebClient ERROR | replayMasterInteractionId={} | interactionId={} | tenantId={} | bundleId={} | TechBDVersion={} | status={} | body={}",
+					replayMasterInteractionId, interactionId, tenantId, bundleId, techbdVersion,
+					e.getStatusCode(), e.getResponseBodyAsString(), e);
+			return null;
+		} catch (Exception e) {
+			LOG.error(
+					"CCDA-REPLAY UNEXPECTED ERROR | replayMasterInteractionId={} | interactionId={} | tenantId={} | bundleId={} | TechBDVersion={} | error={}",
+					replayMasterInteractionId, interactionId, tenantId, bundleId, techbdVersion, e.getMessage(), e);
+			return null;
 		}
 	}
 
