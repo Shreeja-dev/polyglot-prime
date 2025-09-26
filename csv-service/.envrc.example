@@ -1,0 +1,62 @@
+# Rename this file `.envrc` and use it during development.
+# Secrets should be kept in a vault or passed through environments
+# and never stored in Git.
+
+# If you want use these, remember to start VSCode or your IDE after `direnv allow`
+
+# use Spring profiles as 'localopen' for testing locally with no authentication, `sandbox` for testing with auth in localhost , `devl`, `stage`, `prod`
+export sandbox_TECHBD_UDI_DS_PRIME_JDBC_URL=jdbc:postgresql://aws.neon.tech/persistence-prime
+export sandbox_TECHBD_UDI_DS_PRIME_JDBC_USERNAME=persistence-prime
+export sandbox_TECHBD_UDI_DS_PRIME_JDBC_PASSWORD=**********
+
+# these are the `orchctl.ts` SFTP accounts that will be made browsable;
+# ensure sequence of _0_, _1_, etc. are correct, they map to
+# org.techbd.orchestrate.sftp.account.orchctlts in application.yml
+
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_0_TENANTID=qeName1
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_0_SERVER=sftp.techbd.org
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_0_PORT=22
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_0_USERNAME=un1
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_0_PASSWORD=pw1
+
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_1_TENANTID=qeName2
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_1_SERVER=sftp.techbd.org
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_1_PORT=22
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_1_USERNAME=un2
+export ORG_TECHBD_ORCHESTRATE_SFTP_ACCOUNT_ORCHCTLTS_1_PASSWORD=pw2
+
+export SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_ID=github-auth-app-client-id
+export SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_SECRET=github-auth-app-client-secret
+
+# URL and associated API token to get list of authorized users, only works via environment (not Spring properties)
+export ORG_TECHBD_SERVICE_HTTP_GITHUB_AUTHZ_USERS_YAML_URL=https://raw.githubusercontent.com/tech-by-design/infrastructure-prime/main/sensitive/oauth2-github-authz.yml
+export ORG_TECHBD_SERVICE_HTTP_GITHUB_API_AUTHN_TOKEN=*********
+
+# Set the workspace editor to VS Code local or remote (with given distro/host)
+# export UPI_WS_EDITOR=vscode-wsl          # also supply UPI_WS_EDITOR_VSCODE_REMOTE_DISTRO   Files will be accessible as vscode://vscode-remote/wsl+DISTRO/home/username/src/somedir/file.txt:1
+# export UPI_WS_EDITOR=vscode-ssh-remote   # also supply UPI_WS_EDITOR_VSCODE_REMOTE_HOSTNAME Files will be accessible as vscode://vscode-remote/ssh-remote+HOSTNAME/home/username/src/somedir/file.txt:1
+# export UPI_WS_EDITOR=vscode-windows      # Files will be accessible as vscode://file/home/username/src/somedir/file.txt:1
+# export UPI_WS_EDITOR=vscode-linux        # Files will be accessible as vscode://file/home/username/src/somedir/file.txt:1
+# export UPI_WS_EDITOR=vscode-mac          # Files will be accessible as vscode://file/home/username/src/somedir/file.txt:1
+
+export UPI_WS_EDITOR=vscode-wsl
+export UPI_WS_EDITOR_VSCODE_REMOTE_DISTRO=Debian
+# Variable to store the application log file. '.log' will be automatically added, so it does not need to be specified.
+export ORG_TECHBD_HUB_PRIME_LOG_FILE= #Path to the log file with file name (${HOME}/log/techbd/hub-prime/hub-prime-application)
+
+## Set the API base URL
+export TECHBD_HUB_PRIME_FHIR_API_BASE_URL=http://localhost:8080
+## Set the UI base URL
+export TECHBD_HUB_PRIME_FHIR_UI_BASE_URL=http://localhost:8080
+
+export TECHBD_OPEN_OBSERVE_URL=http://10.10.11.248:5080
+export TECHBD_OPEN_OBSERVE_PASSWORD=Y2l0cnVzQGNpdHJ1cy5jb206Y2l0cnVz
+export TECHBD_OPEN_OBSERVE_STREAM_NAME=local
+
+export TECHBD_ALLOWED_HOSTS=localhost:8080
+
+export PYTHON_SCRIPT_PATH=../
+export ORG_TECHBD_CSV_ASYNC_EXECUTOR_CORE_POOL_SIZE=20
+export ORG_TECHBD_CSV_ASYNC_EXECUTOR_MAX_POOL_SIZE=50
+export ORG_TECHBD_CSV_ASYNC_EXECUTOR_QUEUE_CAPACITY=200
+export ORG_TECHBD_CSV_ASYNC_EXECUTOR_AWAIT_TERMINATION_SECONDS=30
