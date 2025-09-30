@@ -24,7 +24,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
 import org.techbd.corelib.util.AppLogger;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 import org.techbd.corelib.util.TemplateLogger;
 import org.techbd.csv.converters.ProcedureConverter;
 import org.techbd.csv.model.DemographicData;
@@ -74,8 +74,8 @@ class ProcedureConverterTest {
         baseFHIRUrl = "http://shinny.org/us/ny/hrsn";
 
         // Initialize FHIRUtil.PROFILE_MAP
-        FHIRUtil.PROFILE_MAP = new HashMap<>();
-        FHIRUtil.PROFILE_MAP.put("procedure", "/StructureDefinition/shinny-sdoh-procedure");
+        CoreFHIRUtil.PROFILE_MAP = new HashMap<>();
+        CoreFHIRUtil.PROFILE_MAP.put("procedure", "/StructureDefinition/shinny-sdoh-procedure");
     }
 
     @Test

@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.techbd.corelib.config.Configuration;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 import org.techbd.csv.config.AppConfig;
 import org.techbd.csv.config.Constants;
 import org.techbd.csv.service.CsvService;
@@ -73,19 +73,19 @@ public class CsvController {
 
     validateFile(file);
     validateTenantId(tenantId);
-    Map <String,Object> requestDetailsMap = FHIRUtil.extractRequestDetails(request);
-    Map<String, Object> headerParameters = FHIRUtil.buildHeaderParametersMap(tenantId, null,
+    Map <String,Object> requestDetailsMap = CoreFHIRUtil.extractRequestDetails(request);
+    Map<String, Object> headerParameters = CoreFHIRUtil.buildHeaderParametersMap(tenantId, null,
         null,
         null, null, null, null,
         null,null);   
-    FHIRUtil.buildRequestParametersMap(requestDetailsMap,null,
+    CoreFHIRUtil.buildRequestParametersMap(requestDetailsMap,null,
         null, null, null, null, request.getRequestURI());
     requestDetailsMap.put(Constants.MASTER_INTERACTION_ID, UUID.randomUUID().toString());
     requestDetailsMap.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
     Map<String, Object> responseParameters = new HashMap<>();
     requestDetailsMap.putAll(headerParameters);
     final var result  = csvService.validateCsvFile(file, requestDetailsMap, responseParameters);
-    FHIRUtil.addCookieAndHeadersToResponse(response, responseParameters, requestDetailsMap);
+    CoreFHIRUtil.addCookieAndHeadersToResponse(response, responseParameters, requestDetailsMap);
     return result;
   }
 
@@ -106,12 +106,12 @@ public class CsvController {
     validateFile(file);
     validateTenantId(tenantId);
     // FHIRUtil.validateBaseFHIRProfileUrl(appConfig.getIgPackages(), baseFHIRURL); //TODO CHECK IF VALID IG PACKAGE
-    Map <String,Object> requestDetailsMap = FHIRUtil.extractRequestDetails(request);
-    Map<String, Object> headerParameters = FHIRUtil.buildHeaderParametersMap(tenantId, null,
+    Map <String,Object> requestDetailsMap = CoreFHIRUtil.extractRequestDetails(request);
+    Map<String, Object> headerParameters = CoreFHIRUtil.buildHeaderParametersMap(tenantId, null,
         null,
         null, validationSeverityLevel, null, null,
         null,null);    
-    FHIRUtil.buildRequestParametersMap(requestDetailsMap,null,
+    CoreFHIRUtil.buildRequestParametersMap(requestDetailsMap,null,
         null, null, null, null, request.getRequestURI());
     requestDetailsMap.put(Constants.MASTER_INTERACTION_ID, UUID.randomUUID().toString());
     requestDetailsMap.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
@@ -123,7 +123,7 @@ public class CsvController {
     requestDetailsMap.putAll(headerParameters);
     Map<String, Object> responseParameters = new HashMap<>();
     List<Object> processedFiles = csvService.processZipFile(file, requestDetailsMap, responseParameters);
-    FHIRUtil.addCookieAndHeadersToResponse(response, responseParameters, requestDetailsMap);
+    CoreFHIRUtil.addCookieAndHeadersToResponse(response, responseParameters, requestDetailsMap);
     return ResponseEntity.ok(processedFiles);
   }
 }

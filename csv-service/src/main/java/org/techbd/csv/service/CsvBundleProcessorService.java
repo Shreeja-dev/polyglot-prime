@@ -47,7 +47,7 @@ import org.techbd.udi.auto.jooq.ingress.routines.SatInteractionCsvRequestUpserte
 import org.techbd.corelib.util.AppLogger;
 import org.techbd.corelib.util.TemplateLogger;
 import org.techbd.csv.util.CsvConversionUtil;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -296,7 +296,7 @@ public class CsvBundleProcessorService {
             final var execResult = initRIHR.execute(jooqCfg);
             final var end = Instant.now();
             final JsonNode responseFromDB = initRIHR.getReturnValue();
-            final Map<String, Object> responseAttributes = FHIRUtil.extractFields(responseFromDB);
+            final Map<String, Object> responseAttributes = CoreFHIRUtil.extractFields(responseFromDB);
             LOG.info(
                     "CsvBundleProcessorService - REGISTER State CONVERTED_TO_FHIR : END | masterInteractionId: {}, groupInteractionId: {}, tenantId: {}, timeTaken: {} ms, error: {}, hub_nexus_interaction_id: {}{}",
                     masterInteractionId,
@@ -402,7 +402,7 @@ private List<Object> processScreening(final String groupKey,
                                 interactionId, requestParameters,
                                 bundle, null, tenantId);
                         
-                              Map<String, Object> headers = FHIRUtil.buildHeaderParametersMap(
+                              Map<String, Object> headers = CoreFHIRUtil.buildHeaderParametersMap(
                                 tenantId,
                                 null,
                                 null,
@@ -411,7 +411,7 @@ private List<Object> processScreening(final String groupKey,
                                 null,
                                 null,
                                 updatedProvenance, null);
-                       FHIRUtil.buildRequestParametersMap(requestParameters,
+                       CoreFHIRUtil.buildRequestParametersMap(requestParameters,
                             false, null, SourceType.CSV.name(),  groupInteractionId, masterInteractionId,(String) requestParameters.get(Constants.REQUEST_URI));
                         requestParameters.put(Constants.INTERACTION_ID, interactionId);
                         requestParameters.put(Constants.GROUP_INTERACTION_ID, groupInteractionId);
@@ -431,7 +431,7 @@ private List<Object> processScreening(final String groupKey,
                                 profile.getPatientMrIdValue(), profile.getEncounterId(),
                                 new Exception("Bundle not created"),
                                 payloadAndValidationOutcome.provenance(),payloadAndValidationOutcome.fileDetails(),requestParameters);
-                        String bundleId =FHIRUtil.extractBundleId(bundle, tenantId);                                
+                        String bundleId =CoreFHIRUtil.extractBundleId(bundle, tenantId);                                
                         DataLedgerPayload dataLedgerPayload = DataLedgerPayload.create(
                         DataLedgerApiClient.Actor.TECHBD.getValue(), DataLedgerApiClient.Action.SENT.getValue(), 
                         DataLedgerApiClient.Actor.INVALID_CSV.getValue(), bundleId != null ? bundleId : masterInteractionId);
@@ -448,7 +448,7 @@ private List<Object> processScreening(final String groupKey,
                     final Map<String, Object> result = createOperationOutcomeForError(masterInteractionId, interactionId,
                             profile.getPatientMrIdValue(), profile.getEncounterId(), e,
                             payloadAndValidationOutcome.provenance(),payloadAndValidationOutcome.fileDetails(),requestParameters);
-                    String bundleId =FHIRUtil.extractBundleId(bundle, tenantId);                                
+                    String bundleId =CoreFHIRUtil.extractBundleId(bundle, tenantId);                                
                     DataLedgerPayload dataLedgerPayload = DataLedgerPayload.create(
                     DataLedgerApiClient.Actor.TECHBD.getValue(), DataLedgerApiClient.Action.SENT.getValue(), 
                     DataLedgerApiClient.Actor.INVALID_CSV.getValue(), bundleId != null ? bundleId : masterInteractionId);

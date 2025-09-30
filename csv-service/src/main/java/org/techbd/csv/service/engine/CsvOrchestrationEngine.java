@@ -34,14 +34,14 @@ import org.apache.commons.vfs2.FileObject;
 import org.springframework.stereotype.Component;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
-import org.techbd.corelib.config.AppConfig;
+import org.techbd.corelib.config.CoreAppConfig;
 import org.techbd.corelib.config.Configuration;
 import org.techbd.corelib.config.Constants;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
 import org.techbd.corelib.config.Nature;
 import org.techbd.corelib.config.State;
 import org.techbd.corelib.util.AppLogger;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 import org.techbd.corelib.util.TemplateLogger;
 import org.techbd.csv.model.CsvDataValidationStatus;
 import org.techbd.csv.model.CsvProcessingMetrics;
@@ -66,14 +66,14 @@ import jakarta.validation.constraints.NotNull;
 @Component
 public class CsvOrchestrationEngine {
     private final ConcurrentHashMap<String, OrchestrationSession> sessions;
-    private final AppConfig appConfig;
+    private final CoreAppConfig appConfig;
     private final VfsCoreService vfsCoreService;
     private final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig;
     private static TemplateLogger log;
     private static final Pattern FILE_PATTERN = Pattern.compile(
           "(SDOH_PtInfo|SDOH_QEadmin|SDOH_ScreeningProf|SDOH_ScreeningObs)_(.+)");
 
-    public CsvOrchestrationEngine(final AppConfig appConfig, final VfsCoreService vfsCoreService,final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig,AppLogger appLogger) {
+    public CsvOrchestrationEngine(final CoreAppConfig appConfig, final VfsCoreService vfsCoreService,final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig,AppLogger appLogger) {
         this.sessions = new ConcurrentHashMap<>();
         this.appConfig = appConfig;
         this.vfsCoreService = vfsCoreService;
@@ -322,7 +322,7 @@ public class CsvOrchestrationEngine {
                 final var execResult = initRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 final JsonNode responseFromDB = initRIHR.getReturnValue();
-                final Map<String, Object> responseAttributes = FHIRUtil.extractFields(responseFromDB);
+                final Map<String, Object> responseAttributes = CoreFHIRUtil.extractFields(responseFromDB);
 
                 log.info(
                         "CsvOrchestrationEngine - REGISTER State NONE TO CSV_ACCEPT: END | zipFileinteractionId: {}, tenantId: {}, timeTaken: {} ms, error: {}, hub_nexus_interaction_id: {}{}",
@@ -406,7 +406,7 @@ public class CsvOrchestrationEngine {
                 final var execResult = initRIHR.execute(jooqCfg);
                 final var end = Instant.now();
                 final JsonNode responseFromDB = initRIHR.getReturnValue();
-                final Map<String, Object> responseAttributes = FHIRUtil.extractFields(responseFromDB);
+                final Map<String, Object> responseAttributes = CoreFHIRUtil.extractFields(responseFromDB);
                 log.info(
                         "CsvOrchestrationEngine - REGISTER State CSV_ACCEPT TO VALIDATION  : END | zipFileInteractionId: {}, tenantId: {}, timeTaken: {} ms, error: {}, hub_nexus_interaction_id: {}{}",
                         masterInteractionId,
@@ -1069,7 +1069,7 @@ public class CsvOrchestrationEngine {
             }
         }
 
-        private List<String> buildValidationCommand(AppConfig.CsvValidation.Validation config,
+        private List<String> buildValidationCommand(CoreAppConfig.CsvValidation.Validation config,
                 final List<FileDetail> fileDetails) {
             final List<String> command = new ArrayList<>();
             command.add(config.pythonExecutable());

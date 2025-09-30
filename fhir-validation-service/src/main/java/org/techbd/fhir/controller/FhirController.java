@@ -4,7 +4,6 @@ import static org.techbd.udi.auto.jooq.ingress.Tables.INTERACTION_HTTP_REQUEST;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,17 +26,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
-import org.techbd.fhir.config.AppConfig;
 import org.techbd.corelib.config.Configuration;
 import org.techbd.corelib.config.Constants;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
 import org.techbd.corelib.config.Helpers;
+import org.techbd.corelib.service.dataledger.DataLedgerApiClient;
+import org.techbd.corelib.util.CoreFHIRUtil;
+import org.techbd.fhir.config.AppConfig;
 import org.techbd.fhir.service.FHIRService;
 import org.techbd.fhir.service.engine.OrchestrationEngine;
-import org.techbd.corelib.service.dataledger.DataLedgerApiClient;
-import org.techbd.corelib.util.FHIRUtil;
 
-import io.micrometer.common.util.StringUtils;
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import io.swagger.v3.oas.annotations.Operation;
@@ -64,23 +63,14 @@ public class FhirController {
         private final FHIRService fhirService;
         private final Tracer tracer;
 
-        public FhirController(final Tracer tracer,final OrchestrationEngine engine,
+        public FhirController(final OrchestrationEngine engine,
         final AppConfig appConfig ,final DataLedgerApiClient dataLedgerApiClient,final FHIRService fhirService
         ,final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig) throws IOException {
-                // String activeProfile = System.getenv("SPRING_PROFILES_ACTIVE");
-                // appConfig = ConfigLoader.loadConfig(activeProfile);
-                // this.fhirService = new FHIRService();
-                // fhirService.setAppConfig(appConfig);
-                // org.techbd.util.fhir.FHIRUtil.initialize(appConfig);
-                // dataLedgerApiClient = new DataLedgerApiClient(appConfig);
-                // OrchestrationEngine engine = new OrchestrationEngine(appConfig);
-                // fhirService.setDataLedgerApiClient(dataLedgerApiClient);
-                // fhirService.setEngine(engine);
                 this.appConfig = appConfig;
                 this.engine = engine;
                 this.fhirService = fhirService;
                 this.dataLedgerApiClient = dataLedgerApiClient;
-                this.tracer = tracer;
+                 this.tracer = GlobalOpenTelemetry.get().getTracer("FhirController");
                 this.coreUdiPrimeJpaConfig = coreUdiPrimeJpaConfig;
         }
 
@@ -95,132 +85,6 @@ public class FhirController {
 
                 return "metadata.xml";
         }
-
-        @PostMapping(value = { "/Bundle", "/Bundle/" }, consumes = { MediaType.APPLICATION_JSON_VALUE,
-                        Constants.FHIR_CONTENT_TYPE_HEADER_VALUE })
-        @Operation(summary = "Endpoint to to validate, store, and then forward a payload to SHIN-NY. If you want to validate a payload and not store it or forward it to SHIN-NY, use $validate.", description = "Endpoint to to validate, store, and then forward a payload to SHIN-NY.")
-        @ApiResponses(value = {
-                        @ApiResponse(responseCode = "200", description = "Request processed successfully", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = "{\n"
-                                        + "  \"OperationOutcome\": {\n"
-                                        + "    \"validationResults\": [\n"
-                                        + "      {\n"
-                                        + "        \"operationOutcome\": {\n"
-                                        + "          \"resourceType\": \"OperationOutcome\",\n"
-                                        + "          \"issue\": [\n"
-                                        + "            {\n"
-                                        + "              \"severity\": \"error\",\n"
-                                        + "              \"diagnostics\": \"Error Message\",\n"
-                                        + "              \"location\": [\n"
-                                        + "                \"Bundle.entry[0].resource/*Patient/PatientExample*/.extension[0].extension[0].value.ofType(Coding)\",\n"
-                                        + "                \"Line[1] Col[5190]\"\n"
-                                        + "              ]\n"
-                                        + "            }\n"
-                                        + "          ]\n"
-                                        + "        }\n"
-                                        + "      }\n"
-                                        + "    ],\n"
-                                        + "    \"techByDesignDisposition\": [\n"
-                                        + "      {\n"
-                                        + "        \"action\": \"reject\",\n"
-                                        + "        \"actionPayload\": {\n"
-                                        + "          \"message\": \"reject message\",\n"
-                                        + "          \"description\": \"rule name\"\n"
-                                        + "        }\n"
-                                        + "      }\n"
-                                        + "    ],\n"
-                                        + "    \"resourceType\": \"OperationOutcome\"\n"
-                                        + "  }\n"
-                                        + "}"))),
-
-                        @ApiResponse(responseCode = "400", description = "Validation Error: Missing or invalid parameter", content = @Content(mediaType = "application/json", examples = {
-                                        @ExampleObject(value = "{\n"
-                                                        + "  \"status\": \"Error\",\n"
-                                                        + "  \"message\": \"Validation Error: Required request body is missing.\"\n"
-                                                        + "}"),
-                                        @ExampleObject(value = "{\n"
-                                                        + "  \"status\": \"Error\",\n"
-                                                        + "  \"message\": \"Validation Error: Required request header 'X-TechBD-Tenant-ID' for method parameter type String is not present.\"\n"
-                                                        + "}")
-                        })),
-                        @ApiResponse(responseCode = "500", description = "An unexpected system error occurred", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = "{\n"
-                                        + "  \"status\": \"Error\",\n"
-                                        + "  \"message\": \"An unexpected system error occurred.\"\n"
-                                        + "}")))
-        })
-        @ResponseBody
-        public Object validateBundleAndForward(
-                        @Parameter(description = "Payload for the API. This <b>must not</b> be <code>null</code>.", required = true) final @RequestBody @Nonnull String payload,
-                        @Parameter(description = "Parameter to specify the Tenant ID. This is a <b>mandatory</b> parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID, required = true) String tenantId,
-                        // "profile" is the same name that HL7 validator uses
-                        @Parameter(description = "Optional header to specify the Datalake API URL. If not specified, the default URL mentioned in the application configuration will be used.", required = false) @RequestHeader(value = Constants.DATALAKE_API_URL, required = false) String customDataLakeApi,
-                        @Parameter(description = "Optional header to provide elaboration details.", required = false) @RequestHeader(value = "X-TechBD-Elaboration", required = false) String elaboration,
-                        @Parameter(description = "Optional header to specify the request URI to override. This parameter is used for requests forwarded from Mirth Connect, where we override it with the initial request URI from Mirth Connect.", required = false) @RequestHeader(value = "X-TechBD-Override-Request-URI", required = false) String requestUriToBeOverridden,
-                        @Parameter(description = "An optional header to provide a UUID that if provided will be used as interaction id.", required = false) @RequestHeader(value = "X-Correlation-ID", required = false) String coRrelationId,
-                        @Parameter(description = """
-                                        Optional header to specify the Datalake API content type.
-                                        Value provided with this header will be used to set the <code>Content-Type</code> header while invoking the Datalake API.
-                                        If the header is not provided, <code>application/json</code> will be used.
-                                        """, required = false) @RequestHeader(value = Constants.DATALAKE_API_CONTENT_TYPE, required = false) String dataLakeApiContentType,
-                        @Parameter(description = "Header to decide whether the request is just for health check. If <code>true</code>, no information will be recorded in the database. It will be <code>false</code> in by default.", required = false) @RequestHeader(value = Constants.HEALTH_CHECK_HEADER, required = false) String healthCheck,
-                        @Parameter(hidden = true, description = "Optional parameter to decide whether response should be synchronous or asynchronous.", required = false) @RequestParam(value = "immediate", required = false,defaultValue = "true") boolean isSync,
-
-                        @Parameter(hidden = true, description = """
-                                        An optional parameter specifies whether the scoring engine API should be called with or without mTLS.<br>
-                                        The allowed values for <code>mTlsStrategy</code> are:
-                                        <ul>
-                                            <li><code>no-mTls</code>: No mTLS is used. The WebClient sends a standard HTTP POST request to the scoring engine API without mutual TLS (mTLS).</li>
-                                            <li><code>mTlsResources</code>: mTLS is enabled. The WebClient reads the TLS key and certificate from a local folder, and then sends an HTTPS POST request to the scoring engine API with mutual TLS authentication.</li>
-                                            <li><code>aws-secrets</code>: mTLS is enabled. The WebClient retrieves the TLS key and certificate from AWS Secrets Manager, and then sends an HTTPS POST request to the scoring engine API with mutual TLS authentication.</li>
-                                            <li><code>post-stdin-payload-to-nyec-datalake-external</code>: This option runs a bash script via ProcessBuilder. The payload is passed through standard input (STDIN) to the script, which uses <code>curl</code> to send the request to the scoring engine API. In the <b>PHI-QA</b> environment, mTLS is enabled for this request. In other environments, mTLS is disabled for this script.</li>
-                                        </ul>
-                                        """, required = false) @RequestParam(value = "mtls-strategy", required = false) String mtlsStrategy,
-                        @Parameter(hidden = true, description = "Optional parameter to decide whether the session cookie (JSESSIONID) should be deleted.", required = false) @RequestParam(value = "delete-session-cookie", required = false) Boolean deleteSessionCookie,
-                        @Parameter(hidden = true, description = "Optional parameter to specify source of the request.", required = false) @RequestParam(value = "source", required = false, defaultValue = "FHIR") String source,
-                        @Parameter(description = "Optional header to set validation severity level (`information`, `warning`, `error`, `fatal`).", required = false) @RequestHeader(value = "X-TechBD-Validation-Severity-Level", required = false) String validationSeverityLevel,
-                        @Parameter(description = "Optional header to specify IG version.", required = false) @RequestHeader(value = "X-SHIN-NY-IG-Version", required = false) String requestedIgVersion ,                    
-                        HttpServletRequest request, HttpServletResponse response) throws SQLException, IOException {
-                Span span = tracer.spanBuilder("FhirController.validateBundleAndForward").startSpan();
-                try {
-                        if (tenantId == null || tenantId.trim().isEmpty()) {
-                                LOG.error("FHIRController:Bundle Validate:: Tenant ID is missing or empty");
-                                throw new IllegalArgumentException("Tenant ID must be provided");
-                        }
-
-                        if (Boolean.TRUE.equals(deleteSessionCookie)) {
-                                deleteJSessionCookie(request, response);
-                        }
-                        if (StringUtils.isNotEmpty(coRrelationId)) {
-                                try {
-                                        UUID.fromString(coRrelationId);
-                                } catch (IllegalArgumentException e) {
-                                        throw new IllegalArgumentException("X-Correlation-ID should be a valid UUID");
-                                }
-                        }
-                        final var provenance = "%s.validateBundleAndForward(%s)".formatted(
-                                        FhirController.class.getName(),
-                                        isSync ? "sync" : "async");
-                        // request = new CustomRequestWrapper(request, payload); //TODO: Check and remove if not needed
-                        Map<String, Object> headers = FHIRUtil.buildHeaderParametersMap(tenantId, customDataLakeApi,
-                                        dataLakeApiContentType,
-                                        requestUriToBeOverridden, validationSeverityLevel, healthCheck, coRrelationId,
-                                        provenance,requestedIgVersion);
-                        Map <String,Object> requestDetailsMap = FHIRUtil.extractRequestDetails(request);
-                        FHIRUtil.buildRequestParametersMap(requestDetailsMap,deleteSessionCookie,
-                                        mtlsStrategy, source, null, null,request.getRequestURI());
-                        requestDetailsMap.put(Constants.INTERACTION_ID,UUID.randomUUID().toString()); 
-                        requestDetailsMap.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString()); 
-                        requestDetailsMap.put(Constants.ELABORATION, elaboration);
-                        requestDetailsMap.putAll(headers);  
-                        // request = new CustomRequestWrapper(request, payload); //TODO: Check and remove if not needed
-                        Map<String, Object> responseParameters = new HashMap<>();
-                        final var result = fhirService.processBundle(payload, requestDetailsMap,responseParameters);
-                        FHIRUtil.addCookieAndHeadersToResponse(response, responseParameters, requestDetailsMap);
-                        return result;
-                } finally {
-                        span.end();
-                }
-        }
-
         @PostMapping(value = { "/Bundle/$validate", "/Bundle/$validate/" }, consumes = {
                         MediaType.APPLICATION_JSON_VALUE,
                         Constants.FHIR_CONTENT_TYPE_HEADER_VALUE })
@@ -282,10 +146,10 @@ public class FhirController {
                                 deleteJSessionCookie(request, response);
                         }
                         // request = new CustomRequestWrapper(request, payload);
-                        Map<String, Object> headers = FHIRUtil.buildHeaderParametersMap(tenantId, null, null,
+                        Map<String, Object> headers = CoreFHIRUtil.buildHeaderParametersMap(tenantId, null, null,
                                         null, null, null, null, null,requestedIgVersion );
-                        Map <String,Object> requestDetailsMap = FHIRUtil.extractRequestDetails(request);            
-                        FHIRUtil.buildRequestParametersMap(requestDetailsMap,deleteSessionCookie,
+                        Map <String,Object> requestDetailsMap = CoreFHIRUtil.extractRequestDetails(request);            
+                        CoreFHIRUtil.buildRequestParametersMap(requestDetailsMap,deleteSessionCookie,
                                         null, null,
                                         null, null, request.getRequestURI());
                         requestDetailsMap.put(Constants.INTERACTION_ID,UUID.randomUUID().toString());
@@ -293,7 +157,7 @@ public class FhirController {
                         requestDetailsMap.putAll(headers);
                         Map<String, Object> responseParameters = new HashMap<>();
                         final var result = fhirService.processBundle(payload, requestDetailsMap,  responseParameters);
-                        FHIRUtil.addCookieAndHeadersToResponse(response, responseParameters, requestDetailsMap);
+                        CoreFHIRUtil.addCookieAndHeadersToResponse(response, responseParameters, requestDetailsMap);
                         return result;
                 } finally {
                         span.end();

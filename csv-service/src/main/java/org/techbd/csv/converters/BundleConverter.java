@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.techbd.csv.model.DemographicData;
 import org.techbd.csv.util.CsvConversionUtil;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 
 import io.micrometer.common.util.StringUtils;
 
@@ -41,9 +41,9 @@ public class BundleConverter {
         meta.setLastUpdated(new Date());
         if (StringUtils.isNotEmpty(baseFHIRUrl)) {
             meta.setProfile(List.of(
-                    new CanonicalType(FHIRUtil.getProfileUrl(baseFHIRUrl, ResourceType.Bundle.name().toLowerCase()))));
+                    new CanonicalType(CoreFHIRUtil.getProfileUrl(baseFHIRUrl, ResourceType.Bundle.name().toLowerCase()))));
         } else {
-            meta.setProfile(List.of(new CanonicalType(FHIRUtil.getBundleProfileUrl())));
+            meta.setProfile(List.of(new CanonicalType(CoreFHIRUtil.getBundleProfileUrl())));
         }
         bundle.setMeta(meta);
         LOG.info("Empty FHIR Bundle template generated with Meta and one empty entry for interactionId : {}.",

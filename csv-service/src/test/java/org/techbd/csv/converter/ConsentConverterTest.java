@@ -31,7 +31,7 @@ import org.techbd.csv.model.QeAdminData;
 import org.techbd.csv.model.ScreeningObservationData;
 import org.techbd.csv.model.ScreeningProfileData;
 import org.techbd.csv.service.CodeLookupService;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.IParser;
@@ -56,10 +56,10 @@ class ConsentConverterTest {
             lenient().when(mockCodeLookupService.fetchCode(any(), anyString())).thenReturn(new HashMap<>());
             lenient().when(mockCodeLookupService.fetchSystem(any(), anyString())).thenReturn(new HashMap<>());
             lenient().when(mockCodeLookupService.fetchDisplay(any(), anyString())).thenReturn(new HashMap<>());
-            Field profileMapField = FHIRUtil.class.getDeclaredField("PROFILE_MAP");
+            Field profileMapField = CoreFHIRUtil.class.getDeclaredField("PROFILE_MAP");
             profileMapField.setAccessible(true);
             profileMapField.set(null, CsvTestHelper.getProfileMap());
-            Field baseFhirUrlField = FHIRUtil.class.getDeclaredField("BASE_FHIR_URL");
+            Field baseFhirUrlField = CoreFHIRUtil.class.getDeclaredField("BASE_FHIR_URL");
             baseFhirUrlField.setAccessible(true);
             baseFhirUrlField.set(null, CsvTestHelper.BASE_FHIR_URL);
     }

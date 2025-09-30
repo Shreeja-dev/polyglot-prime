@@ -9,7 +9,7 @@ import org.hl7.fhir.r4.model.CanonicalType;
 import org.hl7.fhir.r4.model.Resource;
 import org.hl7.fhir.r4.model.ResourceType;
 import org.springframework.stereotype.Component;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 import org.techbd.csv.model.DemographicData;
 import org.techbd.csv.model.QeAdminData;
 import org.techbd.csv.model.ScreeningObservationData;
@@ -34,7 +34,7 @@ public interface IConverter {
     default void setMeta(Resource resource,String baseFHIRUrl) {
         if (null != resource.getMeta()) {
             if (StringUtils.isNotEmpty(baseFHIRUrl)) {
-                resource.getMeta().setProfile(List.of(new CanonicalType(FHIRUtil.getProfileUrl(baseFHIRUrl,getResourceType().name().toLowerCase()))));
+                resource.getMeta().setProfile(List.of(new CanonicalType(CoreFHIRUtil.getProfileUrl(baseFHIRUrl,getResourceType().name().toLowerCase()))));
             } else {
                 resource.getMeta().setProfile(List.of(getProfileUrl()));
             }
@@ -47,7 +47,7 @@ public interface IConverter {
     default void setMeta(Resource resource,String baseFHIRUrl,String resourceType) {
         if (null != resource.getMeta()) {
             if (StringUtils.isNotEmpty(baseFHIRUrl) && StringUtils.isNotEmpty(resourceType)) {
-                resource.getMeta().setProfile(List.of(new CanonicalType(FHIRUtil.getProfileUrl(baseFHIRUrl,resourceType))));
+                resource.getMeta().setProfile(List.of(new CanonicalType(CoreFHIRUtil.getProfileUrl(baseFHIRUrl,resourceType))));
             } else {
                 resource.getMeta().setProfile(List.of(getProfileUrl()));
             }

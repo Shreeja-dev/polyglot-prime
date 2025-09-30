@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
-import org.techbd.corelib.config.AppConfig;
+import org.techbd.corelib.config.CoreAppConfig;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
 import org.techbd.corelib.service.dataledger.DataLedgerApiClient;
 import org.techbd.corelib.service.dataledger.DataLedgerApiClient.Action;
@@ -32,7 +32,7 @@ import org.techbd.corelib.util.TemplateLogger;
 class DataLedgerApiClientTest {
 
     @Mock
-    private AppConfig appConfig;
+    private CoreAppConfig appConfig;
 
     @Mock
     private CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig;

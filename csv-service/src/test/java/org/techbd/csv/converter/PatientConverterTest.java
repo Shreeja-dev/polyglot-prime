@@ -27,7 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
 import org.techbd.corelib.util.AppLogger;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 import org.techbd.corelib.util.TemplateLogger;
 import org.techbd.csv.converters.PatientConverter;
 import org.techbd.csv.model.DemographicData;
@@ -62,10 +62,10 @@ class PatientConverterTest {
                 when(appLogger.getLogger(PatientConverter.class)).thenReturn(templateLogger);
                 patientConverter = new PatientConverter(codeLookupService, coreUdiPrimeJpaConfig, appLogger);
                 
-                Field profileMapField = FHIRUtil.class.getDeclaredField("PROFILE_MAP");
+                Field profileMapField = CoreFHIRUtil.class.getDeclaredField("PROFILE_MAP");
                 profileMapField.setAccessible(true);
                 profileMapField.set(null, CsvTestHelper.getProfileMap());
-                Field baseFhirUrlField = FHIRUtil.class.getDeclaredField("BASE_FHIR_URL");
+                Field baseFhirUrlField = CoreFHIRUtil.class.getDeclaredField("BASE_FHIR_URL");
                 baseFhirUrlField.setAccessible(true);
                 baseFhirUrlField.set(null, CsvTestHelper.BASE_FHIR_URL);
         }

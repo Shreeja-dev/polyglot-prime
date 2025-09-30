@@ -11,7 +11,7 @@ import org.hl7.fhir.r4.model.Reference;
 import org.hl7.fhir.r4.model.StringType;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
 import org.techbd.csv.service.CodeLookupService;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 
 public abstract class BaseConverter implements IConverter {
 
@@ -123,7 +123,7 @@ public abstract class BaseConverter implements IConverter {
     }
 
     public CanonicalType getProfileUrl() {
-        return new CanonicalType(FHIRUtil.getProfileUrl(getResourceType().name().toLowerCase()));
+        return new CanonicalType(CoreFHIRUtil.getProfileUrl(getResourceType().name().toLowerCase()));
     }
 
     public static Extension createExtension(String url, String value, String system, String code, String display) {

@@ -21,7 +21,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
 import org.techbd.corelib.util.AppLogger;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 import org.techbd.corelib.util.TemplateLogger;
 import org.techbd.csv.converters.ScreeningResponseObservationConverter;
 import org.techbd.csv.model.DemographicData;
@@ -57,10 +57,10 @@ class ScreeningResponseObservationConverterTest {
         // Manually instantiate the converter after mocks are set up
         converter = new ScreeningResponseObservationConverter(codeLookupService, coreUdiPrimeJpaConfig, appLogger);
         
-        Field profileMapField = FHIRUtil.class.getDeclaredField("PROFILE_MAP");
+        Field profileMapField = CoreFHIRUtil.class.getDeclaredField("PROFILE_MAP");
         profileMapField.setAccessible(true);
         profileMapField.set(null, CsvTestHelper.getProfileMap());
-        Field baseFhirUrlField = FHIRUtil.class.getDeclaredField("BASE_FHIR_URL");
+        Field baseFhirUrlField = CoreFHIRUtil.class.getDeclaredField("BASE_FHIR_URL");
         baseFhirUrlField.setAccessible(true);
         baseFhirUrlField.set(null, CsvTestHelper.BASE_FHIR_URL);
     }

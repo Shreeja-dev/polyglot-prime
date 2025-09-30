@@ -14,7 +14,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @Primary
-public class AppConfig {
+public class CoreAppConfig {
     private String version;
     private String defaultDatalakeApiUrl;
     private String operationOutcomeHelpUrl;

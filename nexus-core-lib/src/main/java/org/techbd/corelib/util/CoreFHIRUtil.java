@@ -1,7 +1,6 @@
 package org.techbd.corelib.util;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -14,10 +13,9 @@ import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
-import org.techbd.corelib.config.AppConfig;
-import org.techbd.corelib.config.AppConfig.FhirV4Config;
 import org.techbd.corelib.config.Configuration;
 import org.techbd.corelib.config.Constants;
+import org.techbd.corelib.config.CoreAppConfig;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -27,14 +25,14 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
 @Component
-public class FHIRUtil {
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(FHIRUtil.class);
-    private final AppConfig appConfig;
+public class CoreFHIRUtil {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(CoreFHIRUtil.class);
+    private final CoreAppConfig appConfig;
     public static Map<String, String> PROFILE_MAP;
     private static String BASE_FHIR_URL;
     public static final String BUNDLE = "bundle";
 
-    public FHIRUtil(AppConfig appConfig) {
+    public CoreFHIRUtil(CoreAppConfig appConfig) {
         this.appConfig = appConfig;
         BASE_FHIR_URL = appConfig.getBaseFHIRURL();
         PROFILE_MAP = appConfig.getStructureDefinitionsUrls() != null

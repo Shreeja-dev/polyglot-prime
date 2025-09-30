@@ -28,7 +28,7 @@ import org.techbd.corelib.config.State;
 import org.techbd.corelib.service.dataledger.DataLedgerApiClient;
 import org.techbd.corelib.service.dataledger.DataLedgerApiClient.DataLedgerPayload;
 import org.techbd.corelib.util.AppLogger;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 import org.techbd.corelib.util.SystemDiagnosticsLogger;
 import org.techbd.corelib.util.TemplateLogger;
 import org.techbd.csv.config.AppConfig;
@@ -175,7 +175,7 @@ public class CsvService {
             final var execResult = initRIHR.execute(jooqCfg);
             final var end = Instant.now();
             final JsonNode responseFromDB = initRIHR.getReturnValue();
-            final Map<String, Object> responseAttributes = FHIRUtil.extractFields(responseFromDB);
+            final Map<String, Object> responseAttributes = CoreFHIRUtil.extractFields(responseFromDB);
             LOG.info(
                     "CsvServoce - saveArchiveInteraction END | zipFileInteractionId: {}, tenantId: {}, timeTaken: {} ms, error: {}, hub_nexus_interaction_id: {}{}",
                     zipFileInteractionId,

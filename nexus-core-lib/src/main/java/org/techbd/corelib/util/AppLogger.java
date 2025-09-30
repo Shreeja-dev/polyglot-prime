@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>
  * This class centralizes logger creation to ensure that all loggers
- * are initialized with the application build version from {@link AppConfig}.
+ * are initialized with the application build version from {@link CoreAppConfig}.
  * By doing this, every log entry generated through a {@link TemplateLogger}
  * will automatically append the current build version at the end of the log message
  * (e.g., <code>... for TechBD Version : 1.0.0</code>), ensuring better traceability
@@ -42,7 +42,7 @@ public class AppLogger {
      *
      * @param appConfig the application configuration containing build details
      */
-    public AppLogger(@Value("${app.version}") String version) {
+    public AppLogger(@Value("${org.techbd.version}") String version) {
         this.version = version;
     }
 
@@ -51,7 +51,7 @@ public class AppLogger {
      *
      * <p>
      * The returned logger will automatically include the application build version
-     * (from {@link AppConfig}) in every log entry.
+     * (from {@link CoreAppConfig}) in every log entry.
      * </p>
      *
      * @param clazz the class for which the logger is being created

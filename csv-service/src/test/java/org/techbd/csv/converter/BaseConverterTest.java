@@ -23,7 +23,7 @@ import org.techbd.csv.model.QeAdminData;
 import org.techbd.csv.model.ScreeningObservationData;
 import org.techbd.csv.model.ScreeningProfileData;
 import org.techbd.csv.service.CodeLookupService;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 
 class BaseConverterTest {
 
@@ -87,10 +87,10 @@ class BaseConverterTest {
     
     @Test
     void testGetProfileUrl1() {
-        try (MockedStatic<FHIRUtil> mockedCoreUtil = mockStatic(FHIRUtil.class)) {
+        try (MockedStatic<CoreFHIRUtil> mockedCoreUtil = mockStatic(CoreFHIRUtil.class)) {
             // Arrange
             String expectedUrl = "http://shinny.org/us/ny/hrsn/StructureDefinition/shinny-patient";
-            mockedCoreUtil.when(() -> FHIRUtil.getProfileUrl("patient")).thenReturn(expectedUrl);
+            mockedCoreUtil.when(() -> CoreFHIRUtil.getProfileUrl("patient")).thenReturn(expectedUrl);
 
             // Act
             CanonicalType result = baseConverter.getProfileUrl();
@@ -98,7 +98,7 @@ class BaseConverterTest {
             // Assert
             assertNotNull(result);
             assertEquals(expectedUrl, result.getValue());
-            mockedCoreUtil.verify(() -> FHIRUtil.getProfileUrl("patient"));
+            mockedCoreUtil.verify(() -> CoreFHIRUtil.getProfileUrl("patient"));
         }
     }
     

@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import org.techbd.corelib.config.Configuration;
-import org.techbd.corelib.config.AppConfig;
+import org.techbd.corelib.config.CoreAppConfig;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
 import org.techbd.udi.auto.jooq.ingress.routines.SatDiagnosticDataledgerApiUpserted;
 import org.techbd.corelib.util.AWSUtil;
@@ -31,10 +31,10 @@ import lombok.Setter;
 @Component
 public class DataLedgerApiClient {
     private final HttpClient client = HttpClient.newHttpClient();
-    private final org.techbd.corelib.config.AppConfig appConfig;
+    private final org.techbd.corelib.config.CoreAppConfig appConfig;
     private final TemplateLogger LOG;
     private final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig;
-    public DataLedgerApiClient(AppConfig appConfig,final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig,AppLogger appLogger) {
+    public DataLedgerApiClient(CoreAppConfig appConfig,final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig,AppLogger appLogger) {
         this.appConfig = appConfig;
         this.coreUdiPrimeJpaConfig = coreUdiPrimeJpaConfig;
         LOG = appLogger.getLogger(DataLedgerApiClient.class);

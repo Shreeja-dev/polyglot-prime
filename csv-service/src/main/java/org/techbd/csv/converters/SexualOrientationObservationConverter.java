@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
 import org.techbd.corelib.util.AppLogger;
 import org.techbd.corelib.util.DateUtil;
-import org.techbd.corelib.util.FHIRUtil;
+import org.techbd.corelib.util.CoreFHIRUtil;
 import org.techbd.corelib.util.TemplateLogger;
 import org.techbd.csv.model.DemographicData;
 import org.techbd.csv.model.QeAdminData;
@@ -46,7 +46,7 @@ public class SexualOrientationObservationConverter extends BaseConverter {
     }
 
     public CanonicalType getProfileUrl() {
-        return new CanonicalType(FHIRUtil.getProfileUrl("observationSexualOrientation"));
+        return new CanonicalType(CoreFHIRUtil.getProfileUrl("observationSexualOrientation"));
     }
 
     @Override
