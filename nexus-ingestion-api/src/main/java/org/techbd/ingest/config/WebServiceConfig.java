@@ -146,7 +146,33 @@ public class WebServiceConfig extends WsConfigurationSupport {
                 throw new IOException("Unable to create SOAP message", e);
             }
         }
+ 
+        @Override
+        public SaajSoapMessage createWebServiceMessage() {
+            try {
+                // Default to SOAP 1.1
+                MessageFactory msgFactory = MessageFactory.newInstance(SOAPConstants.SOAP_1_1_PROTOCOL);
 
+                // Check if HTTP request is available
+                var transportContext = TransportContextHolder.getTransportContext();
+                if (transportContext != null) {
+                    var connection = (org.springframework.ws.transport.http.HttpServletConnection) transportContext
+                            .getConnection();
+                    String contentType = connection.getHttpServletRequest().getContentType();
+
+                    if (contentType != null && contentType.contains("application/soap+xml")) {
+                        // SOAP 1.2 request
+                        msgFactory = MessageFactory.newInstance(SOAPConstants.SOAP_1_2_PROTOCOL);
+                    }
+                }
+
+                SOAPMessage soapMessage = msgFactory.createMessage();
+                return new SaajSoapMessage(soapMessage);
+
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create SOAP message", e);
+            }
+        }
         /**
          * Try to extract Content-Type from the SOAP envelope for protocol detection.
          * If not found, fallback to SOAP 1.1 (text/xml).
