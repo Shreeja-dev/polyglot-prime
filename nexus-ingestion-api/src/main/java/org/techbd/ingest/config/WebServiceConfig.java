@@ -128,7 +128,7 @@ public class WebServiceConfig extends WsConfigurationSupport {
                     // Handle MTOM - create MIME headers from HTTP request
                     MimeHeaders mimeHeaders = new MimeHeaders();
                     mimeHeaders.addHeader("Content-Type", httpContentType);
-                    MessageFactory msgFactory = MessageFactory.newInstance(SOAPConstants.SOAP_1_1_PROTOCOL);
+                    MessageFactory msgFactory = MessageFactory.newInstance(SOAPConstants.DYNAMIC_SOAP_PROTOCOL);
                     ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
                     SOAPMessage soapMessage = msgFactory.createMessage(mimeHeaders, bis);
                     return new SaajSoapMessage(soapMessage);
@@ -136,12 +136,8 @@ public class WebServiceConfig extends WsConfigurationSupport {
                     // Regular SOAP handling
                     MimeHeaders headers = extractHeaders(bytes);
                     String contentType = getContentType(headers);
-                    MessageFactory msgFactory;
-                    if (contentType != null && contentType.contains("application/soap+xml")) {
-                        msgFactory = MessageFactory.newInstance(SOAPConstants.SOAP_1_2_PROTOCOL);
-                    } else {
-                        msgFactory = MessageFactory.newInstance(SOAPConstants.SOAP_1_1_PROTOCOL);
-                    }
+                    MessageFactory msgFactory =
+                    MessageFactory.newInstance(SOAPConstants.DYNAMIC_SOAP_PROTOCOL);
                     ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
                     SOAPMessage soapMessage = msgFactory.createMessage(headers, bis);
                     return new SaajSoapMessage(soapMessage);
