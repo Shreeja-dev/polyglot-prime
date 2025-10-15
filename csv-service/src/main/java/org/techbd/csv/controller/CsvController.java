@@ -67,6 +67,8 @@ public class CsvController {
       @Parameter(description = "Tenant ID, a mandatory parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID) String tenantId,
       @Parameter(hidden = true, description = "Parameter to specify origin of the request.", required = false) @RequestParam(value = "origin", required = false,defaultValue = "HTTP") String origin,
       @Parameter(hidden = true, description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
+      @Parameter(description = "Optional header to specify master interaction ID.", required = false) @RequestHeader(value = "X-TechBD-Master-Interaction-ID", required = false) String masterInteractionId,
+                       
       HttpServletRequest request,
       HttpServletResponse response)
       throws Exception {
@@ -80,7 +82,10 @@ public class CsvController {
         null,null);   
     CoreFHIRUtil.buildRequestParametersMap(requestDetailsMap,null,
         null, null, null, null, request.getRequestURI());
-    requestDetailsMap.put(Constants.MASTER_INTERACTION_ID, UUID.randomUUID().toString());
+    if (null  == masterInteractionId) {
+      masterInteractionId = UUID.randomUUID().toString();
+    }    
+    requestDetailsMap.put(Constants.MASTER_INTERACTION_ID, masterInteractionId);
     requestDetailsMap.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
     Map<String, Object> responseParameters = new HashMap<>();
     requestDetailsMap.putAll(headerParameters);
@@ -100,6 +105,7 @@ public class CsvController {
       @Parameter(hidden = true, description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
       @Parameter(hidden = true, description = "Optional parameter to decide whether response should be synchronous or asynchronous.", required = false) @RequestParam(value = "immediate", required = false,defaultValue = "true") boolean isSync,
       @Parameter(description = "Optional header to set validation severity level (`information`, `warning`, `error`, `fatal`).", required = false) @RequestHeader(value = "X-TechBD-Validation-Severity-Level", required = false) String validationSeverityLevel,
+      @Parameter(description = "Optional header to specify master interaction ID.", required = false) @RequestHeader(value = "X-TechBD-Master-Interaction-ID", required = false) String masterInteractionId,
       HttpServletRequest request,
       HttpServletResponse response) throws Exception {
         
@@ -113,7 +119,10 @@ public class CsvController {
         null,null);    
     CoreFHIRUtil.buildRequestParametersMap(requestDetailsMap,null,
         null, null, null, null, request.getRequestURI());
-    requestDetailsMap.put(Constants.MASTER_INTERACTION_ID, UUID.randomUUID().toString());
+    if (null  == masterInteractionId) {
+      masterInteractionId = UUID.randomUUID().toString();
+    }   
+    requestDetailsMap.put(Constants.MASTER_INTERACTION_ID, masterInteractionId);
     requestDetailsMap.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
     requestDetailsMap.put(Constants.IMMEDIATE, isSync);
     if (validationSeverityLevel != null) {
