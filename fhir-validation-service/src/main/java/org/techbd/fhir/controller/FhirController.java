@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
@@ -132,10 +133,12 @@ public class FhirController {
                         @Parameter(description = "Parameter to specify the Tenant ID. This is a <b>mandatory</b> parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID, required = true) String tenantId,
                         // "profile" is the same name that HL7 validator uses
                         @Parameter(hidden = true, description = "Optional parameter to decide whether the session cookie (JSESSIONID) should be deleted.", required = false) @RequestParam(value = "delete-session-cookie", required = false) Boolean deleteSessionCookie,
+                        @Parameter(description = "Optional header to specify the base FHIR URL. If provided, it will be used in the generated FHIR; otherwise, the default value will be used.", required = false) @RequestHeader(value = "X-TechBD-Base-FHIR-URL", required = false) String baseFHIRURL,
                         @Parameter(description = "Optional header to specify IG version.", required = false) @RequestHeader(value = "X-SHIN-NY-IG-Version", required = false) String requestedIgVersion,
                         @Parameter(description = "Optional header to specify source type.", required = false) @RequestHeader(value = "X-TechBD-Source-Type", required = false) String sourceType,
                         @Parameter(description = "Optional header to specify master interaction ID.", required = false) @RequestHeader(value = "X-TechBD-Master-Interaction-ID", required = false) String masterInteractionId,
                         @Parameter(description = "Optional header to specify group interaction ID.", required = false) @RequestHeader(value = "X-TechBD-Group-Interaction-ID", required = false) String groupInteractionId,
+                        @Parameter(description = "Optional header to specify interaction id otherwise, the default value will be used.", required = false) @RequestHeader(value = "X-TechBD-Interaction-ID", required = false) String interactionId,
                         HttpServletRequest request, HttpServletResponse response) throws IOException {
                 Span span = tracer.spanBuilder("FhirController.validateBundle").startSpan();
                 try {
@@ -157,7 +160,10 @@ public class FhirController {
                         CoreFHIRUtil.buildRequestParametersMap(requestDetailsMap,deleteSessionCookie,
                                         null, sourceType,
                                         groupInteractionId, masterInteractionId, request.getRequestURI());
-                        requestDetailsMap.put(Constants.INTERACTION_ID,UUID.randomUUID().toString());
+                        if (StringUtils.isEmpty(interactionId)) {
+                                interactionId = UUID.randomUUID().toString();
+                        }
+                        requestDetailsMap.put(Constants.INTERACTION_ID,interactionId);
                         requestDetailsMap.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
                         requestDetailsMap.putAll(headers);
                         Map<String, Object> responseParameters = new HashMap<>();
@@ -191,43 +197,6 @@ public class FhirController {
                                         """.replace("\n", "%n"), e.toString(), bundleSessionId);
                 }
         }
-
-        @Operation(summary = "Send mock JSON payloads pretending to be from SHIN-NY Data Lake 1115 Waiver validation (scorecard) server.")
-        @GetMapping("/mock/shinny-data-lake/1115-validate/{resourcePath}.json")
-        public ResponseEntity<String> getJsonFile(
-                        @Parameter(description = """
-                                        Mandatory path variable.
-                                        Possible values are:
-                                        <ul>
-                                            <li><code>fhir-result-healthelink-20240327-testcase2-MRN-healthelinkV7W7BQTTJS</code></li>
-                                            <li><code>fhir-result-healthelink-20240327-testcase2-MRN-healthelinkZNTS7DGCIK</code></li>
-                                            <li><code>fhir-result-healthelink-20240523-testcase1-MRN-healthelinkCZ8BSG71LI</code></li>
-                                            <li><code>fhir-result-healthelink-20240523-testcase1-MRN-healthelinkS8KXK30S8W</code></li>
-                                            <li><code>fhir-result-rochester-20240405-testcase1-MRN-rochesterBICFYAK7QF</code></li>
-                                            <li><code>fhir-result-rochester-20240405-testcase1-MRN-rochesterOKNSL0ZX7C</code></li>
-                                        </ul>
-                                        The API will wait for the number of milliseconds specified in the <code>simulateLifetimeMs</code> parameter
-                                        and then return the content of the JSON file specified in the <code>resourcePath</code> parameter.
-                                        """, required = true) @PathVariable String resourcePath,
-                        @Parameter(description = "Parameter to specify lifetime simulation in milli seconds. The default value is 0, meaning no waiting", required = false) @RequestParam(required = false, defaultValue = "0") long simulateLifetimeMs) {
-                final var cpResourceName = "templates/mock/shinny-data-lake/1115-validate/" + resourcePath + ".json";
-                try {
-                        if (simulateLifetimeMs > 0) {
-                                Thread.sleep(simulateLifetimeMs);
-                        }
-                        ClassPathResource resource = new ClassPathResource(cpResourceName);
-                        String content = StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
-                        HttpHeaders headers = new HttpHeaders();
-                        headers.setContentType(MediaType.APPLICATION_JSON);
-                        return new ResponseEntity<>(content, headers, HttpStatus.OK);
-                } catch (IOException e) {
-                        return new ResponseEntity<>(cpResourceName + " not found", HttpStatus.NOT_FOUND);
-                } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        return new ResponseEntity<>("Request interrupted", HttpStatus.INTERNAL_SERVER_ERROR);
-                }
-        }
-
         private void deleteJSessionCookie(HttpServletRequest request, HttpServletResponse response) {
                 // Delete the JSESSIONID cookie
                 Cookie cookie = new Cookie("JSESSIONID", null); // Set the cookie name
