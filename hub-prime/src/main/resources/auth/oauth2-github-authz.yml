@@ -1,0 +1,9 @@
+users:
+  - gitHubId: Shreeja-dev
+    name: Shreeja
+    tenantId: Netspective
+    resources:
+      sudomain1.techbd.org:
+        roles:          
+          - USER
+          - ADMIN
