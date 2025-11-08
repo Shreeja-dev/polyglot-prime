@@ -16,6 +16,9 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+/**
+ * 2025-11-08T13:59:38.805Z INFO 86 --- [ Thread-84] o.t.ingest.NexusIngestionApiApplication : NATIVE_SERVER_SOCKET | Proxy Protocol v2 info: {src_ip=98.83.83.62, dst_ip=10.17.83.14, src_port=49178, dst_port=1610}
+ */
 @SpringBootApplication(scanBasePackages = { "org.techbd" })
 public class NexusIngestionApiApplication implements CommandLineRunner {
 

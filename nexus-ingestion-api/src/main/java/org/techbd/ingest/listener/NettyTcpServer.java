@@ -27,6 +27,9 @@ import ca.uhn.hl7v2.HL7Exception;
 import ca.uhn.hl7v2.model.Message;
 import ca.uhn.hl7v2.parser.PipeParser;
 
+/*
+ * 2025-11-08T14:07:41.151Z  INFO 86 --- [ntLoopGroup-3-4] org.techbd.ingest.listener.TcpRoute      : NETTY_TCP_SERVER [PROXY] Full Message: HAProxyMessage(protocolVersion: V2, command: PROXY, proxiedProtocol: TCP4, sourceAddress: 98.83.83.62, destinationAddress: 10.17.27.71, sourcePort: 11328, destinationPort: 1610, tlvs: [HAProxyTLV(type: OTHER, typeByteValue: 3, content: UnpooledSlicedByteBuf(ridx: 0, widx: 4, cap: 4/4, unwrapped: PooledUnsafeDirectByteBuf(ridx: 100, widx: 100, cap: 2048))), HAProxyTLV(type: OTHER, typeByteValue: 4, content: UnpooledSlicedByteBuf(ridx: 0, widx: 62, cap: 62/62, unwrapped: PooledUnsafeDirectByteBuf(ridx: 100, widx: 100, cap: 2048)))])
+ */
 @Component
 public class NettyTcpServer {
 

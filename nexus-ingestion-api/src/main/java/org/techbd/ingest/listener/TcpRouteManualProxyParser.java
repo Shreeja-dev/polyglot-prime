@@ -12,8 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /**
- * TCP listener route that manually parses Proxy Protocol v2 headers.
- * This approach doesn't rely on HAProxy decoder and reads raw bytes directly.
+ * 2025-11-08T14:03:40.976Z INFO 86 --- [erExecutorGroup] o.t.i.l.TcpRouteManualProxyParser : MANUAL_PROXY | Proxy Protocol v2 Info | Client: 98.83.83.62:64295 → Server: 10.17.27.71:1610 | Family: IPv4
  */
 @Component
 public class TcpRouteManualProxyParser extends RouteBuilder {
