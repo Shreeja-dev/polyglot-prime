@@ -71,7 +71,10 @@ public class NettyTcpServer implements MessageSourceProvider {
 
     @Value("${TCP_MAX_MESSAGE_SIZE_BYTES:10485760}") // 10MB default
     private int maxMessageSizeBytes;
-
+    // Idle threshold for TCP message completion (milliseconds)
+    // 100ms without new data = message complete
+    @Value("${TCP_IDLE_THRESHOLD_MS:100}")
+    private long TCP_IDLE_THRESHOLD_MS;
     private static final AttributeKey<String> CLIENT_IP_KEY = AttributeKey.valueOf("CLIENT_IP");
     private static final AttributeKey<Integer> CLIENT_PORT_KEY = AttributeKey.valueOf("CLIENT_PORT");
     private static final AttributeKey<String> DESTINATION_IP_KEY = AttributeKey.valueOf("DESTINATION_IP_KEY");
@@ -80,11 +83,18 @@ public class NettyTcpServer implements MessageSourceProvider {
     private static final AttributeKey<Long> MESSAGE_START_TIME_KEY = AttributeKey.valueOf("MESSAGE_START_TIME");
     private static final AttributeKey<AtomicInteger> FRAGMENT_COUNT_KEY = AttributeKey.valueOf("FRAGMENT_COUNT");
     private static final AttributeKey<AtomicLong> TOTAL_BYTES_KEY = AttributeKey.valueOf("TOTAL_BYTES");
+    private static final AttributeKey<Boolean> IS_MLLP_KEY = AttributeKey.valueOf("IS_MLLP");
+    private static final AttributeKey<Boolean> ACK_SENT_KEY = AttributeKey.valueOf("ACK_SENT");
+    
+    //Track last receive time for TCP idle detection
+    private static final AttributeKey<Long> LAST_DATA_TIME_KEY = AttributeKey.valueOf("LAST_DATA_TIME");
 
     // MLLP protocol markers
     private static final byte MLLP_START = 0x0B; // <VT> Vertical Tab
     private static final byte MLLP_END_1 = 0x1C; // <FS> File Separator
     private static final byte MLLP_END_2 = 0x0D; // <CR> Carriage Return
+    
+
 
     public NettyTcpServer(MessageProcessorService messageProcessorService,
             AppConfig appConfig,
@@ -113,6 +123,9 @@ public class NettyTcpServer implements MessageSourceProvider {
                                 ch.attr(MESSAGE_START_TIME_KEY).set(System.currentTimeMillis());
                                 ch.attr(FRAGMENT_COUNT_KEY).set(new AtomicInteger(0));
                                 ch.attr(TOTAL_BYTES_KEY).set(new AtomicLong(0));
+                                ch.attr(IS_MLLP_KEY).set(false);
+                                ch.attr(ACK_SENT_KEY).set(false);
+                                ch.attr(LAST_DATA_TIME_KEY).set(System.currentTimeMillis()); // *** NEW ***
                                 
                                 // Add read timeout handler
                                 ch.pipeline().addLast(new ReadTimeoutHandler(readTimeoutSeconds, TimeUnit.SECONDS));
@@ -131,6 +144,10 @@ public class NettyTcpServer implements MessageSourceProvider {
                                     @Override
                                     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
                                         UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
+                                            logger.info("CHANNEL_READ [interactionId={}] msgType={} readableBytes={}",
+                                                interactionId,
+                                                msg.getClass().getSimpleName(),
+                                                (msg instanceof ByteBuf byteBuf) ? byteBuf.readableBytes() : -1);
                                         if (interactionId == null) {
                                             interactionId = UUID.randomUUID();
                                             ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
@@ -148,7 +165,12 @@ public class NettyTcpServer implements MessageSourceProvider {
                                         }
 
                                         // Handle actual message content
-                                        if (msg instanceof ByteBuf byteBuf) {
+                                        if (msg instanceof ByteBuf byteBuf ) {
+                                             // Check if ByteBuf has any readable bytes before processing
+                                            if (!byteBuf.isReadable()) {
+                                                logger.info("EMPTY_BYTEBUF_RECEIVED [interactionId={}]", interactionId);
+                                                return; // Stop further processing
+                                            }
                                             // Convert ByteBuf to String
                                             String messageContent = byteBuf.toString(StandardCharsets.UTF_8);
                                             
@@ -161,8 +183,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                                             logger.info("MESSAGE_FULLY_RECEIVED [interactionId={}] totalSize={} bytes, fragments={}, receiveTimeMs={}, avgFragmentSize={} bytes",
                                                     interactionId, totalBytes, fragmentCount, receiveTime, 
                                                     fragmentCount > 0 ? (totalBytes / fragmentCount) : totalBytes);
-                                            
-                                            handleMessage(ctx, messageContent, interactionId);
+                                           handleMessage(ctx, messageContent, interactionId);
                                         }
                                     }
 
@@ -179,7 +200,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                                     @Override
                                     public void channelInactive(ChannelHandlerContext ctx) {
                                         UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
-                                        logger.debug("Channel closed for interactionId {}", interactionId);
+                                        logger.info("Channel closed for interactionId {}", interactionId);
                                         // Clear attributes to prevent memory leaks
                                         clearChannelAttributes(ctx);
                                     }
@@ -200,12 +221,7 @@ public class NettyTcpServer implements MessageSourceProvider {
         }).start();
     }
 
-    /**
-     * Custom MLLP Frame Decoder - Buffers data until complete message received
-     * Tracks fragments and provides detailed logging
-     * FIXED: Proper buffer management and memory leak prevention
-     */
-    private class MllpFrameDecoder extends ByteToMessageDecoder {
+     private class MllpFrameDecoder extends ByteToMessageDecoder {
         private final int maxFrameLength;
 
         public MllpFrameDecoder(int maxFrameLength) {
@@ -215,6 +231,10 @@ public class NettyTcpServer implements MessageSourceProvider {
         @Override
         protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
             UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
+            logger.info("DECODE_START [interactionId={}] readableBytes={} isReadable={}",
+                    interactionId,
+                    in.readableBytes(),
+                    in.isReadable());
             if (interactionId == null) {
                 interactionId = UUID.randomUUID();
                 ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
@@ -222,8 +242,12 @@ public class NettyTcpServer implements MessageSourceProvider {
 
             int fragmentSize = in.readableBytes();
             if (fragmentSize == 0) {
+                logger.info("EMPTY_BYTEBUF_RECEIVED inside decode[interactionId={}]", interactionId);
                 return;
             }
+
+            // *** NEW: Update last data received time ***
+            ctx.channel().attr(LAST_DATA_TIME_KEY).set(System.currentTimeMillis());
 
             // Track fragment metrics
             AtomicInteger fragmentCount = ctx.channel().attr(FRAGMENT_COUNT_KEY).get();
@@ -237,7 +261,7 @@ public class NettyTcpServer implements MessageSourceProvider {
 
             // Check if we have minimum bytes for MLLP wrapper detection
             if (in.readableBytes() < 3) {
-                logger.debug("BUFFER_TOO_SMALL [interactionId={}] readable={} bytes, waiting for more data", 
+                logger.info("BUFFER_TOO_SMALL [interactionId={}] readable={} bytes, waiting for more data", 
                         interactionId, in.readableBytes());
                 return; // Wait for more data
             }
@@ -247,15 +271,15 @@ public class NettyTcpServer implements MessageSourceProvider {
 
             // MLLP Message Detection
             if (firstByte == MLLP_START) {
-                logger.debug("MLLP_START_DETECTED [interactionId={}] searching for end markers in {} bytes",
+                logger.info("MLLP_START_DETECTED [interactionId={}] searching for end markers in {} bytes",
                         interactionId, in.readableBytes());
-                
+                ctx.channel().attr(IS_MLLP_KEY).set(true);
                 // Look for MLLP end markers: <FS><CR>
                 int endIndex = -1;
                 for (int i = startIndex + 1; i < in.writerIndex() - 1; i++) {
                     if (in.getByte(i) == MLLP_END_1 && in.getByte(i + 1) == MLLP_END_2) {
                         endIndex = i + 2; // Include both end markers
-                        logger.debug("MLLP_END_MARKERS_FOUND [interactionId={}] at position={}", 
+                        logger.info("MLLP_END_MARKERS_FOUND [interactionId={}] at position={}", 
                                 interactionId, i);
                         break;
                     }
@@ -270,7 +294,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                         in.skipBytes(in.readableBytes());
                         throw new IllegalStateException("MLLP message exceeds max size: " + maxFrameLength + " bytes");
                     }
-                    logger.debug("MLLP_END_NOT_FOUND [interactionId={}] buffered={} bytes, waiting for more data",
+                    logger.info("MLLP_END_NOT_FOUND [interactionId={}] buffered={} bytes, waiting for more data",
                             interactionId, in.readableBytes());
                     return; // Wait for more data
                 }
@@ -284,13 +308,15 @@ public class NettyTcpServer implements MessageSourceProvider {
                         interactionId, frameLength, currentFragment, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
 
             } else {
-                // Non-MLLP message: read until newline or channel close
-                logger.debug("NON_MLLP_DETECTED [interactionId={}] firstByte=0x{}, searching for newline",
+                // Non-MLLP message: read until newline OR idle timeout
+                ctx.channel().attr(IS_MLLP_KEY).set(false);
+                logger.info("NON_MLLP_DETECTED [interactionId={}] firstByte=0x{}, searching for newline or idle",
                         interactionId, String.format("%02X", firstByte));
                 
                 int newlineIndex = in.indexOf(startIndex, in.writerIndex(), (byte) '\n');
 
                 if (newlineIndex != -1) {
+                    // *** CASE 1: Newline found - process immediately ***
                     int frameLength = newlineIndex - startIndex + 1;
                     ByteBuf frame = in.readRetainedSlice(frameLength);
                     out.add(frame);
@@ -298,26 +324,63 @@ public class NettyTcpServer implements MessageSourceProvider {
                     logger.info("NON_MLLP_FRAME_COMPLETE [interactionId={}] totalLength={} bytes, assembled from {} fragments, avgFragmentSize={} bytes",
                             interactionId, frameLength, currentFragment, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
                 } else {
-                    // No newline yet, check if we should wait or process
-                    if (in.readableBytes() > maxFrameLength) {
-                        logger.error("NON_MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
-                                interactionId, in.readableBytes(), maxFrameLength);
-                        // FIXED: Discard buffer to prevent memory buildup
-                        in.skipBytes(in.readableBytes());
-                        throw new IllegalStateException("Non-MLLP message exceeds max size: " + maxFrameLength + " bytes");
+                    // *** CASE 2: No newline - check for idle timeout ***
+                    long lastDataTime = ctx.channel().attr(LAST_DATA_TIME_KEY).get();
+                    long idleTime = System.currentTimeMillis() - lastDataTime;
+                    
+                    if (idleTime >= TCP_IDLE_THRESHOLD_MS && in.readableBytes() > 0) {
+                        // *** FIX: Idle timeout reached - treat buffered data as complete message ***
+                        int frameLength = in.readableBytes();
+                        ByteBuf frame = in.readRetainedSlice(frameLength);
+                        out.add(frame);
+                        
+                        logger.info("NON_MLLP_FRAME_COMPLETE_ON_IDLE [interactionId={}] totalLength={} bytes, assembled from {} fragments, idleMs={}, avgFragmentSize={} bytes",
+                                interactionId, frameLength, currentFragment, idleTime, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
+                    } else {
+                        // Still receiving data or haven't reached idle threshold
+                        if (in.readableBytes() > maxFrameLength) {
+                            logger.error("NON_MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
+                                    interactionId, in.readableBytes(), maxFrameLength);
+                            in.skipBytes(in.readableBytes());
+                            throw new IllegalStateException("Non-MLLP message exceeds max size: " + maxFrameLength + " bytes");
+                        }
+                        final UUID id = interactionId;
+                        final long remainingWait = TCP_IDLE_THRESHOLD_MS - idleTime + 10;
+
+                        logger.info(
+                                "NON_MLLP_WAITING [interactionId={}] buffered={} bytes, idleMs={}, threshold={}ms, remainingWaitMs={}",
+                                id,
+                                in.readableBytes(),
+                                idleTime,
+                                TCP_IDLE_THRESHOLD_MS,
+                                remainingWait);
+
+                        // *** NEW: Schedule a check after idle threshold ***
+                        ctx.executor().schedule(() -> {
+                            logger.info(
+                                    "NON_MLLP_IDLE_CHECK_TRIGGERED [interactionId={}] Triggering decode after waiting {}ms",
+                                    id, remainingWait);
+
+                            // Trigger another decode attempt
+                            ctx.fireChannelRead(ctx.alloc().buffer(0));
+                        }, remainingWait, TimeUnit.MILLISECONDS);
                     }
-                    logger.debug("NON_MLLP_NEWLINE_NOT_FOUND [interactionId={}] buffered={} bytes, waiting for more data",
-                            interactionId, in.readableBytes());
-                    // Wait for more data or channel close
                 }
             }
+             logger.info("DECODE_END [interactionId={}] readableBytes={} isReadable={}",
+                    interactionId,
+                    in.readableBytes(),
+                    in.isReadable());
         }
 
         @Override
         protected void decodeLast(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
             UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
-            
-            // Handle any remaining data when channel closes
+             logger.info("DECODE_LAST_START [interactionId={}] readableBytes={} isReadable={}",
+                    interactionId,
+                    in.readableBytes(),
+                    in.isReadable());
+            // *** MODIFIED: Only emit if not already processed via idle timeout ***
             if (in.isReadable()) {
                 int frameLength = in.readableBytes();
                 ByteBuf frame = in.readRetainedSlice(frameLength);
@@ -329,8 +392,12 @@ public class NettyTcpServer implements MessageSourceProvider {
                 logger.info("FINAL_FRAME_ON_CLOSE [interactionId={}] length={} bytes, totalFragments={}",
                         interactionId, frameLength, currentFragment);
             } else {
-                logger.debug("CHANNEL_CLOSED_NO_REMAINING_DATA [interactionId={}]", interactionId);
+                logger.info("CHANNEL_CLOSED_NO_REMAINING_DATA [interactionId={}]", interactionId);
             }
+             logger.info("DECODE_LAST_END [interactionId={}] readableBytes={} isReadable={}",
+                    interactionId,
+                    in.readableBytes(),
+                    in.isReadable());
         }
 
         @Override
@@ -354,6 +421,9 @@ public class NettyTcpServer implements MessageSourceProvider {
         ctx.channel().attr(CLIENT_PORT_KEY).set(null);
         ctx.channel().attr(DESTINATION_IP_KEY).set(null);
         ctx.channel().attr(DESTINATION_PORT_KEY).set(null);
+        ctx.channel().attr(IS_MLLP_KEY).set(null);
+        ctx.channel().attr(ACK_SENT_KEY).set(null);
+        ctx.channel().attr(LAST_DATA_TIME_KEY).set(null); // *** NEW ***
     }
 
     /**
@@ -597,7 +667,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                 
                 // Schedule close to allow network flush
                 ctx.executor().schedule(() -> {
-                    logger.debug("CLOSING_CONNECTION [interactionId={}]", interactionId);
+                    logger.info("CLOSING_CONNECTION [interactionId={}]", interactionId);
                     ctx.close();
                 }, 50, TimeUnit.MILLISECONDS);
             } else {
@@ -698,7 +768,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                 mshFields.put("processingId", fields.length > 10 ? fields[10] : "");
                 mshFields.put("version", fields.length > 11 ? fields[11] : "2.5");
 
-                logger.debug("MSH_PARSED messageControlId={}, sendingApp={}, receivingApp={}",
+                logger.info("MSH_PARSED messageControlId={}, sendingApp={}, receivingApp={}",
                         mshFields.get("messageControlId"),
                         mshFields.get("sendingApplication"),
                         mshFields.get("receivingApplication"));
@@ -957,48 +1027,7 @@ public class NettyTcpServer implements MessageSourceProvider {
         return false;
     }
 
-    /**
-     * Detect message format based on content (for non-MLLP messages)
-     */
-    private String detectMessageFormat(String message) {
-        if (message == null || message.isBlank()) {
-            return "empty";
-        }
-
-        String trimmed = message.trim();
-
-        // HL7 detection (starts with MSH segment) - shouldn't happen in non-MLLP
-        if (trimmed.startsWith("MSH|") || trimmed.startsWith("MSH^")) {
-            return "hl7";
-        }
-
-        // JSON detection
-        if ((trimmed.startsWith("{") && trimmed.endsWith("}"))
-                || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
-            return "json";
-        }
-
-        // XML detection
-        if (trimmed.startsWith("<") && trimmed.endsWith(">")) {
-            if (trimmed.contains("<ClinicalDocument") || trimmed.contains("urn:hl7-org:v3")) {
-                return "ccd";
-            }
-            return "xml";
-        }
-
-        // CSV detection (simple heuristic)
-        String[] lines = trimmed.split("\n", 3);
-        if (lines.length >= 2 && lines[0].contains(",") && lines[1].contains(",")) {
-            int firstCommas = lines[0].split(",").length;
-            int secondCommas = lines[1].split(",").length;
-            if (Math.abs(firstCommas - secondCommas) <= 1) {
-                return "csv";
-            }
-        }
-
-        return "text";
-    }
-
+  
     /**
      * Generate simple acknowledgment for non-MLLP messages
      */
