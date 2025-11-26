@@ -75,6 +75,8 @@ public class NettyTcpServer implements MessageSourceProvider {
     // 100ms without new data = message complete
     @Value("${TCP_IDLE_THRESHOLD_MS:100}")
     private long TCP_IDLE_THRESHOLD_MS;
+    @Value("${TCP_ACK_CLOSE_DELAY_MS:50}")
+    private int TCP_ACK_CLOSE_DELAY_MS;
     private static final AttributeKey<String> CLIENT_IP_KEY = AttributeKey.valueOf("CLIENT_IP");
     private static final AttributeKey<Integer> CLIENT_PORT_KEY = AttributeKey.valueOf("CLIENT_PORT");
     private static final AttributeKey<String> DESTINATION_IP_KEY = AttributeKey.valueOf("DESTINATION_IP_KEY");
@@ -141,29 +143,31 @@ public class NettyTcpServer implements MessageSourceProvider {
 
                                 // Main message handler - handles both HAProxyMessage and ByteBuf
                                 ch.pipeline().addLast(new SimpleChannelInboundHandler<Object>() {
-                                    @Override
-                                    protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
+                                        @Override
+                                        protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
                                         UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
-                                            logger.info("CHANNEL_READ [interactionId={}] msgType={} readableBytes={}",
+
+                                        // *** CRITICAL FIX: Check ACK_SENT but CONSUME the message regardless ***
+                                        Boolean ackSent = ctx.channel().attr(ACK_SENT_KEY).get();
+                                        if (Boolean.TRUE.equals(ackSent)) {
+                                            logger.info(
+                                                    "ACK_ALREADY_SENT [interactionId={}] - ignoring additional data, msgType={}",
+                                                    interactionId, msg.getClass().getSimpleName());
+                                            // *** FIX: Message is auto-released by SimpleChannelInboundHandler, just
+                                            // return ***
+                                            return;
+                                        }
+
+                                        logger.info("CHANNEL_READ [interactionId={}] msgType={} readableBytes={}",
                                                 interactionId,
                                                 msg.getClass().getSimpleName(),
                                                 (msg instanceof ByteBuf byteBuf) ? byteBuf.readableBytes() : -1);
+
                                         if (interactionId == null) {
                                             interactionId = UUID.randomUUID();
                                             ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
                                         }
-                                        Boolean ackSent = ctx.channel().attr(ACK_SENT_KEY).get();
-                                        if (Boolean.TRUE.equals(ackSent)) {
-                                            logger.info(
-                                                    "ACK_ALREADY_SENT [interactionId={}] - ignoring additional data",
-                                                    interactionId);
-                                            // Release the message buffer
-                                            if (msg instanceof ByteBuf) {
-                                                ((ByteBuf) msg).release();
-                                            }
-                                            return;
-                                        }
-    
+
                                         String activeProfile = System.getenv("SPRING_PROFILES_ACTIVE");
                                         if ("sandbox".equals(activeProfile)) {
                                             handleSandboxProxy(ctx, interactionId);
@@ -176,25 +180,36 @@ public class NettyTcpServer implements MessageSourceProvider {
                                         }
 
                                         // Handle actual message content
-                                        if (msg instanceof ByteBuf byteBuf ) {
-                                             // Check if ByteBuf has any readable bytes before processing
+                                        if (msg instanceof ByteBuf byteBuf) {
+                                            // Check if ByteBuf has any readable bytes before processing
                                             if (!byteBuf.isReadable()) {
                                                 logger.info("EMPTY_BYTEBUF_RECEIVED [interactionId={}]", interactionId);
-                                                return; // Stop further processing
+                                                return;
                                             }
+
+                                            // *** ADDITIONAL CHECK: Verify ACK not sent (double-check race condition)
+                                            // ***
+                                            if (Boolean.TRUE.equals(ctx.channel().attr(ACK_SENT_KEY).get())) {
+                                                logger.warn("ACK_SENT_DURING_PROCESSING [interactionId={}] - aborting",
+                                                        interactionId);
+                                                return;
+                                            }
+
                                             // Convert ByteBuf to String
                                             String messageContent = byteBuf.toString(StandardCharsets.UTF_8);
-                                            
+
                                             // Log complete message reception with timing
                                             long startTime = ctx.channel().attr(MESSAGE_START_TIME_KEY).get();
                                             long receiveTime = System.currentTimeMillis() - startTime;
                                             int fragmentCount = ctx.channel().attr(FRAGMENT_COUNT_KEY).get().get();
                                             long totalBytes = ctx.channel().attr(TOTAL_BYTES_KEY).get().get();
-                                            
-                                            logger.info("MESSAGE_FULLY_RECEIVED [interactionId={}] totalSize={} bytes, fragments={}, receiveTimeMs={}, avgFragmentSize={} bytes",
-                                                    interactionId, totalBytes, fragmentCount, receiveTime, 
+
+                                            logger.info(
+                                                    "MESSAGE_FULLY_RECEIVED [interactionId={}] totalSize={} bytes, fragments={}, receiveTimeMs={}, avgFragmentSize={} bytes",
+                                                    interactionId, totalBytes, fragmentCount, receiveTime,
                                                     fragmentCount > 0 ? (totalBytes / fragmentCount) : totalBytes);
-                                           handleMessage(ctx, messageContent, interactionId);
+
+                                            handleMessage(ctx, messageContent, interactionId);
                                         }
                                     }
 
@@ -214,7 +229,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                                         Boolean ackSent = ctx.channel().attr(ACK_SENT_KEY).get();
 
                                         logger.info("CHANNEL_INACTIVE [interactionId={}] ackSent={}",
-                                                interactionId, ackSent);
+                                                interactionId, ackSent != null ? ackSent : false);
 
                                         if (!Boolean.TRUE.equals(ackSent)) {
                                             logger.warn("CHANNEL_CLOSED_WITHOUT_ACK [interactionId={}]", interactionId);
@@ -250,10 +265,17 @@ public class NettyTcpServer implements MessageSourceProvider {
         @Override
         protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
             UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
-            logger.info("DECODE_START [interactionId={}] readableBytes={} isReadable={}",
-                    interactionId,
-                    in.readableBytes(),
-                    in.isReadable());
+
+            // Stop decoding if ACK already sent
+            Boolean ackSent = ctx.channel().attr(ACK_SENT_KEY).get();
+            if (Boolean.TRUE.equals(ackSent)) {
+                int discarded = in.readableBytes();
+                if (discarded > 0) {
+                    in.skipBytes(discarded);
+                }
+                return;
+            }
+
             if (interactionId == null) {
                 interactionId = UUID.randomUUID();
                 ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
@@ -261,166 +283,170 @@ public class NettyTcpServer implements MessageSourceProvider {
 
             int fragmentSize = in.readableBytes();
             if (fragmentSize == 0) {
-                logger.info("EMPTY_BYTEBUF_RECEIVED inside decode[interactionId={}]", interactionId);
                 return;
             }
 
-            // *** NEW: Update last data received time ***
+            // *** KEY FIX: Update last data received time ***
             ctx.channel().attr(LAST_DATA_TIME_KEY).set(System.currentTimeMillis());
 
             // Track fragment metrics
             AtomicInteger fragmentCount = ctx.channel().attr(FRAGMENT_COUNT_KEY).get();
             AtomicLong totalBytes = ctx.channel().attr(TOTAL_BYTES_KEY).get();
-            
+
             int currentFragment = fragmentCount.incrementAndGet();
             long currentTotalBytes = totalBytes.addAndGet(fragmentSize);
-            
-            logger.info("FRAGMENTED_MESSAGE [interactionId={}] fragment={}, fragmentSize={} bytes, cumulativeSize={} bytes, bufferReadable={} bytes",
-                    interactionId, currentFragment, fragmentSize, currentTotalBytes, in.readableBytes());
 
-            // Check if we have minimum bytes for MLLP wrapper detection
-            if (in.readableBytes() < 3) {
-                logger.info("BUFFER_TOO_SMALL [interactionId={}] readable={} bytes, waiting for more data", 
-                        interactionId, in.readableBytes());
-                return; // Wait for more data
-            }
+            logger.info(
+                    "ACCUMULATING_DATA [interactionId={}] fragment={}, fragmentSize={} bytes, cumulativeSize={} bytes",
+                    interactionId, currentFragment, fragmentSize, currentTotalBytes);
 
-            int startIndex = in.readerIndex();
-            byte firstByte = in.getByte(startIndex);
+            // Check if we have minimum bytes for MLLP detection (only on first fragment)
+            if (currentFragment == 1 && in.readableBytes() >= 3) {
+                int startIndex = in.readerIndex();
+                byte firstByte = in.getByte(startIndex);
 
-            // MLLP Message Detection
-            if (firstByte == MLLP_START) {
-                logger.info("MLLP_START_DETECTED [interactionId={}] searching for end markers in {} bytes",
-                        interactionId, in.readableBytes());
-                ctx.channel().attr(IS_MLLP_KEY).set(true);
-                // Look for MLLP end markers: <FS><CR>
-                int endIndex = -1;
-                for (int i = startIndex + 1; i < in.writerIndex() - 1; i++) {
-                    if (in.getByte(i) == MLLP_END_1 && in.getByte(i + 1) == MLLP_END_2) {
-                        endIndex = i + 2; // Include both end markers
-                        logger.info("MLLP_END_MARKERS_FOUND [interactionId={}] at position={}", 
-                                interactionId, i);
-                        break;
+                // MLLP Message Detection
+                if (firstByte == MLLP_START) {
+                    logger.info("MLLP_START_DETECTED [interactionId={}] searching for end markers",
+                            interactionId);
+                    ctx.channel().attr(IS_MLLP_KEY).set(true);
+
+                    // Look for MLLP end markers
+                    int endIndex = -1;
+                    for (int i = startIndex + 1; i < in.writerIndex() - 1; i++) {
+                        if (in.getByte(i) == MLLP_END_1 && in.getByte(i + 1) == MLLP_END_2) {
+                            endIndex = i + 2;
+                            logger.info("MLLP_END_MARKERS_FOUND [interactionId={}] at position={}",
+                                    interactionId, i);
+                            break;
+                        }
                     }
-                }
 
-                if (endIndex == -1) {
-                    // End markers not found yet
-                    if (in.readableBytes() > maxFrameLength) {
-                        logger.error("MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
-                                interactionId, in.readableBytes(), maxFrameLength);
-                        // FIXED: Discard buffer to prevent memory buildup
-                        in.skipBytes(in.readableBytes());
-                        throw new IllegalStateException("MLLP message exceeds max size: " + maxFrameLength + " bytes");
+                    if (endIndex == -1) {
+                        // End markers not found yet
+                        if (in.readableBytes() > maxFrameLength) {
+                            logger.error("MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes",
+                                    interactionId, in.readableBytes());
+                            in.skipBytes(in.readableBytes());
+                            throw new IllegalStateException("MLLP message exceeds max size");
+                        }
+                        logger.info("MLLP_END_NOT_FOUND [interactionId={}] buffered={} bytes",
+                                interactionId, in.readableBytes());
+                        return; // Wait for more data
                     }
-                    logger.info("MLLP_END_NOT_FOUND [interactionId={}] buffered={} bytes, waiting for more data",
-                            interactionId, in.readableBytes());
-                    return; // Wait for more data
-                }
 
-                // Complete MLLP message found
-                int frameLength = endIndex - startIndex;
-                ByteBuf frame = in.readRetainedSlice(frameLength);
-                out.add(frame);
-                
-                logger.info("MLLP_FRAME_COMPLETE [interactionId={}] totalLength={} bytes, assembled from {} fragments, avgFragmentSize={} bytes",
-                        interactionId, frameLength, currentFragment, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
-            } else {
-                // Non-MLLP message: read until newline OR idle timeout
-                ctx.channel().attr(IS_MLLP_KEY).set(false);
-                logger.info("NON_MLLP_DETECTED [interactionId={}] firstByte=0x{}, searching for newline or idle",
-                        interactionId, String.format("%02X", firstByte));
-                
-                int newlineIndex = in.indexOf(startIndex, in.writerIndex(), (byte) '\n');
-
-                if (newlineIndex != -1) {
-                    // *** CASE 1: Newline found - process immediately ***
-                    int frameLength = newlineIndex - startIndex + 1;
+                    // Complete MLLP message found
+                    int frameLength = endIndex - startIndex;
                     ByteBuf frame = in.readRetainedSlice(frameLength);
                     out.add(frame);
-                    
-                    logger.info("NON_MLLP_FRAME_COMPLETE [interactionId={}] totalLength={} bytes, assembled from {} fragments, avgFragmentSize={} bytes",
-                            interactionId, frameLength, currentFragment, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
+
+                    logger.info("MLLP_COMPLETE_MESSAGE [interactionId={}] totalLength={} bytes, fragments={}",
+                            interactionId, frameLength, currentFragment);
+                    return;
                 } else {
-                    // *** CASE 2: No newline - check for idle timeout ***
-                    long lastDataTime = ctx.channel().attr(LAST_DATA_TIME_KEY).get();
-                    long idleTime = System.currentTimeMillis() - lastDataTime;
-                    
-                    if (idleTime >= TCP_IDLE_THRESHOLD_MS && in.readableBytes() > 0) {
-                        // Idle timeout reached - treat buffered data as complete message
-                        int frameLength = in.readableBytes();
-                        ByteBuf frame = in.readRetainedSlice(frameLength);
-                        out.add(frame);
+                    // Non-MLLP: accumulate until idle timeout
+                    ctx.channel().attr(IS_MLLP_KEY).set(false);
+                    logger.info(
+                            "NON_MLLP_DETECTED [interactionId={}] firstByte=0x{}, will use idle detection for completion",
+                            interactionId, String.format("%02X", firstByte));
+                }
+            }
 
-                        logger.info(
-                                "NON_MLLP_FRAME_COMPLETE_ON_IDLE [interactionId={}] totalLength={} bytes, assembled from {} fragments, idleMs={}, avgFragmentSize={} bytes",
-                                interactionId, frameLength, currentFragment, idleTime,
-                                currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
-                    } else {
-                        // Still receiving data or haven't reached idle threshold
-                        if (in.readableBytes() > maxFrameLength) {
-                            logger.error(
-                                    "NON_MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
-                                    interactionId, in.readableBytes(), maxFrameLength);
-                            in.skipBytes(in.readableBytes());
-                            throw new IllegalStateException(
-                                    "Non-MLLP message exceeds max size: " + maxFrameLength + " bytes");
-                        }
+            // For non-MLLP: check idle timeout to detect message completion
+            Boolean isMllp = ctx.channel().attr(IS_MLLP_KEY).get();
+            if (Boolean.FALSE.equals(isMllp)) {
+                if (in.readableBytes() > maxFrameLength) {
+                    logger.error("NON_MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes",
+                            interactionId, in.readableBytes());
+                    in.skipBytes(in.readableBytes());
+                    throw new IllegalStateException("Non-MLLP message exceeds max size");
+                }
 
-                        final UUID id = interactionId;
-                        final long remainingWait = TCP_IDLE_THRESHOLD_MS - idleTime + 10;
+                // *** KEY FIX: Check if idle threshold reached (no new data received) ***
+                long lastDataTime = ctx.channel().attr(LAST_DATA_TIME_KEY).get();
+                long idleTime = System.currentTimeMillis() - lastDataTime;
 
-                        logger.info(
-                                "NON_MLLP_WAITING [interactionId={}] buffered={} bytes, idleMs={}, threshold={}ms, remainingWaitMs={}",
-                                id,
-                                in.readableBytes(),
-                                idleTime,
-                                TCP_IDLE_THRESHOLD_MS,
-                                remainingWait);
+                if (idleTime >= TCP_IDLE_THRESHOLD_MS && in.readableBytes() > 0) {
+                    // *** Message complete - emit accumulated data ***
+                    int frameLength = in.readableBytes();
+                    ByteBuf frame = in.readRetainedSlice(frameLength);
+                    out.add(frame);
 
-                        // *** FIX: Don't schedule if idle threshold already reached ***
-                        if (remainingWait > 0) {
-                            ctx.executor().schedule(() -> {
+                    logger.info(
+                            "NON_MLLP_COMPLETE_ON_IDLE [interactionId={}] totalLength={} bytes, fragments={}, idleMs={}",
+                            interactionId, frameLength, currentFragment, idleTime);
+                } else {
+                    // Still receiving data or idle threshold not reached
+                    final UUID id = interactionId;
+                    final long remainingWait = TCP_IDLE_THRESHOLD_MS - idleTime + 10;
+
+                    logger.info(
+                            "NON_MLLP_WAITING [interactionId={}] buffered={} bytes, idleMs={}, threshold={}ms, remainingWaitMs={}",
+                            id, in.readableBytes(), idleTime, TCP_IDLE_THRESHOLD_MS, remainingWait);
+
+                    // Schedule a check after idle threshold
+                    if (remainingWait > 0) {
+                        ctx.executor().schedule(() -> {
+                            // Check if ACK already sent
+                            Boolean ackSentCheck = ctx.channel().attr(ACK_SENT_KEY).get();
+                            if (Boolean.TRUE.equals(ackSentCheck)) {
+                                logger.info("NON_MLLP_IDLE_CHECK_SKIPPED [interactionId={}] - ACK already sent", id);
+                                return;
+                            }
+
+                            if (ctx.channel().isActive()) {
                                 logger.info(
-                                        "NON_MLLP_IDLE_CHECK_TRIGGERED [interactionId={}] Triggering decode after waiting {}ms",
+                                        "NON_MLLP_IDLE_CHECK_TRIGGERED [interactionId={}] Triggering decode after {}ms idle",
                                         id, remainingWait);
-                                // Trigger another decode attempt by firing a zero-byte buffer
-                                if (ctx.channel().isActive()) {
-                                    ctx.fireChannelRead(ctx.alloc().buffer(0));
-                                }
-                            }, remainingWait, TimeUnit.MILLISECONDS);
-                        }
+                                // Trigger decode by firing empty buffer
+                                ctx.fireChannelRead(ctx.alloc().buffer(0));
+                            }
+                        }, remainingWait, TimeUnit.MILLISECONDS);
                     }
                 }
             }
-             logger.info("DECODE_END [interactionId={}] readableBytes={} isReadable={}",
-                    interactionId,
-                    in.readableBytes(),
-                    in.isReadable());
         }
+
 
         @Override
         protected void decodeLast(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
             UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
-             logger.info("DECODE_LAST_START [interactionId={}] readableBytes={} isReadable={}",
+
+            // Check if ACK already sent
+            Boolean ackSent = ctx.channel().attr(ACK_SENT_KEY).get();
+            if (Boolean.TRUE.equals(ackSent)) {
+                if (in.isReadable()) {
+                    in.skipBytes(in.readableBytes());
+                }
+                return;
+            }
+
+            Boolean isMllp = ctx.channel().attr(IS_MLLP_KEY).get();
+
+            logger.info("DECODE_LAST_START [interactionId={}] readableBytes={} isReadable={} isMllp={}",
                     interactionId,
                     in.readableBytes(),
-                    in.isReadable());
-            // *** MODIFIED: Only emit if not already processed via idle timeout ***
+                    in.isReadable(),
+                    isMllp);
+
+            // *** FIX: Only emit if not already emitted via idle timeout ***
             if (in.isReadable()) {
                 int frameLength = in.readableBytes();
                 ByteBuf frame = in.readRetainedSlice(frameLength);
                 out.add(frame);
-                
+
                 AtomicInteger fragmentCount = ctx.channel().attr(FRAGMENT_COUNT_KEY).get();
-                int currentFragment = fragmentCount.get();
-                
-                logger.info("FINAL_FRAME_ON_CLOSE [interactionId={}] length={} bytes, totalFragments={}",
-                        interactionId, frameLength, currentFragment);
+                int currentFragment = fragmentCount != null ? fragmentCount.get() : 0;
+
+                logger.info(
+                        "COMPLETE_MESSAGE_ON_CLOSE [interactionId={}] totalLength={} bytes, totalFragments={}, isMllp={}",
+                        interactionId, frameLength, currentFragment, isMllp);
             } else {
-                logger.info("CHANNEL_CLOSED_NO_REMAINING_DATA [interactionId={}]", interactionId);
+                logger.info("CHANNEL_CLOSED_NO_DATA [interactionId={}] - already emitted via idle timeout",
+                        interactionId);
             }
-             logger.info("DECODE_LAST_END [interactionId={}] readableBytes={} isReadable={}",
+
+            logger.info("DECODE_LAST_END [interactionId={}] readableBytes={} isReadable={}",
                     interactionId,
                     in.readableBytes(),
                     in.isReadable());
@@ -668,7 +694,6 @@ public class NettyTcpServer implements MessageSourceProvider {
     private void sendResponseAndClose(ChannelHandlerContext ctx, String response,
             UUID interactionId, String responseType) {
 
-        // Check if already sent ACK for this channel
         Boolean ackSent = ctx.channel().attr(ACK_SENT_KEY).get();
         if (Boolean.TRUE.equals(ackSent)) {
             logger.warn("ACK_ALREADY_SENT [interactionId={}] type={} - skipping duplicate",
@@ -679,7 +704,11 @@ public class NettyTcpServer implements MessageSourceProvider {
         // Mark ACK as sent
         ctx.channel().attr(ACK_SENT_KEY).set(true);
 
-        // Verify channel is still active before attempting to send
+        // Stop reading from socket
+        ctx.channel().config().setAutoRead(false);
+        logger.info("AUTO_READ_DISABLED [interactionId={}] - stopped reading from socket", interactionId);
+
+        // Verify channel is still active
         if (!ctx.channel().isActive()) {
             logger.warn("CANNOT_SEND_RESPONSE [interactionId={}] type={} - CHANNEL_ALREADY_INACTIVE",
                     interactionId, responseType);
@@ -692,26 +721,26 @@ public class NettyTcpServer implements MessageSourceProvider {
         ByteBuf responseBuf = ctx.alloc().buffer();
         responseBuf.writeBytes(response.getBytes(StandardCharsets.UTF_8));
 
-        // *** KEY FIX: Use writeAndFlush with proper listener and longer delay ***
+        // Send ACK and keep connection open briefly for client to receive
         ctx.writeAndFlush(responseBuf).addListener(future -> {
             if (future.isSuccess()) {
-                logger.info("RESPONSE_SENT_SUCCESS [interactionId={}] type={}, scheduling connection close in 200ms",
+                logger.info("ACK_SENT_SUCCESS [interactionId={}] type={}, keeping connection open briefly",
                         interactionId, responseType);
 
-                // *** CRITICAL: Increase delay to 200ms to ensure ACK is transmitted ***
+                // *** FIX: Keep connection open longer (500ms) to ensure client receives ACK
+                // ***
                 ctx.executor().schedule(() -> {
                     if (ctx.channel().isActive()) {
-                        logger.info("CLOSING_CONNECTION [interactionId={}]", interactionId);
+                        logger.info("CLOSING_CONNECTION_AFTER_ACK [interactionId={}]", interactionId);
                         ctx.close();
                     } else {
                         logger.info("CONNECTION_ALREADY_CLOSED [interactionId={}]", interactionId);
                     }
-                }, 200, TimeUnit.MILLISECONDS);
+                }, 500, TimeUnit.MILLISECONDS);
             } else {
                 logger.error("RESPONSE_SEND_FAILED [interactionId={}] type={}: {}",
                         interactionId, responseType,
                         future.cause() != null ? future.cause().getMessage() : "unknown");
-                // Close immediately on failure
                 ctx.close();
             }
         });
