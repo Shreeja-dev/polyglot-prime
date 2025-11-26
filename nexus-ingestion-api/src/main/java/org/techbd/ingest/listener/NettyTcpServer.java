@@ -72,6 +72,26 @@ public class NettyTcpServer implements MessageSourceProvider {
     @Value("${TCP_MAX_MESSAGE_SIZE_BYTES:10485760}") // 10MB default
     private int maxMessageSizeBytes;
 
+    // MLLP protocol markers (unchanged)
+    private static final byte MLLP_START = 0x0B; // <VT> Vertical Tab
+    private static final byte MLLP_END_1 = 0x1C; // <FS> File Separator
+    private static final byte MLLP_END_2 = 0x0D; // <CR> Carriage Return
+
+    // NEW: TCP delimiter configuration from environment variables
+    @Value("${TCP_MESSAGE_START_DELIMITER:0x02}") // STX - Start of Text
+    private String tcpStartDelimiterHex;
+    
+    @Value("${TCP_MESSAGE_END_DELIMITER_1:0x03}") // ETX - End of Text
+    private String tcpEndDelimiter1Hex;
+    
+    @Value("${TCP_MESSAGE_END_DELIMITER_2:0x0A}") // LF - Line Feed
+    private String tcpEndDelimiter2Hex;
+
+    // Parsed TCP delimiter bytes
+    private byte tcpStartDelimiter;
+    private byte tcpEndDelimiter1;
+    private byte tcpEndDelimiter2;
+
     private static final AttributeKey<String> CLIENT_IP_KEY = AttributeKey.valueOf("CLIENT_IP");
     private static final AttributeKey<Integer> CLIENT_PORT_KEY = AttributeKey.valueOf("CLIENT_PORT");
     private static final AttributeKey<String> DESTINATION_IP_KEY = AttributeKey.valueOf("DESTINATION_IP_KEY");
@@ -80,11 +100,6 @@ public class NettyTcpServer implements MessageSourceProvider {
     private static final AttributeKey<Long> MESSAGE_START_TIME_KEY = AttributeKey.valueOf("MESSAGE_START_TIME");
     private static final AttributeKey<AtomicInteger> FRAGMENT_COUNT_KEY = AttributeKey.valueOf("FRAGMENT_COUNT");
     private static final AttributeKey<AtomicLong> TOTAL_BYTES_KEY = AttributeKey.valueOf("TOTAL_BYTES");
-
-    // MLLP protocol markers
-    private static final byte MLLP_START = 0x0B; // <VT> Vertical Tab
-    private static final byte MLLP_END_1 = 0x1C; // <FS> File Separator
-    private static final byte MLLP_END_2 = 0x0D; // <CR> Carriage Return
 
     public NettyTcpServer(MessageProcessorService messageProcessorService,
             AppConfig appConfig,
@@ -98,6 +113,9 @@ public class NettyTcpServer implements MessageSourceProvider {
 
     @PostConstruct
     public void startServer() {
+        // NEW: Parse TCP delimiters from hex strings
+        parseTcpDelimiters();
+        
         new Thread(() -> {
             EventLoopGroup boss = new NioEventLoopGroup(1);
             EventLoopGroup worker = new NioEventLoopGroup();
@@ -123,8 +141,8 @@ public class NettyTcpServer implements MessageSourceProvider {
                                     ch.pipeline().addLast(new HAProxyMessageDecoder());
                                 }
 
-                                // *** KEY FIX: Custom MLLP Frame Decoder ***
-                                ch.pipeline().addLast(new MllpFrameDecoder(maxMessageSizeBytes));
+                                // RENAMED: Delimiter-based frame decoder for both MLLP and TCP
+                                ch.pipeline().addLast(new DelimiterBasedFrameDecoder(maxMessageSizeBytes));
 
                                 // Main message handler - handles both HAProxyMessage and ByteBuf
                                 ch.pipeline().addLast(new SimpleChannelInboundHandler<Object>() {
@@ -179,7 +197,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                                     @Override
                                     public void channelInactive(ChannelHandlerContext ctx) {
                                         UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
-                                        logger.debug("Channel closed for interactionId {}", interactionId);
+                                        logger.info("Channel closed for interactionId {}", interactionId);
                                         // Clear attributes to prevent memory leaks
                                         clearChannelAttributes(ctx);
                                     }
@@ -188,8 +206,11 @@ public class NettyTcpServer implements MessageSourceProvider {
                         });
 
                 ChannelFuture future = bootstrap.bind(tcpPort).sync();
-                logger.info("TCP Server listening on port {} (MLLP=HL7 with ACK, non-MLLP=Generic with ACK). Max message size: {} bytes",
-                        tcpPort, maxMessageSizeBytes);
+                logger.info("TCP Server listening on port {} (MLLP=HL7 with ACK, TCP with delimiters=Generic with ACK). Max message size: {} bytes. TCP Delimiters: START=0x{}, END1=0x{}, END2=0x{}",
+                        tcpPort, maxMessageSizeBytes, 
+                        String.format("%02X", tcpStartDelimiter),
+                        String.format("%02X", tcpEndDelimiter1),
+                        String.format("%02X", tcpEndDelimiter2));
                 future.channel().closeFuture().sync();
             } catch (Exception e) {
                 logger.error("Failed to start TCP Server on port {}", tcpPort, e);
@@ -201,14 +222,35 @@ public class NettyTcpServer implements MessageSourceProvider {
     }
 
     /**
-     * Custom MLLP Frame Decoder - Buffers data until complete message received
-     * Tracks fragments and provides detailed logging
-     * FIXED: Proper buffer management and memory leak prevention
+     * NEW: Parse TCP delimiter hex strings to byte values
      */
-    private class MllpFrameDecoder extends ByteToMessageDecoder {
+    private void parseTcpDelimiters() {
+        try {
+            tcpStartDelimiter = (byte) Integer.parseInt(tcpStartDelimiterHex.replace("0x", ""), 16);
+            tcpEndDelimiter1 = (byte) Integer.parseInt(tcpEndDelimiter1Hex.replace("0x", ""), 16);
+            tcpEndDelimiter2 = (byte) Integer.parseInt(tcpEndDelimiter2Hex.replace("0x", ""), 16);
+            
+            logger.info("TCP_DELIMITERS_CONFIGURED START=0x{} ({}), END1=0x{} ({}), END2=0x{} ({})",
+                    String.format("%02X", tcpStartDelimiter), (int) tcpStartDelimiter,
+                    String.format("%02X", tcpEndDelimiter1), (int) tcpEndDelimiter1,
+                    String.format("%02X", tcpEndDelimiter2), (int) tcpEndDelimiter2);
+        } catch (NumberFormatException e) {
+            logger.error("Failed to parse TCP delimiters, using defaults (MLLP delimiters): {}", e.getMessage());
+            tcpStartDelimiter = MLLP_START;
+            tcpEndDelimiter1 = MLLP_END_1;
+            tcpEndDelimiter2 = MLLP_END_2;
+        }
+    }
+
+    /**
+     * RENAMED: Delimiter-Based Frame Decoder - Works for both MLLP and TCP with configurable delimiters
+     * Buffers data until complete message received based on start/end delimiters
+     * Tracks fragments and provides detailed logging
+     */
+    private class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
         private final int maxFrameLength;
 
-        public MllpFrameDecoder(int maxFrameLength) {
+        public DelimiterBasedFrameDecoder(int maxFrameLength) {
             this.maxFrameLength = maxFrameLength;
         }
 
@@ -235,9 +277,9 @@ public class NettyTcpServer implements MessageSourceProvider {
             logger.info("FRAGMENTED_MESSAGE [interactionId={}] fragment={}, fragmentSize={} bytes, cumulativeSize={} bytes, bufferReadable={} bytes",
                     interactionId, currentFragment, fragmentSize, currentTotalBytes, in.readableBytes());
 
-            // Check if we have minimum bytes for MLLP wrapper detection
+            // Check if we have minimum bytes for delimiter detection
             if (in.readableBytes() < 3) {
-                logger.debug("BUFFER_TOO_SMALL [interactionId={}] readable={} bytes, waiting for more data", 
+                logger.info("BUFFER_TOO_SMALL [interactionId={}] readable={} bytes, waiting for more data", 
                         interactionId, in.readableBytes());
                 return; // Wait for more data
             }
@@ -245,9 +287,9 @@ public class NettyTcpServer implements MessageSourceProvider {
             int startIndex = in.readerIndex();
             byte firstByte = in.getByte(startIndex);
 
-            // MLLP Message Detection
+            // MODIFIED: Check for MLLP delimiters first (for HL7 messages)
             if (firstByte == MLLP_START) {
-                logger.debug("MLLP_START_DETECTED [interactionId={}] searching for end markers in {} bytes",
+                logger.info("MLLP_START_DETECTED [interactionId={}] searching for MLLP end markers in {} bytes",
                         interactionId, in.readableBytes());
                 
                 // Look for MLLP end markers: <FS><CR>
@@ -255,7 +297,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                 for (int i = startIndex + 1; i < in.writerIndex() - 1; i++) {
                     if (in.getByte(i) == MLLP_END_1 && in.getByte(i + 1) == MLLP_END_2) {
                         endIndex = i + 2; // Include both end markers
-                        logger.debug("MLLP_END_MARKERS_FOUND [interactionId={}] at position={}", 
+                        logger.info("MLLP_END_MARKERS_FOUND [interactionId={}] at position={}", 
                                 interactionId, i);
                         break;
                     }
@@ -266,11 +308,10 @@ public class NettyTcpServer implements MessageSourceProvider {
                     if (in.readableBytes() > maxFrameLength) {
                         logger.error("MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
                                 interactionId, in.readableBytes(), maxFrameLength);
-                        // FIXED: Discard buffer to prevent memory buildup
                         in.skipBytes(in.readableBytes());
                         throw new IllegalStateException("MLLP message exceeds max size: " + maxFrameLength + " bytes");
                     }
-                    logger.debug("MLLP_END_NOT_FOUND [interactionId={}] buffered={} bytes, waiting for more data",
+                    logger.info("MLLP_END_NOT_FOUND [interactionId={}] buffered={} bytes, waiting for more data",
                             interactionId, in.readableBytes());
                     return; // Wait for more data
                 }
@@ -283,9 +324,48 @@ public class NettyTcpServer implements MessageSourceProvider {
                 logger.info("MLLP_FRAME_COMPLETE [interactionId={}] totalLength={} bytes, assembled from {} fragments, avgFragmentSize={} bytes",
                         interactionId, frameLength, currentFragment, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
 
-            } else {
-                // Non-MLLP message: read until newline or channel close
-                logger.debug("NON_MLLP_DETECTED [interactionId={}] firstByte=0x{}, searching for newline",
+            } 
+            // NEW: Check for TCP delimiters (for non-HL7 messages)
+            else if (firstByte == tcpStartDelimiter) {
+                logger.info("TCP_DELIMITER_START_DETECTED [interactionId={}] searching for TCP end markers (0x{}, 0x{}) in {} bytes",
+                        interactionId, String.format("%02X", tcpEndDelimiter1), String.format("%02X", tcpEndDelimiter2), in.readableBytes());
+                
+                // Look for TCP end markers
+                int endIndex = -1;
+                for (int i = startIndex + 1; i < in.writerIndex() - 1; i++) {
+                    if (in.getByte(i) == tcpEndDelimiter1 && in.getByte(i + 1) == tcpEndDelimiter2) {
+                        endIndex = i + 2; // Include both end markers
+                        logger.info("TCP_END_MARKERS_FOUND [interactionId={}] at position={}", 
+                                interactionId, i);
+                        break;
+                    }
+                }
+
+                if (endIndex == -1) {
+                    // End markers not found yet
+                    if (in.readableBytes() > maxFrameLength) {
+                        logger.error("TCP_DELIMITED_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
+                                interactionId, in.readableBytes(), maxFrameLength);
+                        in.skipBytes(in.readableBytes());
+                        throw new IllegalStateException("TCP delimited message exceeds max size: " + maxFrameLength + " bytes");
+                    }
+                    logger.info("TCP_END_NOT_FOUND [interactionId={}] buffered={} bytes, waiting for more data",
+                            interactionId, in.readableBytes());
+                    return; // Wait for more data
+                }
+
+                // Complete TCP delimited message found
+                int frameLength = endIndex - startIndex;
+                ByteBuf frame = in.readRetainedSlice(frameLength);
+                out.add(frame);
+                
+                logger.info("TCP_DELIMITED_FRAME_COMPLETE [interactionId={}] totalLength={} bytes, assembled from {} fragments, avgFragmentSize={} bytes",
+                        interactionId, frameLength, currentFragment, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
+
+            } 
+            else {
+                // Fallback: Non-delimited message - read until newline or channel close
+                logger.info("NON_DELIMITED_DETECTED [interactionId={}] firstByte=0x{}, searching for newline",
                         interactionId, String.format("%02X", firstByte));
                 
                 int newlineIndex = in.indexOf(startIndex, in.writerIndex(), (byte) '\n');
@@ -295,18 +375,17 @@ public class NettyTcpServer implements MessageSourceProvider {
                     ByteBuf frame = in.readRetainedSlice(frameLength);
                     out.add(frame);
                     
-                    logger.info("NON_MLLP_FRAME_COMPLETE [interactionId={}] totalLength={} bytes, assembled from {} fragments, avgFragmentSize={} bytes",
+                    logger.info("NON_DELIMITED_FRAME_COMPLETE [interactionId={}] totalLength={} bytes, assembled from {} fragments, avgFragmentSize={} bytes",
                             interactionId, frameLength, currentFragment, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
                 } else {
                     // No newline yet, check if we should wait or process
                     if (in.readableBytes() > maxFrameLength) {
-                        logger.error("NON_MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
+                        logger.error("NON_DELIMITED_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
                                 interactionId, in.readableBytes(), maxFrameLength);
-                        // FIXED: Discard buffer to prevent memory buildup
                         in.skipBytes(in.readableBytes());
-                        throw new IllegalStateException("Non-MLLP message exceeds max size: " + maxFrameLength + " bytes");
+                        throw new IllegalStateException("Non-delimited message exceeds max size: " + maxFrameLength + " bytes");
                     }
-                    logger.debug("NON_MLLP_NEWLINE_NOT_FOUND [interactionId={}] buffered={} bytes, waiting for more data",
+                    logger.info("NON_DELIMITED_NEWLINE_NOT_FOUND [interactionId={}] buffered={} bytes, waiting for more data",
                             interactionId, in.readableBytes());
                     // Wait for more data or channel close
                 }
@@ -329,7 +408,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                 logger.info("FINAL_FRAME_ON_CLOSE [interactionId={}] length={} bytes, totalFragments={}",
                         interactionId, frameLength, currentFragment);
             } else {
-                logger.debug("CHANNEL_CLOSED_NO_REMAINING_DATA [interactionId={}]", interactionId);
+                logger.info("CHANNEL_CLOSED_NO_REMAINING_DATA [interactionId={}]", interactionId);
             }
         }
 
@@ -343,7 +422,7 @@ public class NettyTcpServer implements MessageSourceProvider {
     }
 
     /**
-     * ADDED: Clear channel attributes to prevent memory leaks
+     * Clear channel attributes to prevent memory leaks
      */
     private void clearChannelAttributes(ChannelHandlerContext ctx) {
         ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(null);
@@ -415,8 +494,12 @@ public class NettyTcpServer implements MessageSourceProvider {
         }
 
         boolean isMllpWrapped = detectMllpWrapper(rawMessage);
-        logger.info("COMPLETE_MESSAGE_RECEIVED [interactionId={}] from={}:{}, size={} bytes MLLP_WRAPPED={}",
-                interactionId, clientIP, clientPort, rawMessage.length(), isMllpWrapped ? "YES" : "NO");
+        // NEW: Also detect TCP delimiter wrapper
+        boolean isTcpDelimited = detectTcpDelimiterWrapper(rawMessage);
+        
+        logger.info("COMPLETE_MESSAGE_RECEIVED [interactionId={}] from={}:{}, size={} bytes MLLP_WRAPPED={} TCP_DELIMITED={}",
+                interactionId, clientIP, clientPort, rawMessage.length(), 
+                isMllpWrapped ? "YES" : "NO", isTcpDelimited ? "YES" : "NO");
 
         Optional<PortConfig.PortEntry> portEntryOpt = portConfigUtil.readPortEntry(
                 destinationPort, interactionId.toString());
@@ -426,13 +509,20 @@ public class NettyTcpServer implements MessageSourceProvider {
             handleHL7Message(ctx, rawMessage, interactionId, clientIP, clientPort,
                     destinationIP, destinationPort, portEntryOpt);
         } else {
-            logger.info("NON_MLLP_DETECTED [interactionId={}] - Using generic processing with simple ACK",
+            logger.info("TCP_MODE_DETECTED [interactionId={}] - Using generic processing with simple ACK",
                     interactionId);
             handleGenericMessage(ctx, rawMessage, interactionId, clientIP, clientPort,
                     destinationIP, destinationPort, portEntryOpt);
         }
     }
-
+private boolean detectTcpDelimiterWrapper(String message) {
+    if (message == null || message.length() < 3) {
+        return false;
+    }
+    return message.charAt(0) == tcpStartDelimiter
+            && message.charAt(message.length() - 2) == tcpEndDelimiter1
+            && message.charAt(message.length() - 1) == tcpEndDelimiter2;
+}
     private void handleHL7Message(
             ChannelHandlerContext ctx,
             String rawMessage,
@@ -597,7 +687,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                 
                 // Schedule close to allow network flush
                 ctx.executor().schedule(() -> {
-                    logger.debug("CLOSING_CONNECTION [interactionId={}]", interactionId);
+                    logger.info("CLOSING_CONNECTION [interactionId={}]", interactionId);
                     ctx.close();
                 }, 50, TimeUnit.MILLISECONDS);
             } else {
@@ -698,7 +788,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                 mshFields.put("processingId", fields.length > 10 ? fields[10] : "");
                 mshFields.put("version", fields.length > 11 ? fields[11] : "2.5");
 
-                logger.debug("MSH_PARSED messageControlId={}, sendingApp={}, receivingApp={}",
+                logger.info("MSH_PARSED messageControlId={}, sendingApp={}, receivingApp={}",
                         mshFields.get("messageControlId"),
                         mshFields.get("sendingApplication"),
                         mshFields.get("receivingApplication"));
@@ -955,48 +1045,6 @@ public class NettyTcpServer implements MessageSourceProvider {
             logger.error("ZNT_MANUAL_EXTRACTION_ERROR [interactionId={}]: {}", interactionId, e.getMessage());
         }
         return false;
-    }
-
-    /**
-     * Detect message format based on content (for non-MLLP messages)
-     */
-    private String detectMessageFormat(String message) {
-        if (message == null || message.isBlank()) {
-            return "empty";
-        }
-
-        String trimmed = message.trim();
-
-        // HL7 detection (starts with MSH segment) - shouldn't happen in non-MLLP
-        if (trimmed.startsWith("MSH|") || trimmed.startsWith("MSH^")) {
-            return "hl7";
-        }
-
-        // JSON detection
-        if ((trimmed.startsWith("{") && trimmed.endsWith("}"))
-                || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
-            return "json";
-        }
-
-        // XML detection
-        if (trimmed.startsWith("<") && trimmed.endsWith(">")) {
-            if (trimmed.contains("<ClinicalDocument") || trimmed.contains("urn:hl7-org:v3")) {
-                return "ccd";
-            }
-            return "xml";
-        }
-
-        // CSV detection (simple heuristic)
-        String[] lines = trimmed.split("\n", 3);
-        if (lines.length >= 2 && lines[0].contains(",") && lines[1].contains(",")) {
-            int firstCommas = lines[0].split(",").length;
-            int secondCommas = lines[1].split(",").length;
-            if (Math.abs(firstCommas - secondCommas) <= 1) {
-                return "csv";
-            }
-        }
-
-        return "text";
     }
 
     /**
