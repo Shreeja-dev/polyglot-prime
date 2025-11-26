@@ -152,7 +152,18 @@ public class NettyTcpServer implements MessageSourceProvider {
                                             interactionId = UUID.randomUUID();
                                             ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
                                         }
-
+                                        Boolean ackSent = ctx.channel().attr(ACK_SENT_KEY).get();
+                                        if (Boolean.TRUE.equals(ackSent)) {
+                                            logger.info(
+                                                    "ACK_ALREADY_SENT [interactionId={}] - ignoring additional data",
+                                                    interactionId);
+                                            // Release the message buffer
+                                            if (msg instanceof ByteBuf) {
+                                                ((ByteBuf) msg).release();
+                                            }
+                                            return;
+                                        }
+    
                                         String activeProfile = System.getenv("SPRING_PROFILES_ACTIVE");
                                         if ("sandbox".equals(activeProfile)) {
                                             handleSandboxProxy(ctx, interactionId);
@@ -200,7 +211,15 @@ public class NettyTcpServer implements MessageSourceProvider {
                                     @Override
                                     public void channelInactive(ChannelHandlerContext ctx) {
                                         UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
-                                        logger.info("Channel closed for interactionId {}", interactionId);
+                                        Boolean ackSent = ctx.channel().attr(ACK_SENT_KEY).get();
+
+                                        logger.info("CHANNEL_INACTIVE [interactionId={}] ackSent={}",
+                                                interactionId, ackSent);
+
+                                        if (!Boolean.TRUE.equals(ackSent)) {
+                                            logger.warn("CHANNEL_CLOSED_WITHOUT_ACK [interactionId={}]", interactionId);
+                                        }
+
                                         // Clear attributes to prevent memory leaks
                                         clearChannelAttributes(ctx);
                                     }
@@ -306,7 +325,6 @@ public class NettyTcpServer implements MessageSourceProvider {
                 
                 logger.info("MLLP_FRAME_COMPLETE [interactionId={}] totalLength={} bytes, assembled from {} fragments, avgFragmentSize={} bytes",
                         interactionId, frameLength, currentFragment, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
-
             } else {
                 // Non-MLLP message: read until newline OR idle timeout
                 ctx.channel().attr(IS_MLLP_KEY).set(false);
@@ -329,21 +347,26 @@ public class NettyTcpServer implements MessageSourceProvider {
                     long idleTime = System.currentTimeMillis() - lastDataTime;
                     
                     if (idleTime >= TCP_IDLE_THRESHOLD_MS && in.readableBytes() > 0) {
-                        // *** FIX: Idle timeout reached - treat buffered data as complete message ***
+                        // Idle timeout reached - treat buffered data as complete message
                         int frameLength = in.readableBytes();
                         ByteBuf frame = in.readRetainedSlice(frameLength);
                         out.add(frame);
-                        
-                        logger.info("NON_MLLP_FRAME_COMPLETE_ON_IDLE [interactionId={}] totalLength={} bytes, assembled from {} fragments, idleMs={}, avgFragmentSize={} bytes",
-                                interactionId, frameLength, currentFragment, idleTime, currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
+
+                        logger.info(
+                                "NON_MLLP_FRAME_COMPLETE_ON_IDLE [interactionId={}] totalLength={} bytes, assembled from {} fragments, idleMs={}, avgFragmentSize={} bytes",
+                                interactionId, frameLength, currentFragment, idleTime,
+                                currentFragment > 0 ? (frameLength / currentFragment) : frameLength);
                     } else {
                         // Still receiving data or haven't reached idle threshold
                         if (in.readableBytes() > maxFrameLength) {
-                            logger.error("NON_MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
+                            logger.error(
+                                    "NON_MLLP_MESSAGE_TOO_LARGE [interactionId={}] size={} bytes exceeds max={} bytes",
                                     interactionId, in.readableBytes(), maxFrameLength);
                             in.skipBytes(in.readableBytes());
-                            throw new IllegalStateException("Non-MLLP message exceeds max size: " + maxFrameLength + " bytes");
+                            throw new IllegalStateException(
+                                    "Non-MLLP message exceeds max size: " + maxFrameLength + " bytes");
                         }
+
                         final UUID id = interactionId;
                         final long remainingWait = TCP_IDLE_THRESHOLD_MS - idleTime + 10;
 
@@ -355,15 +378,18 @@ public class NettyTcpServer implements MessageSourceProvider {
                                 TCP_IDLE_THRESHOLD_MS,
                                 remainingWait);
 
-                        // *** NEW: Schedule a check after idle threshold ***
-                        ctx.executor().schedule(() -> {
-                            logger.info(
-                                    "NON_MLLP_IDLE_CHECK_TRIGGERED [interactionId={}] Triggering decode after waiting {}ms",
-                                    id, remainingWait);
-
-                            // Trigger another decode attempt
-                            ctx.fireChannelRead(ctx.alloc().buffer(0));
-                        }, remainingWait, TimeUnit.MILLISECONDS);
+                        // *** FIX: Don't schedule if idle threshold already reached ***
+                        if (remainingWait > 0) {
+                            ctx.executor().schedule(() -> {
+                                logger.info(
+                                        "NON_MLLP_IDLE_CHECK_TRIGGERED [interactionId={}] Triggering decode after waiting {}ms",
+                                        id, remainingWait);
+                                // Trigger another decode attempt by firing a zero-byte buffer
+                                if (ctx.channel().isActive()) {
+                                    ctx.fireChannelRead(ctx.alloc().buffer(0));
+                                }
+                            }, remainingWait, TimeUnit.MILLISECONDS);
+                        }
                     }
                 }
             }
@@ -639,40 +665,51 @@ public class NettyTcpServer implements MessageSourceProvider {
         }
     }
 
-    /**
-     * Send response and close connection
-     * FIXED: Added channel active check and scheduled close to ensure response delivery
-     */
     private void sendResponseAndClose(ChannelHandlerContext ctx, String response,
             UUID interactionId, String responseType) {
-        
-        // FIXED: Verify channel is still active before attempting to send
+
+        // Check if already sent ACK for this channel
+        Boolean ackSent = ctx.channel().attr(ACK_SENT_KEY).get();
+        if (Boolean.TRUE.equals(ackSent)) {
+            logger.warn("ACK_ALREADY_SENT [interactionId={}] type={} - skipping duplicate",
+                    interactionId, responseType);
+            return;
+        }
+
+        // Mark ACK as sent
+        ctx.channel().attr(ACK_SENT_KEY).set(true);
+
+        // Verify channel is still active before attempting to send
         if (!ctx.channel().isActive()) {
             logger.warn("CANNOT_SEND_RESPONSE [interactionId={}] type={} - CHANNEL_ALREADY_INACTIVE",
                     interactionId, responseType);
             return;
         }
 
-        logger.info("SENDING_RESPONSE [interactionId={}] type={} size={} bytes", 
+        logger.info("SENDING_RESPONSE [interactionId={}] type={} size={} bytes",
                 interactionId, responseType, response.length());
 
         ByteBuf responseBuf = ctx.alloc().buffer();
         responseBuf.writeBytes(response.getBytes(StandardCharsets.UTF_8));
 
-        // FIXED: Schedule close after flush to ensure response is sent
+        // *** KEY FIX: Use writeAndFlush with proper listener and longer delay ***
         ctx.writeAndFlush(responseBuf).addListener(future -> {
             if (future.isSuccess()) {
-                logger.info("RESPONSE_SENT_SUCCESS [interactionId={}] type={}, scheduling connection close",
+                logger.info("RESPONSE_SENT_SUCCESS [interactionId={}] type={}, scheduling connection close in 200ms",
                         interactionId, responseType);
-                
-                // Schedule close to allow network flush
+
+                // *** CRITICAL: Increase delay to 200ms to ensure ACK is transmitted ***
                 ctx.executor().schedule(() -> {
-                    logger.info("CLOSING_CONNECTION [interactionId={}]", interactionId);
-                    ctx.close();
-                }, 50, TimeUnit.MILLISECONDS);
+                    if (ctx.channel().isActive()) {
+                        logger.info("CLOSING_CONNECTION [interactionId={}]", interactionId);
+                        ctx.close();
+                    } else {
+                        logger.info("CONNECTION_ALREADY_CLOSED [interactionId={}]", interactionId);
+                    }
+                }, 200, TimeUnit.MILLISECONDS);
             } else {
                 logger.error("RESPONSE_SEND_FAILED [interactionId={}] type={}: {}",
-                        interactionId, responseType, 
+                        interactionId, responseType,
                         future.cause() != null ? future.cause().getMessage() : "unknown");
                 // Close immediately on failure
                 ctx.close();
