@@ -71,6 +71,11 @@
             <version>4.16.0</version>
         </dependency>
         <dependency>
+			<groupId>com.fasterxml.uuid</groupId>
+			<artifactId>java-uuid-generator</artifactId>
+			<version>5.1.1</version> <!-- Latest as of Nov 2025; check Maven Central -->
+		</dependency>
+        <dependency>
             <groupId>jakarta.xml.bind</groupId>
             <artifactId>jakarta.xml.bind-api</artifactId>
             <version>4.0.0</version>
