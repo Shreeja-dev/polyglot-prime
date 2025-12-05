@@ -21,8 +21,9 @@ import org.techbd.ingest.config.AppConfig;
 import org.techbd.ingest.config.PortConfig;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MessageProcessorService;
+import org.techbd.ingest.service.portconfig.PortConfigApplierService;
+import org.techbd.ingest.service.portconfig.PortResolverService;
 import org.techbd.ingest.util.AppLogger;
-import org.techbd.ingest.util.PortConfigUtil;
 import org.techbd.ingest.util.TemplateLogger;
 
 import ca.uhn.hl7v2.DefaultHapiContext;
@@ -61,8 +62,8 @@ public class NettyTcpServer implements MessageSourceProvider {
     private final TemplateLogger logger;
     private final MessageProcessorService messageProcessorService;
     private final AppConfig appConfig;
-    private final PortConfigUtil portConfigUtil;
-
+    private final PortResolverService portResolverService;
+  
     @Value("${TCP_DISPATCHER_PORT:6001}")
     private int tcpPort;
 
@@ -89,10 +90,11 @@ public class NettyTcpServer implements MessageSourceProvider {
     public NettyTcpServer(MessageProcessorService messageProcessorService,
             AppConfig appConfig,
             AppLogger appLogger,
-            PortConfigUtil portConfigUtil) {
+            PortResolverService portResolverService,
+            PortConfigApplierService portConfigApplierService) {
         this.messageProcessorService = messageProcessorService;
         this.appConfig = appConfig;
-        this.portConfigUtil = portConfigUtil;
+        this.portResolverService = portResolverService;
         this.logger = appLogger.getLogger(NettyTcpServer.class);
     }
 
@@ -418,8 +420,18 @@ public class NettyTcpServer implements MessageSourceProvider {
         logger.info("COMPLETE_MESSAGE_RECEIVED [interactionId={}] from={}:{}, size={} bytes MLLP_WRAPPED={}",
                 interactionId, clientIP, clientPort, rawMessage.length(), isMllpWrapped ? "YES" : "NO");
 
-        Optional<PortConfig.PortEntry> portEntryOpt = portConfigUtil.readPortEntry(
-                destinationPort, interactionId.toString());
+        RequestContext initialContext = buildRequestContext(
+                rawMessage.trim(),
+                interactionId.toString(),
+                Optional.empty(), // No port entry yet
+                String.valueOf(clientPort),
+                clientIP,
+                destinationIP,
+                String.valueOf(destinationPort),
+                isMllpWrapped ? MessageSourceType.MLLP : MessageSourceType.TCP);
+
+        // Resolve port entry using the new service
+        Optional<PortConfig.PortEntry> portEntryOpt = portResolverService.resolve(initialContext);
         
         if (detectMllp(portEntryOpt)) {
             logger.info("MLLP_DETECTED [interactionId={}] - Using HL7 processing with proper ACK", interactionId);
@@ -462,10 +474,6 @@ public class NettyTcpServer implements MessageSourceProvider {
                 logger.info("HL7_ACK_GENERATED [interactionId={}]", interactionId);
             } catch (HL7Exception e) {
                 logger.error("HL7_PARSE_ERROR [interactionId={}]: Parsing failed due to error {} .. Continue generating manual ACK", interactionId, e.getMessage(), e);
-            }
-
-            if (!portConfigUtil.validatePortEntry(portEntryOpt, destinationPort, interactionId.toString())) {
-                logger.warn("INVALID_PORT_CONFIG [interactionId={}] port={}", interactionId, destinationPort);
             }
 
             RequestContext requestContext = buildRequestContext(
@@ -531,10 +539,6 @@ public class NettyTcpServer implements MessageSourceProvider {
             String clientIP, Integer clientPort, String destinationIP, Integer destinationPort, Optional<PortConfig.PortEntry> portEntryOpt) {
         try {
             String cleanMsg = rawMessage.trim();
-            if (!portConfigUtil.validatePortEntry(portEntryOpt, destinationPort, interactionId.toString())) {
-                logger.warn("INVALID_PORT_CONFIG [interactionId={}] port={}", interactionId, destinationPort);
-            }
-
             RequestContext requestContext = buildRequestContext(
                     cleanMsg,
                     interactionId.toString(),
@@ -1039,29 +1043,20 @@ public class NettyTcpServer implements MessageSourceProvider {
         String datePath = uploadTime.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
         String fileBaseName = "tcp-message";
         String originalFileName = fileBaseName;
-
-        PortBasedPaths paths = portConfigUtil.resolvePortBasedPaths(
-                portEntryOpt,
-                interactionId,
-                headers,
-                originalFileName,
-                timestamp,
-                datePath);
-
         String userAgent = "";
 
         return new RequestContext(
                 headers,
                 "",
-                paths.getQueue(),
+                appConfig.getAws().getSqs().getFifoQueueUrl(),
                 interactionId,
                 uploadTime,
                 timestamp,
                 originalFileName,
                 message.length(),
-                paths.getDataKey(),
-                paths.getMetaDataKey(),
-                paths.getFullS3DataPath(),
+                getDataKey(interactionId, headers, originalFileName,timestamp),
+                getMetaDataKey(interactionId, headers, originalFileName,timestamp),
+                getFullS3DataPath(interactionId, headers, originalFileName,timestamp),
                 userAgent,
                 "",
                 portEntryOpt.map(pe -> pe.route).orElse(""),
@@ -1071,12 +1066,12 @@ public class NettyTcpServer implements MessageSourceProvider {
                 sourceIp,
                 destinationIp,
                 destinationPort,
-                paths.getAcknowledgementKey(),
-                paths.getFullS3AcknowledgementPath(),
-                paths.getFullS3MetadataPath(),
+                getAcknowledgementKey(interactionId, headers, originalFileName,timestamp),
+                getFullS3AcknowledgementPath(interactionId, headers, originalFileName,timestamp),
+                getFullS3MetadataPath(interactionId, headers, originalFileName,timestamp),
                 messageSourceType,
-                paths.getDataBucketName(),
-                paths.getMetadataBucketName(),
+                getDataBucketName(),
+                getMetadataBucketName(),
                 appConfig.getVersion());
     }
 
