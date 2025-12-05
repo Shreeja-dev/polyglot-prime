@@ -1,4 +1,4 @@
-name: Manual Playwright Tests-Devl
+name: Manual Playwright Tests-Stage
 
 on:
   workflow_dispatch:
@@ -25,7 +25,7 @@ jobs:
       - name: Write .env values using echo
         run: |
           echo "TENANT=test_automation" >> .env
-          echo "HOST_NAME=https://synthetic.fhir.api.devl.techbd.org" >> .env
+          echo "HOST_NAME=https://synthetic.fhir.api.stage.techbd.org" >> .env
           echo "FHIR_BUNDLE_VALIDATE=/Bundle/\$validate" >> .env
 
       - name: Install dependencies
