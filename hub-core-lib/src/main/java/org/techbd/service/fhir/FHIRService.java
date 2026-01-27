@@ -74,6 +74,7 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import io.micrometer.common.util.StringUtils;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import jakarta.annotation.Nonnull;
@@ -99,14 +100,17 @@ public class FHIRService {
     private final OrchestrationEngine engine;
 	private final DSLContext primaryDSLContext;
 	private Tracer tracer;
+	private final OpenTelemetry openTelemetry;
+
 
 	public FHIRService(CoreAppConfig coreAppConfig, CoreDataLedgerApiClient coreDataLedgerApiClient,OrchestrationEngine engine,
-	@Qualifier("primaryDslContext") final DSLContext primaryDSLContext, AppLogger appLogger) {
+	@Qualifier("primaryDslContext") final DSLContext primaryDSLContext, AppLogger appLogger, final OpenTelemetry openTelemetry) {
 		this.coreAppConfig = coreAppConfig;
 		this.coreDataLedgerApiClient = coreDataLedgerApiClient;
-		this.tracer = GlobalOpenTelemetry.get().getTracer("FHIRService");
+		this.tracer = openTelemetry.getTracer("FHIRService");
 		this.engine = engine;
 		this.primaryDSLContext = primaryDSLContext;
+		this.openTelemetry = openTelemetry;
 		LOG = appLogger.getLogger(FHIRService.class);
 	}
 

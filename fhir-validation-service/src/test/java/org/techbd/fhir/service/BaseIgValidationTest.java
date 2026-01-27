@@ -18,6 +18,7 @@ import org.techbd.corelib.util.AppLogger;
 import org.techbd.corelib.util.TemplateLogger;
 import org.techbd.fhir.util.FHIRUtil;
 
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
 import io.opentelemetry.api.trace.Tracer;
@@ -39,6 +40,9 @@ public abstract class BaseIgValidationTest {
 
     protected static OrchestrationEngine.HapiValidationEngine spyHapiEngine;
 
+    private static OpenTelemetry openTelemetry;
+
+
     @BeforeAll
     static void initSharedEngine() throws Exception {
         tracer = mock(Tracer.class);
@@ -47,6 +51,8 @@ public abstract class BaseIgValidationTest {
         span = mock(Span.class);
         appLogger = mock(AppLogger.class);
         templateLogger = mock(TemplateLogger.class);
+        openTelemetry = mock(OpenTelemetry.class);
+        when(openTelemetry.getTracer(anyString())).thenReturn(tracer);
         when(appLogger.getLogger(OrchestrationEngine.class)).thenReturn(templateLogger);
         when(appLogger.getLogger(PrePopulateSupport.class)).thenReturn(templateLogger);
         when(appLogger.getLogger(PostPopulateSupport.class)).thenReturn(templateLogger);
@@ -55,7 +61,7 @@ public abstract class BaseIgValidationTest {
         when(appConfig.getIgPackages()).thenReturn(getIgPackages());
        // when(appConfig.getIgVersion()).thenReturn("1.3.0");
 
-        engine = new OrchestrationEngine(appConfig,appLogger);
+        engine = new OrchestrationEngine(appConfig,appLogger,openTelemetry);
         Field profileMapField = FHIRUtil.class.getDeclaredField("PROFILE_MAP");
         profileMapField.setAccessible(true);
         profileMapField.set(null, getProfileMap());
