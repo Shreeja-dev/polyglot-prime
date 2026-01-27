@@ -59,6 +59,7 @@ import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
 import ca.uhn.fhir.parser.LenientErrorHandler;
 import ca.uhn.fhir.validation.FhirValidator;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import jakarta.validation.constraints.NotNull;
@@ -147,12 +148,15 @@ public class OrchestrationEngine {
     private final TemplateLogger LOG;
     private final AppLogger appLogger;
     private Tracer tracer;
+    private final OpenTelemetry openTelemetry;
 
-    public OrchestrationEngine(final CoreAppConfig coreAppConfig, AppLogger appLogger) {
+
+    public OrchestrationEngine(final CoreAppConfig coreAppConfig, AppLogger appLogger, final OpenTelemetry openTelemetry) {
         this.sessions = new ConcurrentHashMap<>();
         this.coreAppConfig = coreAppConfig;
+        this.openTelemetry = openTelemetry;
         this.validationEngineCache = new HashMap<>();
-        this.tracer = GlobalOpenTelemetry.get().getTracer("OrchestrationEngine");
+        this.tracer = openTelemetry.getTracer("OrchestrationEngine");
         LOG = appLogger.getLogger(OrchestrationEngine.class);
         this.appLogger = appLogger;
         initializeEngines();

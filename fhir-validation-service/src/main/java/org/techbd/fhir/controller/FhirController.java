@@ -38,6 +38,7 @@ import org.techbd.fhir.service.FHIRService;
 import org.techbd.fhir.service.engine.OrchestrationEngine;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import io.swagger.v3.oas.annotations.Operation;
@@ -63,15 +64,17 @@ public class FhirController {
         private final DSLContext primaryDslContext;
         private final FHIRService fhirService;
         private final Tracer tracer;
+        private final OpenTelemetry openTelemetry;
 
         public FhirController(final OrchestrationEngine engine,
         final AppConfig appConfig ,final DataLedgerApiClient dataLedgerApiClient,final FHIRService fhirService
-        ,@Qualifier("primaryDslContext") final DSLContext primaryDslContext) throws IOException {
+        ,@Qualifier("primaryDslContext") final DSLContext primaryDslContext, final OpenTelemetry openTelemetry) throws IOException {
                 this.appConfig = appConfig;
                 this.engine = engine;
                 this.fhirService = fhirService;
                 this.dataLedgerApiClient = dataLedgerApiClient;
-                 this.tracer = GlobalOpenTelemetry.get().getTracer("FhirController");
+                 this.tracer = openTelemetry.getTracer("FhirController");
+                this.openTelemetry = openTelemetry;
                 this.primaryDslContext = primaryDslContext;
         }
 

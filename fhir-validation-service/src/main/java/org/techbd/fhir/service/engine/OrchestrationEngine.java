@@ -41,6 +41,7 @@ import org.techbd.fhir.config.AppConfig;
 import org.techbd.fhir.config.AppConfig.FhirV4Config;
 import org.techbd.fhir.exceptions.ErrorCode;
 import org.techbd.fhir.exceptions.JsonValidationException;
+import org.techbd.fhir.service.engine.OrchestrationEngine.OrchestrationSession;
 import org.techbd.fhir.service.validation.FhirBundleValidator;
 import org.techbd.fhir.service.validation.PostPopulateSupport;
 import org.techbd.fhir.service.validation.PrePopulateSupport;
@@ -59,6 +60,7 @@ import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
 import ca.uhn.fhir.parser.LenientErrorHandler;
 import ca.uhn.fhir.validation.FhirValidator;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import jakarta.validation.constraints.NotNull;
@@ -147,14 +149,16 @@ public class OrchestrationEngine {
     private final TemplateLogger LOG;
     private final AppLogger appLogger;
     private Tracer tracer;
+    private final OpenTelemetry openTelemetry;
 
-    public OrchestrationEngine(final AppConfig appConfig, AppLogger appLogger) {
+    public OrchestrationEngine(final AppConfig appConfig, AppLogger appLogger, final OpenTelemetry openTelemetry) {
         this.sessions = new ConcurrentHashMap<>();
         this.appConfig = appConfig;
         this.validationEngineCache = new HashMap<>();
-        this.tracer = GlobalOpenTelemetry.get().getTracer("OrchestrationEngine");
+        this.tracer = openTelemetry.getTracer("OrchestrationEngine");
         LOG = appLogger.getLogger(OrchestrationEngine.class);
         this.appLogger = appLogger;
+        this.openTelemetry = openTelemetry;
         initializeEngines();
     }
 
