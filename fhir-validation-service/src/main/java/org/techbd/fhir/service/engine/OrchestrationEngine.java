@@ -28,6 +28,7 @@ import org.hl7.fhir.common.hapi.validation.support.CachingValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.CommonCodeSystemsTerminologyService;
 import org.hl7.fhir.common.hapi.validation.support.InMemoryTerminologyServerValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.NpmPackageValidationSupport;
+import org.hl7.fhir.common.hapi.validation.support.RemoteTerminologyServiceValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.SnapshotGeneratingValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
 import org.hl7.fhir.common.hapi.validation.validator.FhirInstanceValidator;
@@ -41,6 +42,7 @@ import org.techbd.fhir.config.AppConfig;
 import org.techbd.fhir.config.AppConfig.FhirV4Config;
 import org.techbd.fhir.exceptions.ErrorCode;
 import org.techbd.fhir.exceptions.JsonValidationException;
+import org.techbd.fhir.service.engine.OrchestrationEngine.OrchestrationSession;
 import org.techbd.fhir.service.validation.FhirBundleValidator;
 import org.techbd.fhir.service.validation.PostPopulateSupport;
 import org.techbd.fhir.service.validation.PrePopulateSupport;
@@ -55,6 +57,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.context.ParserOptions;
 import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
 import ca.uhn.fhir.parser.LenientErrorHandler;
 import ca.uhn.fhir.validation.FhirValidator;
@@ -333,7 +336,8 @@ public class OrchestrationEngine {
 
                         LOG.info("Creating FhirBundleValidator for package: {} interactionId :{}", packagePath,
                                 interactionId);
-
+                        FhirContext fhirContext = FhirContext.forR4();
+                        fhirContext.setParserOptions(new ParserOptions().setDontEncodeElementsForSummaryMode("div", "text",null,"null"));
                         FhirBundleValidator bundleValidator = FhirBundleValidator.builder()
                                 .fhirContext(FhirContext.forR4())
                                 .fhirValidator(initializeFhirValidator(packagePath, basePackages,profileBaseUrl)) // Pass igPackageMap
@@ -400,6 +404,7 @@ public class OrchestrationEngine {
                 supportChain.addValidationSupport(new CommonCodeSystemsTerminologyService(fhirContext));
                 supportChain.addValidationSupport(new SnapshotGeneratingValidationSupport(fhirContext));
                 supportChain.addValidationSupport(new InMemoryTerminologyServerValidationSupport(fhirContext));
+                supportChain.addValidationSupport(new RemoteTerminologyServiceValidationSupport(fhirContext,"http://tx.fhir.org/r4"));
                 final var prePopulateSupport = new PrePopulateSupport(tracer, appLogger);
                 var prePopulatedValidationSupport = prePopulateSupport.build(fhirContext);
                 prePopulateSupport.addCodeSystems(supportChain, prePopulatedValidationSupport);
@@ -409,7 +414,7 @@ public class OrchestrationEngine {
                 postPopulateSupport.update(supportChain,profileBaseUrl);
                 final var cache = new CachingValidationSupport(supportChain);
                 final var instanceValidator = new FhirInstanceValidator(cache);
-                
+
                 FhirValidator fhirValidator = fhirContext.newValidator().registerValidatorModule(instanceValidator);
                 // fhirValidator.setConcurrentBundleValidation(true);
                 // ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
