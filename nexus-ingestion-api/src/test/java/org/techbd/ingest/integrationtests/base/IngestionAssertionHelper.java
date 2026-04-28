@@ -53,6 +53,14 @@ import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
  * {@code interactionId} and {@code timestamp} from it, and then verifies that
  * the actual S3 keys follow the expected naming convention.  This approach is
  * robust against small timestamp-format changes in the application code.
+ *
+ * <h3>Multi-message session support</h3>
+ * When {@code expectedPayload} is set and multiple S3 objects exist in the
+ * bucket (e.g. two HL7 messages sent on one keep-alive TCP session), the helper
+ * locates the <em>exact</em> payload key by content match rather than picking
+ * the first key found. The corresponding metadata key and SQS message are then
+ * located by matching on the derived {@code s3DataObjectPath}, ensuring all
+ * assertions are anchored to the same ingestion event.
  */
 public class IngestionAssertionHelper {
 
@@ -85,16 +93,6 @@ public class IngestionAssertionHelper {
 
     /**
      * Validates the <em>default</em> two-bucket flow (no route or hold).
-     *
-     * <p>Equivalent to the port-9000 SOAP or port-2575 TCP happy-path:
-     * <pre>
-     * Data:     DEFAULT_DATA_BUCKET   /  data/YYYY/MM/DD/{interactionId}_{ts}
-     * Metadata: DEFAULT_METADATA_BUCKET / metadata/YYYY/MM/DD/{interactionId}_{ts}_metadata.json
-     * ACK:      DEFAULT_DATA_BUCKET   /  data/YYYY/MM/DD/{interactionId}_{ts}_ack
-     * </pre>
-     *
-     * @param params      assertion parameters (see {@link FlowAssertionParams})
-     * @param softly      soft-assertion collector
      */
     public void assertDefaultFlow(FlowAssertionParams params, SoftAssertions softly) throws Exception {
         assertCustomFlow(params, softly);
@@ -102,19 +100,6 @@ public class IngestionAssertionHelper {
 
     /**
      * Validates the <em>hold</em> single-bucket flow.
-     *
-     * <p>Applies when {@code route=/hold} is set in the port-config entry.
-     * Both data and metadata land in the same bucket (HOLD_BUCKET).
-     *
-     * <p>Key structure (port-based, no tenant):
-     * <pre>
-     * Data:     HOLD_BUCKET / {dataDir}/hold/{port}/YYYY/MM/DD/{ts}_{fileName}
-     * Metadata: HOLD_BUCKET / {metadataDir}/hold/metadata/{port}/YYYY/MM/DD/{ts}_{fileName}_metadata.json
-     * ACK:      HOLD_BUCKET / {dataDir}/hold/{port}/YYYY/MM/DD/{ts}_{fileName}_ack
-     * </pre>
-     *
-     * @param params      assertion parameters
-     * @param softly      soft-assertion collector
      */
     public void assertHoldFlow(FlowAssertionParams params, SoftAssertions softly) throws Exception {
         assertCustomFlow(params, softly);
@@ -122,16 +107,6 @@ public class IngestionAssertionHelper {
 
     /**
      * Validates the <em>error</em> flow.
-     *
-     * <p>When ingestion fails the application stores the payload under the
-     * {@code error/} prefix (no dataDir applied). SQS assertion is skipped.
-     *
-     * <pre>
-     * Data: dataBucket / error/YYYY/MM/DD/{interactionId}_{ts}
-     * </pre>
-     *
-     * @param params      assertion parameters (set {@code isErrorFlow=true})
-     * @param softly      soft-assertion collector
      */
     public void assertErrorFlow(FlowAssertionParams params, SoftAssertions softly) throws Exception {
         assertCustomFlow(params, softly);
@@ -141,61 +116,59 @@ public class IngestionAssertionHelper {
      * Fully-parameterised assertion method that covers every {@code list.json}
      * combination. All convenience methods delegate here.
      *
-     * <p>Algorithm:
+     * <p><b>Key-selection strategy</b>:
      * <ol>
-     *   <li>List objects in the data bucket and locate the payload / ACK keys.</li>
-     *   <li>List objects in the metadata bucket and read the metadata JSON.</li>
-     *   <li>Extract {@code interactionId}, {@code timestamp}, and optional
-     *       {@code fileName} from the metadata JSON to build <em>expected</em>
-     *       key patterns.</li>
-     *   <li>Verify prefix, suffix, and full {@code s3://} URI consistency.</li>
-     *   <li>If not an error flow and a queue URL is supplied, poll SQS and verify
-     *       all path fields and {@code messageGroupId}.</li>
+     *   <li>List all objects in the data bucket.</li>
+     *   <li>Collect all candidate payload keys (no {@code _ack}, no {@code _metadata}).</li>
+     *   <li>If {@code expectedPayload} is set, read each candidate in turn and pick
+     *       the one whose normalised content matches the normalised expected payload.
+     *       This is the <em>content-aware</em> selection that makes multi-message
+     *       sessions work correctly — each call finds its own S3 object regardless
+     *       of how many objects are in the bucket.</li>
+     *   <li>If {@code expectedPayload} is null (or no match found after retries),
+     *       fall back to the first candidate — preserving existing behaviour for
+     *       SOAP/TCP tests that rely on single-object buckets.</li>
+     *   <li>Locate the matching metadata key by matching on the
+     *       {@code s3DataObjectPath} embedded in each metadata JSON — so the
+     *       metadata is always the one that belongs to the selected payload.</li>
+     *   <li>Locate the SQS message by matching its {@code s3DataObjectPath} field
+     *       against the path derived from the selected payload key.</li>
      * </ol>
-     *
-     * @param params assertion parameters
-     * @param softly soft-assertion collector
      */
     public void assertCustomFlow(FlowAssertionParams params, SoftAssertions softly) throws Exception {
 
-        // ── 1. Locate objects in the data bucket ─────────────────────────────
-        ListObjectsV2Response dataObjects = s3Client.listObjectsV2(
-                ListObjectsV2Request.builder().bucket(params.dataBucket).build());
+        // ── 1. Wait for the payload key for THIS specific assertion ────────────
+        // When expectedPayload is set this blocks until the specific object is
+        // durably written — critical for multi-message keep-alive sessions where
+        // MSG1 is already present when asserting MSG2.
+        String payloadKey = waitForMatchingPayloadKey(params.dataBucket, params);
 
-        softly.assertThat(dataObjects.contents())
-                .as("[S3] Data bucket '%s' must not be empty", params.dataBucket)
-                .isNotEmpty();
-        if (dataObjects.contents().isEmpty()) return;
-
-        String payloadKey = findKey(dataObjects, k -> !k.contains("_ack") && !k.contains("_metadata"));
-        String ackKey     = params.ackExpected ? findKey(dataObjects, k -> k.contains("_ack")) : null;
-
-        softly.assertThat(payloadKey).as("[S3] Payload key must exist in '%s'", params.dataBucket).isNotNull();
-        if (params.ackExpected) {
-            softly.assertThat(ackKey).as("[S3] ACK key must exist in '%s'", params.dataBucket).isNotNull();
-        }
+        softly.assertThat(payloadKey)
+                .as("[S3] Could not locate a payload key matching the expected content in '%s'",
+                        params.dataBucket)
+                .isNotNull();
         if (payloadKey == null) return;
 
-        // ── 2. Locate metadata object ────────────────────────────────────────
+        // ── 2. Locate the metadata key that belongs to THIS payload ─────────────────────
         String metaBucket = params.metadataBucket != null ? params.metadataBucket : params.dataBucket;
-        ListObjectsV2Response metaObjects = s3Client.listObjectsV2(
-                ListObjectsV2Request.builder().bucket(metaBucket).build());
 
-        softly.assertThat(metaObjects.contents())
-                .as("[S3] Metadata bucket '%s' must not be empty", metaBucket)
-                .isNotEmpty();
-        if (metaObjects.contents().isEmpty()) return;
+        // Build the expected data s3:// URI from the selected payload key.
+        // We use it to find the right metadata JSON among potentially many.
+        String expectedDataS3Uri = "s3://" + params.dataBucket + "/" + payloadKey;
 
-        String metadataKey = findKey(metaObjects, k -> k.contains("_metadata.json"));
-        softly.assertThat(metadataKey).as("[S3] Metadata key must exist in '%s'", metaBucket).isNotNull();
+        String metadataKey = waitForMatchingMetadataKey(metaBucket, expectedDataS3Uri);
+
+        softly.assertThat(metadataKey)
+                .as("[S3] Metadata key anchored to payload '%s' must exist in bucket '%s'",
+                        payloadKey, metaBucket)
+                .isNotNull();
         if (metadataKey == null) return;
 
-        // ── 3. Parse metadata JSON and extract canonical IDs ─────────────────
+        // ── 3. Parse metadata JSON ────────────────────────────────────────────
         String metadataContent = readS3(metaBucket, metadataKey);
-        JsonNode meta = MAPPER.readTree(metadataContent);
-
-        String keyFromMeta   = meta.get("key").asText();       // the stored objectKey
-        JsonNode jsonMeta    = meta.get("json_metadata");
+        JsonNode meta      = MAPPER.readTree(metadataContent);
+        String keyFromMeta = meta.get("key").asText();
+        JsonNode jsonMeta  = meta.get("json_metadata");
 
         String interactionId = jsonMeta.has("interactionId") ? jsonMeta.get("interactionId").asText() : null;
         String timestamp     = jsonMeta.has("timestamp")     ? jsonMeta.get("timestamp").asText()     : null;
@@ -205,18 +178,30 @@ public class IngestionAssertionHelper {
         String s3AckPath     = params.ackExpected && jsonMeta.has("fullS3AcknowledgementPath")
                                ? jsonMeta.get("fullS3AcknowledgementPath").asText() : null;
 
-        // ── 4. Build expected key structures ─────────────────────────────────
-        String datePath = todayDatePath();
+        // ── 4. Locate ACK key (if expected) ───────────────────────────────────
+        String ackKey = null;
+        if (params.ackExpected && s3AckPath != null) {
+            // Derive the ack key from the canonical ack path stored in metadata —
+            // this is safe even when multiple ack objects exist in the bucket.
+            ackKey = s3AckPath.replaceFirst("^s3://[^/]+/", "");
+        } else if (params.ackExpected) {
+            // Fallback: find an ack key that shares the same key stem as payloadKey
+            ackKey = findAckKeyForPayload(params.dataBucket, payloadKey);
+        }
 
-        // Build the expected file stem from metadata-derived values
-        String expectedFileStem = buildExpectedFileStem(interactionId, timestamp, fileName, params);
+        if (params.ackExpected) {
+            softly.assertThat(ackKey)
+                    .as("[S3] ACK key must exist for payload '%s'", payloadKey)
+                    .isNotNull();
+        }
 
-        // Determine expected prefix for data key
+        // ── 5. Build expected key structures ──────────────────────────────────
+        String datePath          = todayDatePath();
+        String expectedFileStem  = buildExpectedFileStem(interactionId, timestamp, fileName, params);
         String expectedDataPrefix = buildExpectedDataPrefix(params, datePath);
-        // Determine expected prefix for metadata key
         String expectedMetaPrefix = buildExpectedMetaPrefix(params, datePath);
 
-        // ── 5. Assert key prefixes ────────────────────────────────────────────
+        // ── 6. Assert key prefixes ────────────────────────────────────────────
         softly.assertThat(payloadKey)
                 .as("[S3] Payload key must start with '%s'", expectedDataPrefix)
                 .startsWith(expectedDataPrefix);
@@ -225,7 +210,7 @@ public class IngestionAssertionHelper {
                 .as("[S3] Metadata key must start with '%s'", expectedMetaPrefix)
                 .startsWith(expectedMetaPrefix);
 
-        // ── 6. Assert file-stem / suffix consistency ──────────────────────────
+        // ── 7. Assert file-stem / suffix consistency ──────────────────────────
         if (expectedFileStem != null) {
             softly.assertThat(payloadKey)
                     .as("[S3] Payload key must contain file stem '%s'", expectedFileStem)
@@ -236,10 +221,6 @@ public class IngestionAssertionHelper {
                     .contains(expectedFileStem);
 
             if (params.ackExpected && ackKey != null) {
-                // For hold flow the stem is just "{timestamp}_" (no fixed filename), so
-                // we verify the key contains the timestamp anchor AND ends with "_ack".
-                // For normal flow the stem is "{interactionId}_{timestamp}", so the full
-                // suffix "{stem}_ack" is the right check.
                 if (params.isHoldFlow) {
                     softly.assertThat(ackKey)
                             .as("[S3] ACK key must contain timestamp stem '%s' and end with '_ack'",
@@ -254,7 +235,7 @@ public class IngestionAssertionHelper {
             }
         }
 
-        // ── 7. Assert full s3:// URI consistency ──────────────────────────────
+        // ── 8. Assert full s3:// URI consistency ─────────────────────────────
         softly.assertThat(s3DataPath)
                 .as("[S3] s3DataObjectPath must equal s3://%s/%s", params.dataBucket, keyFromMeta)
                 .isEqualTo("s3://" + params.dataBucket + "/" + keyFromMeta);
@@ -269,7 +250,7 @@ public class IngestionAssertionHelper {
                     .isEqualTo("s3://" + params.dataBucket + "/" + ackKey);
         }
 
-        // ── 8. Optional payload content verification ──────────────────────────
+        // ── 9. Optional payload content verification ─────────────────────────
         if (params.expectedPayload != null) {
             String actualPayload = readS3(params.dataBucket, payloadKey);
             softly.assertThat(params.normalizePayload(actualPayload))
@@ -277,13 +258,13 @@ public class IngestionAssertionHelper {
                     .isEqualTo(params.normalizePayload(params.expectedPayload));
         }
 
-        // ── 9. Optional ACK content verification ─────────────────────────────
+        // ── 10. Optional ACK content verification ─────────────────────────────
         if (params.ackExpected && params.ackXPathAssertions != null && ackKey != null) {
             String actualAck = readS3(params.dataBucket, ackKey);
             params.ackXPathAssertions.accept(actualAck, softly);
         }
 
-        // ── 10. SQS consistency check (skipped for error flow) ───────────────
+        // ── 11. SQS consistency check (skipped for error flow) ────────────────
         if (!params.isErrorFlow && params.queueUrl != null) {
             assertSqsConsistency(
                     params.queueUrl,
@@ -303,9 +284,10 @@ public class IngestionAssertionHelper {
     /**
      * Polls {@code queueUrl} and validates all SQS message fields.
      *
-     * <p>Fields checked: {@code s3DataObjectPath}, {@code fullS3MetaDataPath},
-     * {@code fullS3AcknowledgementPath} (if not null), {@code s3ObjectId},
-     * {@code messageGroupId}.
+     * <p>When multiple messages are present (e.g. two HL7 messages on one keep-alive
+     * session), the poll finds the message whose {@code s3DataObjectPath} equals
+     * {@code expectedDataPath} — anchoring the SQS assertion to the correct
+     * ingestion event rather than assuming arrival order.
      */
     public void assertSqsConsistency(
             String queueUrl,
@@ -316,13 +298,14 @@ public class IngestionAssertionHelper {
             String expectedGroupId,
             SoftAssertions softly) throws Exception {
 
-        ReceiveMessageResponse sqsResponse = waitForSqsMessage(queueUrl);
-        softly.assertThat(sqsResponse.messages())
-                .as("[SQS] Queue '%s' must contain a message", queueUrl)
-                .isNotEmpty();
-        if (sqsResponse.messages().isEmpty()) return;
+        Message msg = waitForSqsMessageMatchingDataPath(queueUrl, expectedDataPath);
 
-        Message msg = sqsResponse.messages().get(0);
+        softly.assertThat(msg)
+                .as("[SQS] Queue '%s' must contain a message with s3DataObjectPath='%s'",
+                        queueUrl, expectedDataPath)
+                .isNotNull();
+        if (msg == null) return;
+
         JsonNode sqsJson = MAPPER.readTree(msg.body());
 
         softly.assertThat(sqsJson.get("s3DataObjectPath").asText())
@@ -399,15 +382,6 @@ public class IngestionAssertionHelper {
 
     /**
      * Builds the expected data key prefix from flow params.
-     *
-     * <p>Rules (mirrors {@code DataDirResolverImpl}):
-     * <ul>
-     *   <li>Error flow → {@code error/YYYY/MM/DD} (no dataDir)</li>
-     *   <li>Hold + tenant → {@code {dataDir}/hold/{tenantId}/YYYY/MM/DD}</li>
-     *   <li>Hold + port  → {@code {dataDir}/hold/{port}/YYYY/MM/DD}</li>
-     *   <li>Normal + tenant → {@code {dataDir}/data/{tenantId}/YYYY/MM/DD}</li>
-     *   <li>Normal + no dir → {@code data/YYYY/MM/DD}</li>
-     * </ul>
      */
     public static String buildExpectedDataPrefix(FlowAssertionParams p, String datePath) {
         if (p.isErrorFlow) {
@@ -434,9 +408,6 @@ public class IngestionAssertionHelper {
 
     /**
      * Builds the expected metadata key prefix from flow params.
-     *
-     * <p>Mirrors {@code DataDirResolverImpl#buildHoldMetadataKey} /
-     * {@code buildNormalMetadataKey}.
      */
     public static String buildExpectedMetaPrefix(FlowAssertionParams p, String datePath) {
         if (p.isErrorFlow) {
@@ -462,29 +433,182 @@ public class IngestionAssertionHelper {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Private helpers
+    // Private helpers — key selection
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Waits (with retries) until a payload key whose content matches
+     * {@code expectedPayload} exists in {@code bucket}, then returns that key.
+     *
+     * <p>When {@code expectedPayload} is null the method waits for any payload
+     * key to appear and returns the first one found — preserving existing
+     * single-object behaviour for SOAP/TCP tests.
+     *
+     * <p>Critically, each retry re-lists the bucket and re-reads every candidate,
+     * so the method blocks until the <em>specific</em> object for this assertion
+     * call is durably written.  This is what makes two-message keep-alive sessions
+     * work: the assertion for MSG2 keeps waiting past the point where only MSG1
+     * is visible, rather than returning early because MSG1 satisfied a weaker
+     * "any candidate" check.
+     */
+    private String waitForMatchingPayloadKey(String bucket, FlowAssertionParams params)
+            throws InterruptedException {
+        String expectedPayload = params.expectedPayload;
+
+        for (int i = 0; i < 20; i++) {
+            ListObjectsV2Response response = s3Client.listObjectsV2(
+                    ListObjectsV2Request.builder().bucket(bucket).build());
+
+            List<String> candidates = response.contents().stream()
+                    .map(S3Object::key)
+                    .filter(k -> !k.contains("_ack") && !k.contains("_metadata"))
+                    .collect(Collectors.toList());
+
+            if (expectedPayload == null) {
+                // No content match needed — return first key as soon as one exists
+                if (!candidates.isEmpty()) return candidates.get(0);
+            } else {
+                // Must find the key whose content matches THIS assertion's payload
+                for (String key : candidates) {
+                    try {
+                        String actual = readS3(bucket, key);
+                        if (params.normalizePayload(actual)
+                                .equals(params.normalizePayload(expectedPayload))) {
+                            return key;
+                        }
+                    } catch (Exception ignored) { /* object may still be in flight */ }
+                }
+            }
+            Thread.sleep(1_000);
+        }
+        return null; // timed out — caller will produce a clear assertion failure
+    }
+
+    /**
+     * Polls the metadata bucket (with retries) until a metadata JSON is found
+     * whose embedded {@code s3DataObjectPath} equals {@code expectedDataS3Uri}.
+     *
+     * <p>This ensures that in multi-message sessions the metadata key returned
+     * always belongs to the same ingestion event as the selected payload key.
+     */
+    private String waitForMatchingMetadataKey(String bucket, String expectedDataS3Uri)
+            throws InterruptedException {
+        for (int i = 0; i < 15; i++) {
+            ListObjectsV2Response response = s3Client.listObjectsV2(
+                    ListObjectsV2Request.builder().bucket(bucket).build());
+
+            for (S3Object obj : response.contents()) {
+                String key = obj.key();
+                if (!key.contains("_metadata.json")) continue;
+                try {
+                    String content = readS3(bucket, key);
+                    JsonNode meta  = MAPPER.readTree(content);
+                    JsonNode jsonMeta = meta.get("json_metadata");
+                    if (jsonMeta != null && jsonMeta.has("s3DataObjectPath")) {
+                        String dataPath = jsonMeta.get("s3DataObjectPath").asText();
+                        if (expectedDataS3Uri.equals(dataPath)) {
+                            return key;
+                        }
+                    }
+                } catch (Exception ignored) { /* metadata may still be in flight */ }
+            }
+            Thread.sleep(1_000);
+        }
+        return null;
+    }
+
+    /**
+     * Finds an ACK key in the data bucket that corresponds to the given payload key.
+     *
+     * <p>The ACK key is expected to share the same timestamp/stem prefix as the
+     * payload key and end with {@code _ack}.  Used only as a fallback when the
+     * metadata JSON does not carry {@code fullS3AcknowledgementPath}.
+     */
+    private String findAckKeyForPayload(String bucket, String payloadKey) {
+        // Extract the stem: everything after the last '/' and up to (not including)
+        // any extension-like suffix that may be specific to the payload file name.
+        // We try to match on timestamp prefix common to both payload and ack.
+        String payloadName = payloadKey.contains("/")
+                ? payloadKey.substring(payloadKey.lastIndexOf('/') + 1)
+                : payloadKey;
+
+        ListObjectsV2Response response = s3Client.listObjectsV2(
+                ListObjectsV2Request.builder().bucket(bucket).build());
+
+        // First pass: exact stem match — "{payloadName}_ack"
+        String exact = response.contents().stream()
+                .map(S3Object::key)
+                .filter(k -> k.contains("_ack") && k.endsWith(payloadName + "_ack"))
+                .findFirst().orElse(null);
+        if (exact != null) return exact;
+
+        // Second pass: share same directory prefix and timestamp stem
+        String dir = payloadKey.contains("/")
+                ? payloadKey.substring(0, payloadKey.lastIndexOf('/') + 1)
+                : "";
+        // Extract leading timestamp (digits before first '_')
+        String ts = payloadName.contains("_") ? payloadName.substring(0, payloadName.indexOf('_')) : payloadName;
+
+        return response.contents().stream()
+                .map(S3Object::key)
+                .filter(k -> k.startsWith(dir) && k.contains("_ack"))
+                .filter(k -> {
+                    String name = k.contains("/") ? k.substring(k.lastIndexOf('/') + 1) : k;
+                    return name.startsWith(ts + "_");
+                })
+                .findFirst().orElse(null);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Private helpers — SQS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Polls {@code queueUrl} (up to 15 × 2 s) until a message whose body contains
+     * {@code s3DataObjectPath == expectedDataPath} is found.
+     *
+     * <p>Receiving messages does <em>not</em> delete them from the FIFO queue, so
+     * both messages sent in a two-message session remain available for the second
+     * {@code assertHoldFlow} call.
+     */
+    private Message waitForSqsMessageMatchingDataPath(String queueUrl, String expectedDataPath)
+            throws InterruptedException {
+        for (int i = 0; i < 15; i++) {
+            // Receive up to 10 messages per poll — FIFO queues may hold both messages
+            ReceiveMessageResponse resp = sqsClient.receiveMessage(
+                    ReceiveMessageRequest.builder()
+                            .queueUrl(queueUrl)
+                            .maxNumberOfMessages(10)
+                            .waitTimeSeconds(2)
+                            .build());
+
+            for (Message msg : resp.messages()) {
+                try {
+                    JsonNode body = MAPPER.readTree(msg.body());
+                    if (body.has("s3DataObjectPath")
+                            && expectedDataPath.equals(body.get("s3DataObjectPath").asText())) {
+                        return msg;
+                    }
+                } catch (Exception ignored) { /* malformed message — skip */ }
+            }
+            Thread.sleep(1_000);
+        }
+        return null;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Private helpers — misc
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
      * Builds the expected file stem used to verify key names.
-     *
-     * <p>For hold flow: returns just {@code "{timestamp}_"} as a prefix-anchor.
-     * The full file name (including extension) is preserved by the application
-     * ({@code DataDirResolverImpl#buildTimestampedName}), so we only assert that
-     * the key contains the timestamp prefix — avoiding false failures caused by
-     * extension stripping (e.g. {@code soap-message.xml} must not become
-     * {@code soap-message}).
-     *
-     * <p>For normal flow: {@code {interactionId}_{timestamp}}
      */
     private static String buildExpectedFileStem(
             String interactionId, String timestamp, String fileName, FlowAssertionParams p) {
 
-        if (timestamp == null) return null; // can't derive without timestamp
+        if (timestamp == null) return null;
 
         if (p.isHoldFlow) {
-            // Only anchor on the timestamp prefix; let the full filename+extension be
-            // whatever the application wrote — verified indirectly via the s3:// URI check.
             return timestamp + "_";
         }
         if (interactionId != null) {
@@ -498,30 +622,6 @@ public class IngestionAssertionHelper {
         return path.replaceAll("^/+", "").replaceAll("/+$", "");
     }
 
-    private static String findKey(ListObjectsV2Response response,
-                                   java.util.function.Predicate<String> predicate) {
-        return response.contents().stream()
-                .map(S3Object::key)
-                .filter(predicate)
-                .findFirst()
-                .orElse(null);
-    }
-
-    /**
-     * Polls {@code queueUrl} (up to 10 × 2 s) until a message arrives.
-     */
-    private ReceiveMessageResponse waitForSqsMessage(String queueUrl) throws InterruptedException {
-        for (int i = 0; i < 10; i++) {
-            ReceiveMessageResponse resp = sqsClient.receiveMessage(
-                    ReceiveMessageRequest.builder()
-                            .queueUrl(queueUrl)
-                            .waitTimeSeconds(2)
-                            .build());
-            if (!resp.messages().isEmpty()) return resp;
-            Thread.sleep(1_000);
-        }
-        throw new AssertionError("No SQS message received after retries for queue: " + queueUrl);
-    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // FlowAssertionParams – builder-style configuration object
@@ -529,78 +629,31 @@ public class IngestionAssertionHelper {
 
     /**
      * Encapsulates all parameters needed to assert a single ingestion flow.
-     *
-     * <p>Use the fluent {@link Builder} to construct instances:
-     * <pre>{@code
-     * FlowAssertionParams params = FlowAssertionParams.builder()
-     *     .dataBucket(DEFAULT_DATA_BUCKET)
-     *     .metadataBucket(DEFAULT_METADATA_BUCKET)
-     *     .queueUrl(mainQueueUrl)
-     *     .expectedMessageGroupId("ORU_PUSH")
-     *     .expectedPayload(hl7)
-     *     .payloadNormalizer(IngestionAssertionHelper::normalizeHl7)
-     *     .build();
-     * }</pre>
      */
     public static final class FlowAssertionParams {
 
         // ── Bucket config ──────────────────────────────────────────────────────
-        /** S3 bucket that holds the raw payload (and ACK). Required. */
         public final String dataBucket;
-        /**
-         * S3 bucket that holds the metadata JSON. If null, defaults to
-         * {@code dataBucket} (hold flow has both in one bucket).
-         */
         public final String metadataBucket;
 
         // ── Flow type flags ────────────────────────────────────────────────────
-        /** True when the port-config has {@code route=/hold}. */
         public final boolean isHoldFlow;
-        /**
-         * True when the ingestion failed and data lands in the {@code error/}
-         * prefix. SQS assertion is skipped for error flows.
-         */
         public final boolean isErrorFlow;
 
-        // ── Port-config attributes (from list.json) ────────────────────────────
-        /** The listening port (used in hold-key path when no tenant). */
+        // ── Port-config attributes ─────────────────────────────────────────────
         public final int port;
-        /** {@code dataDir} from port-config (e.g. {@code "/outbound"}). */
         public final String dataDir;
-        /** {@code metadataDir} from port-config; falls back to dataDir if null. */
         public final String metadataDir;
-        /**
-         * Tenant ID ({@code sourceId_msgType}). Null if neither field is set in
-         * the port-config entry.
-         */
         public final String tenantId;
 
         // ── SQS config ─────────────────────────────────────────────────────────
-        /** Queue URL to poll. Null skips SQS check. */
         public final String queueUrl;
-        /**
-         * Expected {@code messageGroupId} in the SQS message body. Null skips
-         * that specific field assertion.
-         */
         public final String expectedMessageGroupId;
 
         // ── Payload / ACK ──────────────────────────────────────────────────────
-        /**
-         * Raw payload that was sent. When non-null the stored S3 object is
-         * compared after normalisation.
-         */
         public final String expectedPayload;
-        /** Whether to look for an ACK object ({@code _ack} suffix). */
         public final boolean ackExpected;
-        /**
-         * Optional lambda to assert fields inside the stored ACK. Signature:
-         * {@code (ackXml, softly) -> ...}
-         */
         public final AckAssertion ackXPathAssertions;
-        /**
-         * Normalizer applied to both the sent and stored payload before comparison.
-         * Defaults to {@link IngestionAssertionHelper#normalizeGeneric}.
-         */
         final PayloadNormalizer payloadNormalizer;
 
         private FlowAssertionParams(Builder b) {
@@ -628,17 +681,6 @@ public class IngestionAssertionHelper {
 
         public static Builder builder() { return new Builder(); }
 
-        /**
-         * Returns a new {@link Builder} pre-populated with all values from this
-         * instance, allowing callers to clone-and-override specific fields.
-         *
-         * <pre>{@code
-         * FlowAssertionParams noAck = defaultFlowParams(request, null, groupId)
-         *         .toBuilder()
-         *         .ackExpected(false)
-         *         .build();
-         * }</pre>
-         */
         public Builder toBuilder() {
             return new Builder()
                     .dataBucket(this.dataBucket)
@@ -673,33 +715,19 @@ public class IngestionAssertionHelper {
             private AckAssertion ackXPathAssertions;
             private PayloadNormalizer payloadNormalizer;
 
-            /** S3 bucket for data payload + ACK. */
             public Builder dataBucket(String v)             { dataBucket = v;             return this; }
-            /** S3 bucket for metadata JSON (null → same as dataBucket). */
             public Builder metadataBucket(String v)         { metadataBucket = v;         return this; }
-            /** Mark as hold flow ({@code route=/hold}). */
             public Builder holdFlow(boolean v)              { isHoldFlow = v;             return this; }
-            /** Mark as error flow (payload lands in {@code error/…}). */
             public Builder errorFlow(boolean v)             { isErrorFlow = v;            return this; }
-            /** Listening port number (used in hold-key when no tenant). */
             public Builder port(int v)                      { port = v;                   return this; }
-            /** {@code dataDir} from port-config entry. */
             public Builder dataDir(String v)                { dataDir = v;                return this; }
-            /** {@code metadataDir} from port-config entry. */
             public Builder metadataDir(String v)            { metadataDir = v;            return this; }
-            /** Tenant ID ({@code sourceId_msgType}); null if absent. */
             public Builder tenantId(String v)               { tenantId = v;               return this; }
-            /** SQS queue URL to poll; null skips SQS assertion. */
             public Builder queueUrl(String v)               { queueUrl = v;               return this; }
-            /** Expected {@code messageGroupId}; null skips that check. */
             public Builder expectedMessageGroupId(String v) { expectedMessageGroupId = v; return this; }
-            /** Raw payload that was sent (for stored-payload comparison). */
             public Builder expectedPayload(String v)        { expectedPayload = v;        return this; }
-            /** Whether to assert an ACK object exists (default true). */
             public Builder ackExpected(boolean v)           { ackExpected = v;            return this; }
-            /** Optional lambda to assert content inside the stored ACK. */
             public Builder ackXPathAssertions(AckAssertion v) { ackXPathAssertions = v;  return this; }
-            /** Custom payload normalizer (default: {@link IngestionAssertionHelper#normalizeGeneric}). */
             public Builder payloadNormalizer(PayloadNormalizer v) { payloadNormalizer = v; return this; }
 
             public FlowAssertionParams build() {
@@ -724,7 +752,7 @@ public class IngestionAssertionHelper {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Built-in normalizers (static, for convenience)
+    // Built-in normalizers
     // ═══════════════════════════════════════════════════════════════════════════
 
     /** Collapses all whitespace – works for both XML and HL7. */
