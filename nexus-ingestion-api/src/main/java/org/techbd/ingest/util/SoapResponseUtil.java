@@ -20,7 +20,9 @@ import org.techbd.ingest.feature.FeatureEnum;
 import org.techbd.ingest.model.RequestContext;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.UUID;
 import jakarta.servlet.http.HttpServletRequest;
 
 @Component
@@ -123,5 +125,52 @@ public class SoapResponseUtil {
             }
         }
         return null;
+    }
+
+    /**
+     * Generates a random MIME boundary token (UUID-based, no hyphens).
+     * Safe for use as a multipart boundary.
+     */
+    public String generateMimeBoundary() {
+        return "MIMEBoundary_" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /**
+     * Generates a plain UUID string (with hyphens).
+     * Used for Content-ID and MessageID generation in MTOM strategies.
+     */
+    public String generateUuid() {
+        return UUID.randomUUID().toString();
+    }
+
+    /**
+     * Serializes a {@link SoapMessage} to its canonical XML string representation.
+     * Used by MTOM strategies to obtain the SOAP envelope bytes.
+     *
+     * @param message       the SOAP message to serialize
+     * @param interactionId for logging
+     * @return XML string
+     */
+    public String serializeSoapMessage(SoapMessage message, String interactionId) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            message.writeTo(baos);
+            return baos.toString(java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            log.error("SoapResponseUtil:: Failed to serialize SOAP message. interactionId={} error={}",
+                    interactionId, e.getMessage(), e);
+            throw new RuntimeException("Failed to serialize SOAP message", e);
+        }
+    }
+
+    /**
+     * Extracts the inbound WS-Addressing MessageID from the SOAP request header.
+     * Returns a fallback string if not found.
+     *
+     * @param soapRequest the inbound SOAP message
+     * @return the MessageID value, or a fallback URN
+     */
+    public String extractInboundMessageId(SoapMessage soapRequest) {
+        return extractRelatesTo(soapRequest); // reuse existing private method logic
     }
 }

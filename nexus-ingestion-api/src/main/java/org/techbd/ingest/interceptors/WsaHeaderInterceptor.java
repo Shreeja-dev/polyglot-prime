@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
+
 import org.springframework.ws.context.MessageContext;
 import org.springframework.ws.server.EndpointInterceptor;
 import org.springframework.ws.soap.SoapHeaderElement;
@@ -18,28 +19,34 @@ import org.techbd.ingest.exceptions.ErrorTraceIdGenerator;
 import org.techbd.ingest.feature.FeatureEnum;
 import org.techbd.ingest.model.RequestContext;
 import org.techbd.ingest.service.MessageProcessorService;
+import org.techbd.ingest.service.soap.SoapResponseStrategy;
+import org.techbd.ingest.service.soap.SoapResponseStrategyFactory;
 import org.techbd.ingest.util.AppLogger;
 import org.techbd.ingest.util.Hl7Util;
 import org.techbd.ingest.util.LogUtil;
 import org.techbd.ingest.util.SoapResponseUtil;
 import org.techbd.ingest.util.TemplateLogger;
-import jakarta.servlet.http.HttpServletRequest;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 public class WsaHeaderInterceptor implements EndpointInterceptor, SoapEndpointInterceptor {
 
     private final SoapResponseUtil soapResponseUtil;
     private final MessageProcessorService messageProcessorService;
     private final AppConfig appConfig;
     private final TemplateLogger LOG;
+    private final SoapResponseStrategyFactory strategyFactory;
 
     public WsaHeaderInterceptor(SoapResponseUtil soapResponseUtil,
                                 MessageProcessorService messageProcessorService,
                                 AppConfig appConfig,
-                                AppLogger appLogger) {
+                                AppLogger appLogger,
+                                SoapResponseStrategyFactory strategyFactory) {
         this.soapResponseUtil = soapResponseUtil;
         this.messageProcessorService = messageProcessorService;
         this.appConfig = appConfig;
         this.LOG = appLogger.getLogger(WsaHeaderInterceptor.class);
+        this.strategyFactory = strategyFactory;  
     }
 
     /**
@@ -104,19 +111,55 @@ public class WsaHeaderInterceptor implements EndpointInterceptor, SoapEndpointIn
         var transportContext = TransportContextHolder.getTransportContext();
         var connection = (HttpServletConnection) transportContext.getConnection();
         HttpServletRequest httpRequest = connection.getHttpServletRequest();
+        HttpServletResponse httpResponse = connection.getHttpServletResponse();
+
         String interactionId = (String) httpRequest.getAttribute(Constants.INTERACTION_ID);
 
         SoapMessage message = soapResponseUtil.buildSoapResponse(interactionId, messageContext);
+
+        String responseType = (String) httpRequest.getAttribute(Constants.RESPONSE_TYPE);
+        if (responseType == null || responseType.isBlank()) {
+            responseType = httpRequest.getHeader(Constants.RESPONSE_TYPE);
+        }
+        SoapResponseStrategy strategy = strategyFactory.resolve(responseType);
+
         RequestContext context = (RequestContext) httpRequest.getAttribute(Constants.REQUEST_CONTEXT);
         String rawSoapMessage = (String) messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE);
 
         messageContext.setProperty(Constants.INTERACTION_ID, interactionId);
-        LOG.info("handleResponse: Processing SOAP response for /ws endpoint. interactionId={}", interactionId);
+        LOG.info("handleResponse: responseType={} interactionId={}", responseType, interactionId);
+
+        strategy.writeResponse(interactionId, messageContext, httpRequest, httpResponse, message);
+
+        // ── For MTOM strategies: mark the MessageContext response as already sent ──
+        // This prevents Spring-WS from serializing the SoapMessage a second time
+        // after handleResponse returns, which would append bytes past the committed
+        // Content-Length and cause client-side truncation.
+        
+        if (isMtomResponseType(responseType)) {
+            messageContext.getResponse().writeTo(new java.io.OutputStream() {
+                @Override
+                public void write(int b) {
+                } // discard — already written
+
+                @Override
+                public void write(byte[] b, int off, int len) {
+                }
+            });
+            LOG.debug("handleResponse: suppressed Spring-WS secondary write for MTOM. interactionId={}", interactionId);
+        }
 
         messageProcessorService.processMessage(context, rawSoapMessage,
                 Hl7Util.soapMessageToString(message, interactionId));
 
         return true;
+    }
+
+    private boolean isMtomResponseType(String responseType) {
+        if (responseType == null || responseType.isBlank())
+            return false;
+        String n = responseType.trim().toLowerCase();
+        return n.equals("mtom") || n.equals("mtom_trubridge");
     }
 
     @Override

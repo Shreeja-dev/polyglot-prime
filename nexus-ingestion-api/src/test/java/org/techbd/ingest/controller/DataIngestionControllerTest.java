@@ -209,4 +209,48 @@ class DataIngestionControllerTest {
         verify(messageProcessorService)
                 .processMessage(any(RequestContext.class), eq(rawData));
     }
+     @Test
+    void testIngest_soapBody_forwardedWithServletResponse() throws Exception {
+        // Arrange: SOAP body + pnr msgType triggers forwarding
+        String soapBody = "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\"/>";
+
+        when(servletRequest.getContentType()).thenReturn("application/soap+xml");
+        when(servletRequest.getAttribute(Constants.INTERACTION_ID)).thenReturn("FWD-1");
+        when(servletRequest.getAttribute(Constants.ALLOWED_ROUTES)).thenReturn(null);
+
+        HttpServletResponse servletResponse = mock(HttpServletResponse.class);
+
+        ResponseEntity<String> mockForwarderResponse =
+                ResponseEntity.ok("forwarded");
+
+        // The new overload accepts HttpServletResponse
+        when(forwarder.forward(
+                eq(servletRequest),
+                eq(servletResponse),
+                eq(soapBody),
+                eq("src1"),
+                eq("pnr"),
+                eq("FWD-1")))
+                .thenReturn(mockForwarderResponse);
+
+        ResponseEntity<String> result = controller.ingest(
+                "src1",
+                "pnr",
+                null,
+                soapBody,
+                Map.of(),
+                servletRequest,
+                servletResponse);
+
+        assertThat(result.getStatusCodeValue()).isEqualTo(200);
+        assertThat(result.getBody()).isEqualTo("forwarded");
+
+        verify(forwarder).forward(
+                eq(servletRequest),
+                eq(servletResponse),
+                eq(soapBody),
+                eq("src1"),
+                eq("pnr"),
+                eq("FWD-1"));
+    }
 }

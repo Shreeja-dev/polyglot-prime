@@ -169,7 +169,7 @@ public class DataIngestionController extends AbstractMessageSourceProvider {
         if (resolvedBody != null && !resolvedBody.isBlank() && isSoapReq) {
             LOG.info("SOAP forwarding to /ws endpoint sourceId={} msgType={} interactionId={}",
                     sourceId, msgType, interactionId);
-            return forwarder.forward(request, resolvedBody, sourceId, msgType, interactionId);
+            return forwarder.forward(request, response, resolvedBody, sourceId, msgType, interactionId);
         }
 
         Map<String, String> result = Optional.ofNullable(file)

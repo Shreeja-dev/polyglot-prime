@@ -5,15 +5,53 @@
         "protocol": "TCP"
     },
     {
-        "sourceId":"netspective",
-        "msgType":"pnr",
-        "protocol": "TCP",
+        "sourceId": "netspective",
+        "msgType": "pnr",
+        "protocol": "HTTP",
         "route": "/hold",
         "dataDir": "/outbound",
         "metadataDir": "/outbound",
         "ackContentType": "application/soap+xml"
     },
-       {
+    {
+        "sourceId": "netspective_m",
+        "msgType": "pnr",
+        "protocol": "HTTP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "responseType": "mtom"
+    },
+    {
+        "sourceId": "netspective_mt",
+        "msgType": "pnr",
+        "protocol": "HTTP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "responseType": "mtom_trubridge"
+    },
+    {
+        "sourceId": "netspective_ma",
+        "msgType": "pnr",
+        "protocol": "HTTP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "responseType": "mtom",
+        "ackContentType": "application/soap+xml"
+    },
+    {
+        "sourceId": "netspective_mta",
+        "msgType": "pnr",
+        "protocol": "HTTP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "responseType": "mtom_trubridge",
+        "ackContentType": "application/soap+xml"
+    },
+    {
         "port": 5555,
         "responseType": "mllp",
         "protocol": "TCP",
@@ -21,7 +59,7 @@
         "dataDir": "/outbound",
         "metadataDir": "/outbound",
         "queue": "test.fifo",
-         "keepAliveTimeout": 20
+        "keepAliveTimeout": 20
     },
     {
         "port": 5555,
@@ -31,7 +69,7 @@
         "dataDir": "/http",
         "metadataDir": "/outbound",
         "queue": "test.fifo",
-         "keepAliveTimeout": 20
+        "keepAliveTimeout": 20
     },
     {
         "port": 5556,
@@ -41,17 +79,17 @@
         "dataDir": "/outbound",
         "metadataDir": "/outbound",
         "queue": "test.fifo",
-         "keepAliveTimeout": 20
+        "keepAliveTimeout": 20
     },
     {
-        "sourceId":"netspective",
-        "msgType":"pix",
+        "sourceId": "netspective",
+        "msgType": "pix",
         "protocol": "TCP",
         "route": "/",
         "queue": "txd-sbx-util-queue.fifo",
         "dataDir": "/outbound",
         "metadataDir": "/outbound",
-         "ackContentType": "application/soap+xml"
+        "ackContentType": "application/soap+xml"
     },
     {
         "port": 3575,
@@ -109,18 +147,17 @@
     },
     {
         "port": 9000,
-        "responseType": "",
+        "responseType": "mtom",
         "protocol": "HTTP",
         "whitelistIps": [
             "0.0.0.0/0"
         ],
-        
         "execType": "sync",
         "trafficTo": "util"
     },
     {
         "port": 9001,
-        "responseType": "",
+        "responseType": "mtom_trubridge",
         "protocol": "HTTP",
         "whitelistIps": [
             "0.0.0.0/0"

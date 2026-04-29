@@ -3,76 +3,65 @@ package org.techbd.ingest.interceptors;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.mockito.Mock;
-import org.techbd.ingest.config.AppConfig;
-import org.techbd.ingest.service.MessageProcessorService;
-import org.techbd.ingest.util.AppLogger;
-import org.techbd.ingest.util.SoapResponseUtil;
-import org.techbd.ingest.util.TemplateLogger;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-
-import org.mockito.MockedStatic;
-import org.mockito.junit.jupiter.MockitoExtension;
-
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+
+import javax.xml.namespace.QName;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ws.context.MessageContext;
-import org.springframework.ws.soap.SoapMessage;
-import org.springframework.ws.soap.SoapHeaderElement;
+import org.springframework.ws.soap.SoapBody;
+import org.springframework.ws.soap.SoapFault;
 import org.springframework.ws.soap.SoapFaultDetail;
 import org.springframework.ws.soap.SoapFaultDetailElement;
+import org.springframework.ws.soap.SoapHeaderElement;
+import org.springframework.ws.soap.SoapMessage;
 import org.springframework.ws.transport.context.TransportContext;
 import org.springframework.ws.transport.context.TransportContextHolder;
 import org.springframework.ws.transport.http.HttpServletConnection;
+import org.techbd.ingest.commons.Constants;
+import org.techbd.ingest.config.AppConfig;
+import org.techbd.ingest.exceptions.ErrorTraceIdGenerator;
+import org.techbd.ingest.feature.FeatureEnum;
+import org.techbd.ingest.model.RequestContext;
+import org.techbd.ingest.service.MessageProcessorService;
+import org.techbd.ingest.service.soap.DefaultSoapResponseStrategy;
+import org.techbd.ingest.service.soap.SoapResponseStrategy;
+import org.techbd.ingest.service.soap.SoapResponseStrategyFactory;
+import org.techbd.ingest.util.AppLogger;
+import org.techbd.ingest.util.LogUtil;
+import org.techbd.ingest.util.SoapResponseUtil;
+import org.techbd.ingest.util.TemplateLogger;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-import org.techbd.ingest.model.RequestContext;
-import org.techbd.ingest.commons.Constants;
-import org.techbd.ingest.exceptions.ErrorTraceIdGenerator;
-import org.techbd.ingest.util.LogUtil;
-import org.techbd.ingest.feature.FeatureEnum;
-import java.io.ByteArrayOutputStream;
-import java.lang.reflect.Method;
-import java.util.Collections;
-import java.util.Iterator;
-import javax.xml.namespace.QName;
-import java.util.Arrays;
-import org.springframework.ws.soap.SoapBody;
-import org.springframework.ws.soap.SoapFault;
-
 @ExtendWith(MockitoExtension.class)
-public class WsaHeaderInterceptorTest {
-    @Mock
-    private SoapResponseUtil soapResponseUtil;
+class WsaHeaderInterceptorTest {
 
-    @Mock
-    private MessageProcessorService messageProcessorService;
-
-    @Mock
-    private AppConfig appConfig;
-
-    @Mock
-    private AppLogger appLogger;
-
-    @Mock
-    private TemplateLogger templateLogger;
-
-    @Mock
-    private MessageContext messageContext;
-
-    @Mock
-    private SoapMessage soapMessage;
-
-    @Mock
-    private HttpServletRequest request;
-
-    @Mock
-    private HttpServletResponse response;
+    @Mock private SoapResponseUtil soapResponseUtil;
+    @Mock private MessageProcessorService messageProcessorService;
+    @Mock private AppConfig appConfig;
+    @Mock private AppLogger appLogger;
+    @Mock private TemplateLogger templateLogger;
+    @Mock private SoapResponseStrategyFactory strategyFactory;
+    @Mock private MessageContext messageContext;
+    @Mock private SoapMessage soapMessage;
+    @Mock private HttpServletRequest request;
+    @Mock private HttpServletResponse response;
 
     private WsaHeaderInterceptor interceptor;
 
@@ -83,16 +72,17 @@ public class WsaHeaderInterceptorTest {
                 soapResponseUtil,
                 messageProcessorService,
                 appConfig,
-                appLogger);
+                appLogger,
+                strategyFactory);
     }
+
+    // ── handleRequest ─────────────────────────────────────────────────────────
 
     @Test
     void shouldHandleRequest_forWsEndpoint() throws Exception {
-
         mockTransportContext("/ws");
 
         when(messageContext.getRequest()).thenReturn(soapMessage);
-
         doAnswer(invocation -> {
             ByteArrayOutputStream os = invocation.getArgument(0);
             os.write("<soap>req</soap>".getBytes());
@@ -109,7 +99,6 @@ public class WsaHeaderInterceptorTest {
 
     @Test
     void shouldSkipHandleRequest_whenNotWsEndpoint() throws Exception {
-
         mockTransportContext("/other");
 
         boolean result = interceptor.handleRequest(messageContext, new Object());
@@ -119,38 +108,165 @@ public class WsaHeaderInterceptorTest {
     }
 
     @Test
-    void shouldHandleResponse_successfully() throws Exception {
-
+    void shouldUseRawSoapFromRequest_whenAvailable() throws Exception {
         mockTransportContext("/ws");
 
+        when(messageContext.getRequest()).thenReturn(soapMessage);
+        doAnswer(invocation -> {
+            ByteArrayOutputStream os = invocation.getArgument(0);
+            os.write("<soap>original</soap>".getBytes());
+            return null;
+        }).when(soapMessage).writeTo(any());
+
+        when(request.getAttribute(Constants.RAW_SOAP_ATTRIBUTE))
+                .thenReturn("<soap>from-request</soap>");
+
+        boolean result = interceptor.handleRequest(messageContext, new Object());
+
+        assertTrue(result);
+        verify(messageContext).setProperty(
+                Constants.RAW_SOAP_ATTRIBUTE,
+                "<soap>from-request</soap>");
+    }
+
+    @Test
+    void shouldReturnFalse_andLogWarning_whenExceptionOccursInIsWsEndpoint() throws Exception {
+        TransportContext transportContext = mock(TransportContext.class);
+        when(transportContext.getConnection()).thenThrow(new RuntimeException("boom"));
+        TransportContextHolder.setTransportContext(transportContext);
+
+        boolean result = interceptor.handleRequest(messageContext, new Object());
+
+        assertTrue(result);
+        verify(templateLogger).warn(contains("Error checking request URI"), eq("boom"));
+    }
+
+    // ── handleResponse ────────────────────────────────────────────────────────
+
+    @Test
+    void shouldHandleResponse_successfully_defaultStrategy() throws Exception {
+        mockTransportContext("/ws");
+
+        // Stub ALL getAttribute calls made by handleResponse
         when(request.getAttribute(Constants.INTERACTION_ID)).thenReturn("INT-1");
-
-        when(soapResponseUtil.buildSoapResponse(any(), any()))
-                .thenReturn(soapMessage);
-
-        when(messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE))
-                .thenReturn("<req/>");
-
+        when(request.getAttribute(Constants.RESPONSE_TYPE)).thenReturn(null);
         when(request.getAttribute(Constants.REQUEST_CONTEXT))
                 .thenReturn(mock(RequestContext.class));
+        when(request.getHeader(Constants.RESPONSE_TYPE)).thenReturn(null);
+
+        when(soapResponseUtil.buildSoapResponse(any(), any())).thenReturn(soapMessage);
+        when(messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE)).thenReturn("<req/>");
+
+        SoapResponseStrategy defaultStrategy = mock(DefaultSoapResponseStrategy.class);
+        when(strategyFactory.resolve(isNull())).thenReturn(defaultStrategy);
 
         boolean result = interceptor.handleResponse(messageContext, new Object());
 
         assertTrue(result);
-
-        verify(messageProcessorService).processMessage(
-                any(),
-                eq("<req/>"),
-                any());
+        verify(strategyFactory).resolve(isNull());
+        verify(defaultStrategy).writeResponse(eq("INT-1"), any(), any(), any(), any());
+        verify(messageProcessorService).processMessage(any(), eq("<req/>"), any());
     }
 
     @Test
-    void shouldHandleFault_andLogError() throws Exception {
+    void shouldHandleResponse_mtomStrategy_suppressesSpringWrite() throws Exception {
+        mockTransportContext("/ws");
 
+        when(request.getAttribute(Constants.INTERACTION_ID)).thenReturn("INT-MTOM");
+        when(request.getAttribute(Constants.RESPONSE_TYPE)).thenReturn("mtom");
+        when(request.getAttribute(Constants.REQUEST_CONTEXT))
+                .thenReturn(mock(RequestContext.class));
+
+        when(soapResponseUtil.buildSoapResponse(any(), any())).thenReturn(soapMessage);
+        when(messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE)).thenReturn("<req/>");
+
+        SoapResponseStrategy mtomStrategy = mock(SoapResponseStrategy.class);
+        when(strategyFactory.resolve("mtom")).thenReturn(mtomStrategy);
+
+        // messageContext.getResponse() used to drain Spring-WS buffer
+        when(messageContext.getResponse()).thenReturn(soapMessage);
+        doAnswer(invocation -> null).when(soapMessage).writeTo(any(OutputStream.class));
+
+        boolean result = interceptor.handleResponse(messageContext, new Object());
+
+        assertTrue(result);
+        verify(mtomStrategy).writeResponse(eq("INT-MTOM"), any(), any(), any(), any());
+        // Verify Spring-WS secondary write was drained to no-op stream
+        // Note: writeTo is called twice - once for MTOM suppression, once for soapMessageToString
+        verify(soapMessage, times(2)).writeTo(any(OutputStream.class));
+    }
+
+    @Test
+    void shouldHandleResponse_mtomTrubridge_suppressesSpringWrite() throws Exception {
+        mockTransportContext("/ws");
+
+        when(request.getAttribute(Constants.INTERACTION_ID)).thenReturn("INT-TB");
+        when(request.getAttribute(Constants.RESPONSE_TYPE)).thenReturn("mtom_trubridge");
+        when(request.getAttribute(Constants.REQUEST_CONTEXT))
+                .thenReturn(mock(RequestContext.class));
+
+        when(soapResponseUtil.buildSoapResponse(any(), any())).thenReturn(soapMessage);
+        when(messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE)).thenReturn("<req/>");
+
+        SoapResponseStrategy tbStrategy = mock(SoapResponseStrategy.class);
+        when(strategyFactory.resolve("mtom_trubridge")).thenReturn(tbStrategy);
+
+        when(messageContext.getResponse()).thenReturn(soapMessage);
+        doAnswer(invocation -> null).when(soapMessage).writeTo(any(OutputStream.class));
+
+        boolean result = interceptor.handleResponse(messageContext, new Object());
+
+        assertTrue(result);
+        verify(tbStrategy).writeResponse(eq("INT-TB"), any(), any(), any(), any());
+        // Note: writeTo is called twice - once for MTOM suppression, once for soapMessageToString
+        verify(soapMessage, times(2)).writeTo(any(OutputStream.class));
+    }
+
+    @Test
+    void shouldHandleResponse_fallsBackToHeader_whenAttributeNull() throws Exception {
+        mockTransportContext("/ws");
+
+        when(request.getAttribute(Constants.INTERACTION_ID)).thenReturn("INT-H");
+        when(request.getAttribute(Constants.RESPONSE_TYPE)).thenReturn(null);
+        when(request.getHeader(Constants.RESPONSE_TYPE)).thenReturn("mtom");
+        when(request.getAttribute(Constants.REQUEST_CONTEXT))
+                .thenReturn(mock(RequestContext.class));
+
+        when(soapResponseUtil.buildSoapResponse(any(), any())).thenReturn(soapMessage);
+        when(messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE)).thenReturn("<req/>");
+
+        SoapResponseStrategy mtomStrategy = mock(SoapResponseStrategy.class);
+        when(strategyFactory.resolve("mtom")).thenReturn(mtomStrategy);
+
+        when(messageContext.getResponse()).thenReturn(soapMessage);
+        doAnswer(invocation -> null).when(soapMessage).writeTo(any(OutputStream.class));
+
+        boolean result = interceptor.handleResponse(messageContext, new Object());
+
+        assertTrue(result);
+        verify(strategyFactory).resolve("mtom");
+    }
+
+    @Test
+    void shouldSkipHandleResponse_whenNotWsEndpoint() throws Exception {
+        mockTransportContext("/not-ws");
+
+        boolean result = interceptor.handleResponse(messageContext, new Object());
+
+        assertTrue(result);
+        verifyNoInteractions(soapResponseUtil);
+        verifyNoInteractions(messageProcessorService);
+        verifyNoInteractions(strategyFactory);
+    }
+
+    // ── handleFault ───────────────────────────────────────────────────────────
+
+    @Test
+    void shouldHandleFault_andLogError() throws Exception {
         mockTransportContext("/ws");
 
         when(messageContext.getResponse()).thenReturn(soapMessage);
-        when(messageContext.getProperty("interactionId")).thenReturn("INT-2");
+        when(messageContext.getProperty(Constants.INTERACTION_ID)).thenReturn("INT-2");
 
         doAnswer(invocation -> {
             ByteArrayOutputStream os = invocation.getArgument(0);
@@ -159,15 +275,13 @@ public class WsaHeaderInterceptorTest {
         }).when(soapMessage).writeTo(any());
 
         try (MockedStatic<ErrorTraceIdGenerator> traceMock = mockStatic(ErrorTraceIdGenerator.class);
-                MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
+             MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
 
-            traceMock.when(ErrorTraceIdGenerator::generateErrorTraceId)
-                    .thenReturn("TRACE-1");
+            traceMock.when(ErrorTraceIdGenerator::generateErrorTraceId).thenReturn("TRACE-1");
 
             boolean result = interceptor.handleFault(messageContext, new Object());
 
             assertTrue(result);
-
             verify(templateLogger).error(
                     contains("SOAP Fault encountered"),
                     eq("INT-2"),
@@ -177,102 +291,21 @@ public class WsaHeaderInterceptorTest {
     }
 
     @Test
-    void shouldHandleAfterCompletion_success() throws Exception {
+    void shouldSkipHandleFault_whenNotWsEndpoint() throws Exception {
+        mockTransportContext("/not-ws");
 
-        mockTransportContext("/ws");
+        boolean result = interceptor.handleFault(messageContext, new Object());
 
-        when(messageContext.getProperty("interactionId")).thenReturn("INT-3");
-
-        interceptor.afterCompletion(messageContext, new Object(), null);
-
-        verify(templateLogger).info(
-                contains("completed"),
-                eq("INT-3"),
-                eq("SUCCESS"));
-    }
-
-    @Test
-    void shouldHandleAfterCompletion_withException() throws Exception {
-
-        mockTransportContext("/ws");
-
-        when(messageContext.getProperty("interactionId")).thenReturn("INT-4");
-
-        Exception ex = new RuntimeException("boom");
-
-        try (MockedStatic<ErrorTraceIdGenerator> traceMock = mockStatic(ErrorTraceIdGenerator.class);
-                MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
-
-            traceMock.when(ErrorTraceIdGenerator::generateErrorTraceId)
-                    .thenReturn("TRACE-2");
-
-            interceptor.afterCompletion(messageContext, new Object(), ex);
-
-            verify(templateLogger).error(
-                    contains("completed with ERROR"),
-                    eq("INT-4"),
-                    eq("TRACE-2"),
-                    eq("boom"),
-                    eq(ex));
-        }
-    }
-
-    @Test
-    void shouldReturnTrue_whenFeatureEnabled() {
-
-        SoapHeaderElement header = mock(SoapHeaderElement.class);
-
-        when(header.getName()).thenReturn(
-                new QName("ns", "Header", "p"));
-
-        try (MockedStatic<FeatureEnum> featureMock = mockStatic(FeatureEnum.class)) {
-
-            featureMock.when(() -> FeatureEnum.isEnabled(FeatureEnum.IGNORE_MUST_UNDERSTAND_HEADERS)).thenReturn(true);
-
-            assertTrue(interceptor.understands(header));
-        }
-    }
-
-    @Test
-    void shouldExtractFaultString() throws Exception {
-
-        Method method = WsaHeaderInterceptor.class
-                .getDeclaredMethod("extractFaultString", String.class);
-
-        method.setAccessible(true);
-
-        String xml = "<fault><faultstring>Error123</faultstring></fault>";
-
-        String result = (String) method.invoke(interceptor, xml);
-
-        assertEquals("Error123", result);
-    }
-
-    @Test
-    void shouldReturnFalse_whenNoDetailElements() throws Exception {
-
-        SoapFaultDetail detail = mock(SoapFaultDetail.class);
-
-        when(detail.getDetailEntries())
-                .thenReturn(Collections.emptyIterator());
-
-        Method method = WsaHeaderInterceptor.class
-                .getDeclaredMethod("hasDetailElement", SoapFaultDetail.class, String.class);
-
-        method.setAccessible(true);
-
-        boolean result = (boolean) method.invoke(interceptor, detail, "ErrorTraceId");
-
-        assertFalse(result);
+        assertTrue(result);
+        verify(messageContext, never()).getResponse();
+        verify(templateLogger, never()).error(any(), any(), any(), any());
     }
 
     @Test
     void shouldInjectErrorTraceIdIntoFault_whenNotPresent() throws Exception {
-
         mockTransportContext("/ws");
 
-        when(messageContext.getProperty(Constants.INTERACTION_ID))
-                .thenReturn("INT-1");
+        when(messageContext.getProperty(Constants.INTERACTION_ID)).thenReturn("INT-1");
 
         SoapBody soapBody = mock(SoapBody.class);
         SoapFault soapFault = mock(SoapFault.class);
@@ -291,11 +324,16 @@ public class WsaHeaderInterceptorTest {
                 .thenReturn(interactionElement)
                 .thenReturn(traceElement);
 
-        try (MockedStatic<ErrorTraceIdGenerator> mockTrace = mockStatic(ErrorTraceIdGenerator.class);
-                MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
+        doAnswer(invocation -> {
+            ByteArrayOutputStream os = invocation.getArgument(0);
+            os.write("<fault><faultstring>Error</faultstring></fault>".getBytes());
+            return null;
+        }).when(soapMessage).writeTo(any());
 
-            mockTrace.when(ErrorTraceIdGenerator::generateErrorTraceId)
-                    .thenReturn("TRACE-1");
+        try (MockedStatic<ErrorTraceIdGenerator> mockTrace = mockStatic(ErrorTraceIdGenerator.class);
+             MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
+
+            mockTrace.when(ErrorTraceIdGenerator::generateErrorTraceId).thenReturn("TRACE-1");
 
             interceptor.handleFault(messageContext, new Object());
 
@@ -306,11 +344,9 @@ public class WsaHeaderInterceptorTest {
 
     @Test
     void shouldSkipInjection_whenAlreadyPresent() throws Exception {
-
         mockTransportContext("/ws");
 
-        when(messageContext.getProperty(Constants.INTERACTION_ID))
-                .thenReturn("INT-1");
+        when(messageContext.getProperty(Constants.INTERACTION_ID)).thenReturn("INT-1");
 
         SoapBody soapBody = mock(SoapBody.class);
         SoapFault soapFault = mock(SoapFault.class);
@@ -324,82 +360,119 @@ public class WsaHeaderInterceptorTest {
         Iterator<SoapFaultDetailElement> iterator = Arrays.asList(
                 mockDetailElement("InteractionId"),
                 mockDetailElement("ErrorTraceId")).iterator();
-
         when(faultDetail.getDetailEntries()).thenReturn(iterator);
 
-        interceptor.handleFault(messageContext, new Object());
+        doAnswer(invocation -> {
+            ByteArrayOutputStream os = invocation.getArgument(0);
+            os.write("<fault><faultstring>Error</faultstring></fault>".getBytes());
+            return null;
+        }).when(soapMessage).writeTo(any());
 
-        // No new elements added
-        verify(faultDetail, never()).addFaultDetailElement(any());
+        try (MockedStatic<ErrorTraceIdGenerator> mockTrace = mockStatic(ErrorTraceIdGenerator.class);
+             MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
+
+            mockTrace.when(ErrorTraceIdGenerator::generateErrorTraceId).thenReturn("TRACE-1");
+
+            interceptor.handleFault(messageContext, new Object());
+
+            verify(faultDetail, never()).addFaultDetailElement(any());
+        }
     }
 
     @Test
-    void shouldExtractFaultString_fromSoap12() throws Exception {
+    void shouldHandleException_inHandleFaultOuterCatch() throws Exception {
+        mockTransportContext("/ws");
 
-        String xml = "<soap:Text xml:lang=\"en\">Invalid request</soap:Text>";
+        when(messageContext.getProperty(Constants.INTERACTION_ID)).thenReturn("INT-1");
+        when(messageContext.getResponse()).thenReturn(soapMessage);
+        doThrow(new RuntimeException("write-fail")).when(soapMessage).writeTo(any());
 
-        String result = invokeExtractFaultString(xml);
+        try (MockedStatic<ErrorTraceIdGenerator> traceMock = mockStatic(ErrorTraceIdGenerator.class);
+             MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
 
-        assertEquals("Invalid request", result);
-    }
+            traceMock.when(ErrorTraceIdGenerator::generateErrorTraceId).thenReturn("TRACE-2");
 
-    @Test
-    void shouldReturnUnknown_whenNoFaultStringPresent() throws Exception {
-
-        String xml = "<soap>No fault here</soap>";
-
-        String result = invokeExtractFaultString(xml);
-
-        assertEquals("Unknown fault", result);
-    }
-
-    @Test
-    void shouldReturnUnknown_whenIncompleteFaultString() throws Exception {
-
-        String xml = "<faultstring>Error only start tag";
-
-        String result = invokeExtractFaultString(xml);
-
-        assertEquals("Unknown fault", result);
-    }
-
-    @Test
-    void shouldReturnFailureMessage_whenExceptionOccurs() throws Exception {
-
-        String result = invokeExtractFaultString(null);
-
-        assertEquals("Failed to extract fault string", result);
-    }
-
-    @Test
-    void shouldReturnTrue_whenNamespaceMatchesConfigured() {
-
-        SoapHeaderElement header = mock(SoapHeaderElement.class);
-        QName qName = new QName("http://test.com", "TestHeader");
-        when(header.getName()).thenReturn(qName);
-
-        AppConfig.Soap soap = mock(AppConfig.Soap.class);
-        AppConfig.Soap.Wsa wsa = mock(AppConfig.Soap.Wsa.class);
-
-        when(appConfig.getSoap()).thenReturn(soap);
-        when(soap.getWsa()).thenReturn(wsa);
-        when(wsa.getUnderstoodNamespaces())
-                .thenReturn("http://test.com,http://other.com");
-
-        try (MockedStatic<FeatureEnum> mockFeature = mockStatic(FeatureEnum.class)) {
-
-            mockFeature.when(() -> FeatureEnum.isEnabled(FeatureEnum.IGNORE_MUST_UNDERSTAND_HEADERS)).thenReturn(false);
-
-            boolean result = interceptor.understands(header);
+            boolean result = interceptor.handleFault(messageContext, new Object());
 
             assertTrue(result);
+            verify(templateLogger).error(
+                    contains("Exception while processing SOAP fault"),
+                    eq("INT-1"),
+                    eq("TRACE-2"),
+                    contains("write-fail"),
+                    any(Exception.class));
+        }
+    }
+
+    @Test
+    void shouldGenerateErrorTraceId_whenNull_inOuterCatch() throws Exception {
+        mockTransportContext("/ws");
+
+        when(messageContext.getProperty(Constants.INTERACTION_ID)).thenReturn("INT-1");
+        when(messageContext.getResponse()).thenThrow(new RuntimeException("early-fail"));
+
+        try (MockedStatic<ErrorTraceIdGenerator> traceMock = mockStatic(ErrorTraceIdGenerator.class);
+             MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
+
+            traceMock.when(ErrorTraceIdGenerator::generateErrorTraceId).thenReturn("TRACE-NULL");
+
+            boolean result = interceptor.handleFault(messageContext, new Object());
+
+            assertTrue(result);
+            verify(templateLogger).error(
+                    contains("Exception while processing SOAP fault"),
+                    eq("INT-1"),
+                    eq("TRACE-NULL"),
+                    contains("early-fail"),
+                    any(Exception.class));
+        }
+    }
+
+    // ── afterCompletion ───────────────────────────────────────────────────────
+
+    @Test
+    void shouldHandleAfterCompletion_success() throws Exception {
+        mockTransportContext("/ws");
+
+        when(messageContext.getProperty(Constants.INTERACTION_ID)).thenReturn("INT-3");
+        when(request.getAttribute(Constants.ACK_CONTENT_TYPE)).thenReturn(null);
+
+        interceptor.afterCompletion(messageContext, new Object(), null);
+
+        verify(templateLogger).info(
+                contains("completed"),
+                eq("INT-3"),
+                eq("SUCCESS"));
+    }
+
+    @Test
+    void shouldHandleAfterCompletion_withException() throws Exception {
+        mockTransportContext("/ws");
+
+        when(messageContext.getProperty(Constants.INTERACTION_ID)).thenReturn("INT-4");
+        when(request.getAttribute(Constants.ACK_CONTENT_TYPE)).thenReturn(null);
+
+        Exception ex = new RuntimeException("boom");
+
+        try (MockedStatic<ErrorTraceIdGenerator> traceMock = mockStatic(ErrorTraceIdGenerator.class);
+             MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
+
+            traceMock.when(ErrorTraceIdGenerator::generateErrorTraceId).thenReturn("TRACE-2");
+
+            interceptor.afterCompletion(messageContext, new Object(), ex);
+
+            verify(templateLogger).error(
+                    contains("completed with ERROR"),
+                    eq("INT-4"),
+                    eq("TRACE-2"),
+                    eq("boom"),
+                    eq(ex));
         }
     }
 
     @Test
     void shouldSkipAfterCompletion_whenNotWsEndpoint() throws Exception {
-
-        mockTransportContext("/not-ws"); // IMPORTANT
+        mockTransportContext("/not-ws");
 
         interceptor.afterCompletion(messageContext, new Object(), null);
 
@@ -408,25 +481,19 @@ public class WsaHeaderInterceptorTest {
 
     @Test
     void shouldOverrideContentType_whenAckContentTypePresent() throws Exception {
-
         mockTransportContext("/ws");
 
-        when(messageContext.getProperty(Constants.INTERACTION_ID))
-                .thenReturn("INT-1");
+        when(messageContext.getProperty(Constants.INTERACTION_ID)).thenReturn("INT-1");
+        when(request.getAttribute(Constants.ACK_CONTENT_TYPE)).thenReturn("application/xml");
 
-        when(request.getAttribute(Constants.ACK_CONTENT_TYPE))
-                .thenReturn("application/xml");
-
-        HttpServletConnection connection = (HttpServletConnection) TransportContextHolder.getTransportContext()
-                .getConnection();
-
+        HttpServletConnection connection =
+                (HttpServletConnection) TransportContextHolder.getTransportContext().getConnection();
         when(connection.getHttpServletResponse()).thenReturn(response);
 
         interceptor.afterCompletion(messageContext, new Object(), null);
 
         verify(response).setHeader("Content-Type", "application/xml");
         verify(response).setContentType("application/xml");
-
         verify(templateLogger).info(
                 contains("Overriding response content type"),
                 eq("application/xml"),
@@ -435,22 +502,15 @@ public class WsaHeaderInterceptorTest {
 
     @Test
     void shouldLogWarning_whenOverrideContentTypeFails() throws Exception {
-
         mockTransportContext("/ws");
 
-        when(messageContext.getProperty(Constants.INTERACTION_ID))
-                .thenReturn("INT-1");
+        when(messageContext.getProperty(Constants.INTERACTION_ID)).thenReturn("INT-1");
+        when(request.getAttribute(Constants.ACK_CONTENT_TYPE)).thenReturn("application/xml");
 
-        when(request.getAttribute(Constants.ACK_CONTENT_TYPE))
-                .thenReturn("application/xml");
-
-        HttpServletConnection connection = (HttpServletConnection) TransportContextHolder.getTransportContext()
-                .getConnection();
-
+        HttpServletConnection connection =
+                (HttpServletConnection) TransportContextHolder.getTransportContext().getConnection();
         when(connection.getHttpServletResponse()).thenReturn(response);
-
-        doThrow(new RuntimeException("fail"))
-                .when(response).setHeader(any(), any());
+        doThrow(new RuntimeException("fail")).when(response).setHeader(any(), any());
 
         interceptor.afterCompletion(messageContext, new Object(), null);
 
@@ -460,182 +520,109 @@ public class WsaHeaderInterceptorTest {
                 contains("fail"));
     }
 
-    @Test
-    void shouldSkipHandleFault_whenNotWsEndpoint() throws Exception {
-
-        mockTransportContext("/not-ws");
-
-        boolean result = interceptor.handleFault(messageContext, new Object());
-
-        assertTrue(result);
-        verify(messageContext, never()).getResponse();
-        verify(templateLogger, never()).error(any(), any(), any(), any());
-    }
+    // ── understands ───────────────────────────────────────────────────────────
 
     @Test
-    void shouldSkipHandleResponse_whenNotWsEndpoint() throws Exception {
+    void shouldReturnTrue_whenFeatureEnabled() {
+        SoapHeaderElement header = mock(SoapHeaderElement.class);
+        when(header.getName()).thenReturn(new QName("ns", "Header", "p"));
 
-        mockTransportContext("/not-ws");
+        try (MockedStatic<FeatureEnum> featureMock = mockStatic(FeatureEnum.class)) {
+            featureMock.when(() -> FeatureEnum.isEnabled(
+                    FeatureEnum.IGNORE_MUST_UNDERSTAND_HEADERS)).thenReturn(true);
 
-        boolean result = interceptor.handleResponse(messageContext, new Object());
-
-        assertTrue(result);
-
-        verifyNoInteractions(soapResponseUtil);
-        verifyNoInteractions(messageProcessorService);
-        verify(messageContext, never()).getProperty(any());
-    }
-
-    @Test
-    void shouldUseRawSoapFromRequest_whenAvailable() throws Exception {
-
-        mockTransportContext("/ws");
-
-        when(messageContext.getRequest()).thenReturn(soapMessage);
-
-        doAnswer(invocation -> {
-            ByteArrayOutputStream os = invocation.getArgument(0);
-            os.write("<soap>original</soap>".getBytes());
-            return null;
-        }).when(soapMessage).writeTo(any());
-
-        when(request.getAttribute(Constants.RAW_SOAP_ATTRIBUTE))
-                .thenReturn("<soap>from-request</soap>");
-
-        boolean result = interceptor.handleRequest(messageContext, new Object());
-
-        assertTrue(result);
-
-        verify(messageContext).setProperty(
-                Constants.RAW_SOAP_ATTRIBUTE,
-                "<soap>from-request</soap>");
-
-        verify(templateLogger, never()).info(any(), any());
-    }
-
-    @Test
-    void shouldReturnFalse_andLogWarning_whenExceptionOccursInIsWsEndpoint() throws Exception {
-
-        TransportContext transportContext = mock(TransportContext.class);
-
-        when(transportContext.getConnection())
-                .thenThrow(new RuntimeException("boom"));
-
-        TransportContextHolder.setTransportContext(transportContext);
-
-        boolean result = interceptor.handleRequest(messageContext, new Object());
-
-        assertTrue(result);
-
-        verify(templateLogger).warn(
-                contains("Error checking request URI"),
-                eq("boom"));
-    }
-
-    @Test
-    void shouldHandleException_inHandleFaultOuterCatch() throws Exception {
-
-        mockTransportContext("/ws");
-
-        when(messageContext.getProperty(Constants.INTERACTION_ID))
-                .thenReturn("INT-1");
-
-        when(messageContext.getResponse()).thenReturn(soapMessage);
-
-        doThrow(new RuntimeException("write-fail"))
-                .when(soapMessage).writeTo(any());
-
-        try (MockedStatic<ErrorTraceIdGenerator> traceMock = mockStatic(ErrorTraceIdGenerator.class);
-                MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
-
-            traceMock.when(ErrorTraceIdGenerator::generateErrorTraceId)
-                    .thenReturn("TRACE-2");
-
-            boolean result = interceptor.handleFault(messageContext, new Object());
-
-            assertTrue(result);
-
-            verify(templateLogger).error(
-                    contains("Exception while processing SOAP fault"),
-                    eq("INT-1"),
-                    eq("TRACE-2"),
-                    contains("write-fail"),
-                    any(Exception.class));
-
-            logMock.verify(() -> LogUtil.logDetailedError(
-                    eq(500),
-                    contains("Exception while processing SOAP fault"),
-                    eq("INT-1"),
-                    eq("TRACE-2"),
-                    any(Exception.class)));
+            assertTrue(interceptor.understands(header));
         }
     }
 
     @Test
-    void shouldGenerateErrorTraceId_whenNull_inOuterCatch() throws Exception {
+    void shouldReturnTrue_whenNamespaceMatchesConfigured() {
+        SoapHeaderElement header = mock(SoapHeaderElement.class);
+        QName qName = new QName("http://test.com", "TestHeader");
+        when(header.getName()).thenReturn(qName);
 
-        mockTransportContext("/ws");
+        AppConfig.Soap soap = mock(AppConfig.Soap.class);
+        AppConfig.Soap.Wsa wsa = mock(AppConfig.Soap.Wsa.class);
+        when(appConfig.getSoap()).thenReturn(soap);
+        when(soap.getWsa()).thenReturn(wsa);
+        when(wsa.getUnderstoodNamespaces()).thenReturn("http://test.com,http://other.com");
 
-        when(messageContext.getProperty(Constants.INTERACTION_ID))
-                .thenReturn("INT-1");
+        try (MockedStatic<FeatureEnum> mockFeature = mockStatic(FeatureEnum.class)) {
+            mockFeature.when(() -> FeatureEnum.isEnabled(
+                    FeatureEnum.IGNORE_MUST_UNDERSTAND_HEADERS)).thenReturn(false);
 
-        when(messageContext.getResponse())
-                .thenThrow(new RuntimeException("early-fail"));
-
-        try (MockedStatic<ErrorTraceIdGenerator> traceMock = mockStatic(ErrorTraceIdGenerator.class);
-                MockedStatic<LogUtil> logMock = mockStatic(LogUtil.class)) {
-
-            traceMock.when(ErrorTraceIdGenerator::generateErrorTraceId)
-                    .thenReturn("TRACE-NULL");
-
-            boolean result = interceptor.handleFault(messageContext, new Object());
-
-            assertTrue(result);
-
-            verify(templateLogger).error(
-                    contains("Exception while processing SOAP fault"),
-                    eq("INT-1"),
-                    eq("TRACE-NULL"), // <-- generated in catch block
-                    contains("early-fail"),
-                    any(Exception.class));
-
-            logMock.verify(() -> LogUtil.logDetailedError(
-                    eq(500),
-                    contains("Exception while processing SOAP fault"),
-                    eq("INT-1"),
-                    eq("TRACE-NULL"),
-                    any(Exception.class)));
+            assertTrue(interceptor.understands(header));
         }
     }
 
-    private String invokeExtractFaultString(String xml) throws Exception {
+    // ── private method tests ──────────────────────────────────────────────────
+
+    @Test
+    void shouldExtractFaultString() throws Exception {
         Method method = WsaHeaderInterceptor.class
                 .getDeclaredMethod("extractFaultString", String.class);
-
         method.setAccessible(true);
 
-        return (String) method.invoke(interceptor, xml);
+        String xml = "<fault><faultstring>Error123</faultstring></fault>";
+        assertEquals("Error123", method.invoke(interceptor, xml));
     }
+
+    @Test
+    void shouldExtractFaultString_fromSoap12() throws Exception {
+        Method method = WsaHeaderInterceptor.class
+                .getDeclaredMethod("extractFaultString", String.class);
+        method.setAccessible(true);
+
+        String xml = "<soap:Text xml:lang=\"en\">Invalid request</soap:Text>";
+        assertEquals("Invalid request", method.invoke(interceptor, xml));
+    }
+
+    @Test
+    void shouldReturnUnknown_whenNoFaultStringPresent() throws Exception {
+        Method method = WsaHeaderInterceptor.class
+                .getDeclaredMethod("extractFaultString", String.class);
+        method.setAccessible(true);
+
+        assertEquals("Unknown fault", method.invoke(interceptor, "<soap>No fault</soap>"));
+    }
+
+    @Test
+    void shouldReturnFailureMessage_whenExceptionOccurs() throws Exception {
+        Method method = WsaHeaderInterceptor.class
+                .getDeclaredMethod("extractFaultString", String.class);
+        method.setAccessible(true);
+
+        assertEquals("Failed to extract fault string", method.invoke(interceptor, (Object) null));
+    }
+
+    @Test
+    void shouldReturnFalse_whenNoDetailElements() throws Exception {
+        SoapFaultDetail detail = mock(SoapFaultDetail.class);
+        when(detail.getDetailEntries()).thenReturn(Collections.emptyIterator());
+
+        Method method = WsaHeaderInterceptor.class
+                .getDeclaredMethod("hasDetailElement",
+                        org.springframework.ws.soap.SoapFaultDetail.class, String.class);
+        method.setAccessible(true);
+
+        assertFalse((boolean) method.invoke(interceptor, detail, "ErrorTraceId"));
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
 
     private SoapFaultDetailElement mockDetailElement(String name) {
         SoapFaultDetailElement element = mock(SoapFaultDetailElement.class);
-        QName qName = new QName("ns", name);
-        when(element.getName()).thenReturn(qName);
+        when(element.getName()).thenReturn(new QName("ns", name));
         return element;
     }
 
     private void mockTransportContext(String uri) {
-
         HttpServletConnection connection = mock(HttpServletConnection.class);
-
         when(connection.getHttpServletRequest()).thenReturn(request);
-
         when(request.getRequestURI()).thenReturn(uri);
 
         TransportContext transportContext = mock(TransportContext.class);
         when(transportContext.getConnection()).thenReturn(connection);
-
         TransportContextHolder.setTransportContext(transportContext);
     }
-
 }

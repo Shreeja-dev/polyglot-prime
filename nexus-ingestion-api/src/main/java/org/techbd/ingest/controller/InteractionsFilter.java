@@ -210,14 +210,24 @@ public class InteractionsFilter extends OncePerRequestFilter {
                 String mtlsName = portEntry.mtls;
                 String mtlsBucket = System.getenv(Constants.MTLS_BUCKET_NAME);
                 requestToUse.setAttribute(Constants.ACK_CONTENT_TYPE, portEntry.ackContentType);
+                if (portEntry.responseType != null && !portEntry.responseType.isBlank()) {
+                    requestToUse.setAttribute(Constants.RESPONSE_TYPE, portEntry.responseType);
+                    LOG.info("InteractionsFilter: responseType={} for port={} interactionId={}",
+                            portEntry.responseType, requestPort, interactionId);
+                }
                 LOG.info("InteractionsFilter: portEntry.mtls={}, MTLS_BUCKET={}  interactionId: {}",
                         mtlsName, mtlsBucket, interactionId);
 
                 // CRITICAL: Wrap response EARLY in filter chain to force Content-Type override
-                if (portEntry.ackContentType != null && !portEntry.ackContentType.isBlank()) {
+                if (portEntry.ackContentType != null && !portEntry.ackContentType.isBlank()
+                        && !isMtomResponseType(portEntry.responseType)) { // ← skip wrap for MTOM
                     wrappedResponse = new ContentTypeOverrideResponseWrapper(origResponse, portEntry.ackContentType);
-                    LOG.debug("InteractionsFilter: Early wrapping response with forceContentType={}  interactionId: {}",
+                    LOG.debug("InteractionsFilter: wrapping response with forceContentType={} interactionId={}",
                             portEntry.ackContentType, interactionId);
+                } else if (isMtomResponseType(portEntry.responseType)) {
+                    LOG.debug(
+                            "InteractionsFilter: skipping ContentTypeOverrideResponseWrapper for MTOM responseType={} interactionId={}",
+                            portEntry.responseType, interactionId);
                 }
 
                 // Skip mTLS check for internal forwards from SoapForwarderService
@@ -440,6 +450,13 @@ public class InteractionsFilter extends OncePerRequestFilter {
                message.contains("Unable to create envelope") ||
                message.contains("SAAJ0511") ||
                e instanceof IOException;
+    }
+
+    private boolean isMtomResponseType(String responseType) {
+        if (responseType == null || responseType.isBlank())
+            return false;
+        String n = responseType.trim().toLowerCase();
+        return n.equals("mtom") || n.equals("mtom_trubridge");
     }
 
     /**

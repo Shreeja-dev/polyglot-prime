@@ -1,5 +1,6 @@
 package org.techbd.ingest.service;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -19,6 +20,7 @@ import org.techbd.ingest.util.LogUtil;
 import org.techbd.ingest.util.TemplateLogger;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.xml.soap.SOAPConstants;
 
 @Service
@@ -31,14 +33,62 @@ public class SoapForwarderService {
     public SoapForwarderService(AppLogger appLogger) {
         this.LOG = appLogger.getLogger(SoapForwarderService.class);
         this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)   // /ws is HTTP/1.1; upgrade later if needed
-                .connectTimeout(Duration.ofSeconds(30))
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(60))
                 .build();
     }
 
+    // ── Primary entry point (with HttpServletResponse for MTOM direct-write) ──
+
     /**
-     * Primary entry point — always forwards as raw bytes to /ws.
+     * Forward with HttpServletResponse — required for MTOM responses so bytes
+     * are written directly to the socket, bypassing Spring's MediaType parser
+     * which rejects unquoted type parameter values containing '/'.
+     */
+    public ResponseEntity<String> forward(HttpServletRequest request,
+            HttpServletResponse servletResponse,
+            String body, String sourceId, String msgType, String interactionId) {
+        byte[] bytes = (body != null) ? body.getBytes(StandardCharsets.UTF_8) : new byte[0];
+        return forward(request, servletResponse, bytes, sourceId, msgType, interactionId);
+    }
+
+    public ResponseEntity<String> forward(HttpServletRequest request,
+            HttpServletResponse servletResponse,
+            byte[] rawBytes, String sourceId, String msgType, String interactionId) {
+        String errorTraceId = null;
+        String bodySnippet = rawBytes.length > 0
+                ? new String(rawBytes, 0, Math.min(rawBytes.length, 4096), StandardCharsets.UTF_8)
+                : "";
+        try {
+            String contentType = request.getContentType();
+            String targetUrl = getBaseUrl(request, interactionId) + "/ws";
+            LOG.info("SoapForwarderService:: Forwarding raw to targetUrl={} ContentType={} " +
+                    "sourceId={} msgType={} interactionId={}",
+                    targetUrl, contentType, sourceId, msgType, interactionId);
+            return forwardRaw(request, servletResponse, rawBytes, contentType,
+                    targetUrl, sourceId, msgType, interactionId);
+        } catch (Exception e) {
+            errorTraceId = ErrorTraceIdGenerator.generateErrorTraceId();
+            LOG.error("SoapForwarderService:: Forward error. interactionId={} errorTraceId={} error={}",
+                    interactionId, errorTraceId, e.getMessage(), e);
+            LogUtil.logDetailedError(500, "SOAP forwarding error", interactionId, errorTraceId, e);
+            String soapVersion = determineSoapVersion(bodySnippet);
+            return ResponseEntity
+                    .status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR)
+                    .header("Content-Type", soapVersion.equals(SOAPConstants.SOAP_1_2_PROTOCOL)
+                            ? "application/soap+xml; charset=utf-8"
+                            : "text/xml; charset=utf-8")
+                    .body(createSoapFault(e.getMessage(), soapVersion, interactionId, errorTraceId));
+        }
+    }
+
+    // ── Legacy overloads (no HttpServletResponse) — used by XdsRepositoryController ──
+
+    /**
+     * Primary legacy entry point — always forwards as raw bytes to /ws.
      * sourceId and msgType from path are forwarded as headers.
+     * MTOM direct-write is not available in this path (no servlet response);
+     * use the HttpServletResponse overload from DataIngestionController.
      */
     public ResponseEntity<String> forward(HttpServletRequest request, byte[] rawBytes,
             String sourceId, String msgType, String interactionId) {
@@ -49,10 +99,12 @@ public class SoapForwarderService {
         try {
             String contentType = request.getContentType();
             String targetUrl = getBaseUrl(request, interactionId) + "/ws";
-            LOG.info(
-                    "SoapForwarderService:: Forwarding raw to targetUrl={} ContentType={} sourceId={} msgType={} interactionId={}",
+            LOG.info("SoapForwarderService:: Forwarding raw to targetUrl={} ContentType={} " +
+                    "sourceId={} msgType={} interactionId={}",
                     targetUrl, contentType, sourceId, msgType, interactionId);
-            return forwardRaw(request, rawBytes, contentType, targetUrl, sourceId, msgType, interactionId);
+            // null servletResponse — MTOM direct-write not available from this path
+            return forwardRaw(request, null, rawBytes, contentType,
+                    targetUrl, sourceId, msgType, interactionId);
         } catch (Exception e) {
             errorTraceId = ErrorTraceIdGenerator.generateErrorTraceId();
             LOG.error("SoapForwarderService:: Forward error. interactionId={} errorTraceId={} error={}",
@@ -84,24 +136,25 @@ public class SoapForwarderService {
         return forward(request, bytes, sourceId, msgType, interactionId);
     }
 
+    // ── Core forwarding logic ─────────────────────────────────────────────────
+
     /**
      * Pipes rawBytes directly to targetUrl using the shared HttpClient.
-     * No SAAJ parsing — byte stream delivered exactly as received.
-     * Content-Type is reconstructed from bytes if missing or not multipart/related,
-     * so /ws (Spring-WS/SAAJ) can parse the MTOM message correctly.
-     * All original request headers are forwarded except restricted ones.
      *
-     * Key changes from HttpURLConnection:
-     *  - Connection pooling: keep-alive sockets are reused across calls automatically.
-     *  - No manual disconnect() — the HttpClient lifecycle manages connections.
-     *  - Read timeout set per-request via HttpRequest.timeout().
+     * For MTOM multipart responses: if servletResponse is non-null, writes
+     * bytes directly to the socket and returns an empty ResponseEntity, bypassing
+     * Spring's MediaType.parseMediaType() which rejects unquoted type parameter
+     * values containing '/' (e.g. type=application/xop+xml).
+     *
+     * For all other responses: returns a ResponseEntity with the body as a String,
+     * preserving the existing behaviour exactly.
      */
-    private ResponseEntity<String> forwardRaw(HttpServletRequest request, byte[] rawBytes,
-            String contentType, String targetUrl,
-            String sourceId, String msgType,
-            String interactionId) throws Exception {
+    private ResponseEntity<String> forwardRaw(HttpServletRequest request,
+            HttpServletResponse servletResponse,
+            byte[] rawBytes, String contentType, String targetUrl,
+            String sourceId, String msgType, String interactionId) throws Exception {
 
-        // ── Step 1: determine outbound Content-Type ───────────────────────────
+        // ── Step 1: determine outbound Content-Type ───────────────────────
         String outboundContentType = contentType;
         if (isFromXdsRepository(request)
                 && (contentType == null || !contentType.toLowerCase().contains("multipart/related"))) {
@@ -114,10 +167,10 @@ public class SoapForwarderService {
             }
         }
 
-        // ── Step 2: build HttpRequest ─────────────────────────────────────────
+        // ── Step 2: build HttpRequest ─────────────────────────────────────
         HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(targetUrl))
-                .timeout(Duration.ofSeconds(60))
+                .timeout(Duration.ofSeconds(120))
                 .POST(HttpRequest.BodyPublishers.ofByteArray(rawBytes));
 
         // Content-Type (possibly reconstructed)
@@ -138,6 +191,12 @@ public class SoapForwarderService {
         String ackContentType = (String) request.getAttribute(Constants.ACK_CONTENT_TYPE);
         if (ackContentType != null) {
             reqBuilder.header(Constants.ACK_CONTENT_TYPE, ackContentType);
+        }
+        String responseType = (String) request.getAttribute(Constants.RESPONSE_TYPE);
+        if (responseType != null && !responseType.isBlank()) {
+            reqBuilder.header(Constants.RESPONSE_TYPE, responseType);
+            LOG.info("SoapForwarderService:: Forwarding responseType={} interactionId={}",
+                    responseType, interactionId);
         }
         if (sourceId != null && !sourceId.isBlank()) {
             reqBuilder.header(Constants.HEADER_SOURCE_ID, sourceId);
@@ -195,13 +254,66 @@ public class SoapForwarderService {
         LOG.info("SoapForwarderService:: Raw forward response. status={} contentType={} interactionId={}",
                 status, respContentType, interactionId);
 
-        String responseBody = new String(response.body(), StandardCharsets.UTF_8);
+        byte[] responseBodyBytes = response.body();
 
+        // ── Step 4: MTOM direct-write — bypass Spring's MediaType parser ──
+        // Spring's MediaType.parseMediaType() rejects unquoted type parameter
+        // values containing '/' (RFC 7230 token rule). For MTOM responses the
+        // type parameter value is "application/xop+xml" which contains '/'.
+        // Writing directly to the servlet response avoids this entirely.
+        if (respContentType != null
+                && respContentType.toLowerCase().contains("multipart/related")
+                && servletResponse != null) {
+
+            try {
+                servletResponse.setStatus(status);
+                // Use setHeader (not setContentType) to bypass Tomcat's
+                // own MediaType validation in the connector layer.
+                servletResponse.setHeader("Content-Type", respContentType);
+                servletResponse.setContentLengthLong(responseBodyBytes.length);
+                servletResponse.getOutputStream().write(responseBodyBytes);
+                servletResponse.getOutputStream().flush();
+
+                LOG.info("SoapForwarderService:: Wrote MTOM response directly to servlet output. " +
+                        "bytes={} interactionId={}", responseBodyBytes.length, interactionId);
+
+                // Return empty ResponseEntity — response already committed.
+                // Spring will not attempt further writes.
+                return ResponseEntity.status(status).build();
+
+            } catch (IOException e) {
+                if (isBrokenPipe(e)) {
+                    LOG.warn("SoapForwarderService:: Client disconnected during MTOM write " +
+                            "(caller timed out). interactionId={}", interactionId);
+                    return ResponseEntity.status(status).build();
+                }
+                throw e;
+            }
+        }
+
+        // ── Step 5: non-MTOM — existing path unchanged ────────────────────
+        String responseBody = new String(responseBodyBytes, StandardCharsets.UTF_8);
         return ResponseEntity.status(status)
                 .header("Content-Type", respContentType != null
                         ? respContentType
                         : "text/xml; charset=utf-8")
                 .body(responseBody);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private boolean isBrokenPipe(Throwable e) {
+        while (e != null) {
+            String msg = e.getMessage();
+            String cls = e.getClass().getName();
+            if ((msg != null && (msg.contains("Broken pipe")
+                    || msg.contains("Connection reset")))
+                    || cls.contains("ClientAbortException")) {
+                return true;
+            }
+            e = e.getCause();
+        }
+        return false;
     }
 
     private boolean isFromXdsRepository(HttpServletRequest request) {

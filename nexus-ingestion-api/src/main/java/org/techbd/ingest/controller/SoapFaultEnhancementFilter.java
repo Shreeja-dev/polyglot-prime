@@ -78,6 +78,17 @@ public class SoapFaultEnhancementFilter extends OncePerRequestFilter {
             return;
         }
 
+        // ── MTOM bypass ───────────────────────────────────────────────────────
+        // MTOM strategies write directly to the response output stream inside
+        // WsaHeaderInterceptor.handleResponse(). Wrapping the response in
+        // ResponseWrapper would cause the bytes to be buffered and then written
+        // a second time by the filter, truncating or doubling the body.
+        // Skip capture entirely when responseType signals MTOM output.
+        String responseType = resolveResponseType(request);
+        if (isMtomResponseType(responseType)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         // Wrap request to capture body
         CachedBodyHttpServletRequest cachedRequest = new CachedBodyHttpServletRequest(request);
         java.util.Map<String, String> capturedHeaders = extractHeaders(request);
@@ -121,6 +132,30 @@ public class SoapFaultEnhancementFilter extends OncePerRequestFilter {
             byte[] responseBytes = responseWrapper.getCapturedBytes();
             response.getOutputStream().write(responseBytes);
         }
+    }
+
+    /**
+     * Reads responseType from request attribute (set by InteractionsFilter)
+     * or from forwarded header (set by SoapForwarderService).
+     */
+    private String resolveResponseType(HttpServletRequest request) {
+        String rt = (String) request.getAttribute(Constants.RESPONSE_TYPE);
+        if (rt == null || rt.isBlank()) {
+            rt = request.getHeader(Constants.RESPONSE_TYPE);
+        }
+        return rt;
+    }
+
+    /**
+     * Returns true for any responseType that causes the MTOM strategy to
+     * write directly to the servlet output stream.
+     */
+    private boolean isMtomResponseType(String responseType) {
+        if (responseType == null || responseType.isBlank()) {
+            return false;
+        }
+        String normalized = responseType.trim().toLowerCase();
+        return normalized.equals("mtom") || normalized.equals("mtom_trubridge");
     }
 
     /**
