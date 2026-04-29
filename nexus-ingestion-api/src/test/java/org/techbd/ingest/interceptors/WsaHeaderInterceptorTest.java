@@ -158,12 +158,12 @@ class WsaHeaderInterceptorTest {
         when(messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE)).thenReturn("<req/>");
 
         SoapResponseStrategy defaultStrategy = mock(DefaultSoapResponseStrategy.class);
-        when(strategyFactory.resolve(isNull())).thenReturn(defaultStrategy);
+        when(strategyFactory.resolve(isNull(), eq("INT-1"), eq("/ws"), eq(false))).thenReturn(defaultStrategy);
 
         boolean result = interceptor.handleResponse(messageContext, new Object());
 
         assertTrue(result);
-        verify(strategyFactory).resolve(isNull());
+        verify(strategyFactory).resolve(isNull(), eq("INT-1"), eq("/ws"),eq(false));
         verify(defaultStrategy).writeResponse(eq("INT-1"), any(), any(), any(), any());
         verify(messageProcessorService).processMessage(any(), eq("<req/>"), any());
     }
@@ -181,19 +181,26 @@ class WsaHeaderInterceptorTest {
         when(messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE)).thenReturn("<req/>");
 
         SoapResponseStrategy mtomStrategy = mock(SoapResponseStrategy.class);
-        when(strategyFactory.resolve("mtom")).thenReturn(mtomStrategy);
+        when(strategyFactory.resolve("mtom", "INT-MTOM", "/ws", false)).thenReturn(mtomStrategy);
+        when(mtomStrategy.writeResponse(any(), any(), any(), any(), any()))
+                .thenReturn("<soap>response</soap>".getBytes());
 
         // messageContext.getResponse() used to drain Spring-WS buffer
         when(messageContext.getResponse()).thenReturn(soapMessage);
-        doAnswer(invocation -> null).when(soapMessage).writeTo(any(OutputStream.class));
+        doAnswer(invocation -> {
+            OutputStream os = invocation.getArgument(0);
+            os.write("<soap>response</soap>".getBytes());
+            return null;
+        }).when(soapMessage).writeTo(any(OutputStream.class));
 
         boolean result = interceptor.handleResponse(messageContext, new Object());
 
         assertTrue(result);
         verify(mtomStrategy).writeResponse(eq("INT-MTOM"), any(), any(), any(), any());
-        // Verify Spring-WS secondary write was drained to no-op stream
-        // Note: writeTo is called twice - once for MTOM suppression, once for soapMessageToString
-        verify(soapMessage, times(2)).writeTo(any(OutputStream.class));
+        // writeTo is called once: for MTOM suppression (draining Spring-WS buffer).
+        // soapMessageToString is NOT called for MTOM because ackPayload uses
+        // actualResponseBytes.
+        verify(soapMessage, times(1)).writeTo(any(OutputStream.class));
     }
 
     @Test
@@ -209,7 +216,9 @@ class WsaHeaderInterceptorTest {
         when(messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE)).thenReturn("<req/>");
 
         SoapResponseStrategy tbStrategy = mock(SoapResponseStrategy.class);
-        when(strategyFactory.resolve("mtom_trubridge")).thenReturn(tbStrategy);
+        when(strategyFactory.resolve("mtom_trubridge", "INT-TB", "/ws", false)).thenReturn(tbStrategy);
+        when(tbStrategy.writeResponse(any(), any(), any(), any(), any()))
+                .thenReturn("<soap>response</soap>".getBytes());
 
         when(messageContext.getResponse()).thenReturn(soapMessage);
         doAnswer(invocation -> null).when(soapMessage).writeTo(any(OutputStream.class));
@@ -218,8 +227,8 @@ class WsaHeaderInterceptorTest {
 
         assertTrue(result);
         verify(tbStrategy).writeResponse(eq("INT-TB"), any(), any(), any(), any());
-        // Note: writeTo is called twice - once for MTOM suppression, once for soapMessageToString
-        verify(soapMessage, times(2)).writeTo(any(OutputStream.class));
+        // writeTo is called once: for MTOM suppression only.
+        verify(soapMessage, times(1)).writeTo(any(OutputStream.class));
     }
 
     @Test
@@ -236,16 +245,24 @@ class WsaHeaderInterceptorTest {
         when(messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE)).thenReturn("<req/>");
 
         SoapResponseStrategy mtomStrategy = mock(SoapResponseStrategy.class);
-        when(strategyFactory.resolve("mtom")).thenReturn(mtomStrategy);
+        when(strategyFactory.resolve("mtom", "INT-H", "/ws", false)).thenReturn(mtomStrategy);
+        // Stub writeResponse to avoid NPE when building ackPayload
+        when(mtomStrategy.writeResponse(any(), any(), any(), any(), any()))
+                .thenReturn("<soap>response</soap>".getBytes());
 
         when(messageContext.getResponse()).thenReturn(soapMessage);
-        doAnswer(invocation -> null).when(soapMessage).writeTo(any(OutputStream.class));
+        doAnswer(invocation -> {
+            OutputStream os = invocation.getArgument(0);
+            os.write("<soap>response</soap>".getBytes());
+            return null;
+        }).when(soapMessage).writeTo(any(OutputStream.class));
 
         boolean result = interceptor.handleResponse(messageContext, new Object());
 
         assertTrue(result);
-        verify(strategyFactory).resolve("mtom");
+        verify(strategyFactory).resolve("mtom", "INT-H", "/ws", false);
     }
+
 
     @Test
     void shouldSkipHandleResponse_whenNotWsEndpoint() throws Exception {

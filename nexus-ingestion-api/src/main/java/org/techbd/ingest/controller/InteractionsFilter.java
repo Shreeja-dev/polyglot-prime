@@ -145,7 +145,7 @@ public class InteractionsFilter extends OncePerRequestFilter {
                                 interactionId, e);
                     }
                 }
-
+                requestToUse.setAttribute(Constants.ORIGINAL_REQUEST_URI, requestToUse.getRequestURI());
                 requestToUse.setAttribute(Constants.INTERACTION_ID, interactionId);
                 LOG.info("Incoming Request - interactionId={}", interactionId);
 

@@ -42,22 +42,30 @@ public class SoapResponseStrategyFactory {
      * Returns the strategy matching {@code responseType} (case-insensitive).
      * Falls back to {@link DefaultSoapResponseStrategy} for any unrecognised value.
      */
-    public SoapResponseStrategy resolve(String responseType) {
+    public SoapResponseStrategy resolve(String responseType,String interactionId,String requestUri,boolean isPixRequest) {
+        if (isPixRequest) {
+            log.info("[SOAP_RESPONSE_STRATEGY]:: PIX request — using default strategy for interactionId={}", interactionId);
+            return defaultStrategy;
+        }
+        if(requestUri != null && requestUri.equalsIgnoreCase("/xds/XDSbRepositoryWS")) {
+           log.info("[SOAP_RESPONSE_STRATEGY]:: XDSbRepositoryWS — using default strategy for interactionId={}", interactionId);
+            return defaultStrategy;
+        }
         if (responseType == null || responseType.isBlank()) {
-            log.info("SoapResponseStrategyFactory:: no responseType — using default strategy");
+            log.info("[SOAP_RESPONSE_STRATEGY]:: no responseType — using default strategy for interactionId={}", interactionId);
             return defaultStrategy;
         }
         return switch (responseType.trim().toLowerCase()) {
             case MTOM           -> {
-                log.info("SoapResponseStrategyFactory:: resolved MtomSoapResponseStrategy");
+                log.info("[SOAP_RESPONSE_STRATEGY]:: resolved MtomSoapResponseStrategy for interactionId={}", interactionId);
                 yield mtomStrategy;
             }
             case MTOM_TRUBRIDGE -> {
-                log.info("SoapResponseStrategyFactory:: resolved TruBridgeMtomSoapResponseStrategy");
+                log.info("[SOAP_RESPONSE_STRATEGY]:: resolved TruBridgeMtomSoapResponseStrategy for interactionId={}", interactionId);
                 yield truBridgeStrategy;
             }
             default -> {
-                log.warn("SoapResponseStrategyFactory:: unknown responseType='{}' — falling back to default", responseType);
+                log.warn("[SOAP_RESPONSE_STRATEGY]:: unknown responseType='{}' — falling back to default for interactionId={}", responseType, interactionId);
                 yield defaultStrategy;
             }
         };

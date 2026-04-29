@@ -58,4 +58,5 @@ public class Constants {
     public static final String NO_ACK_EXPECTED = "NO_ACK_EXPECTED";
     public static final String ORIGINAL_REQUEST_URL = "x-techbd-original-uri";
     public static final String RESPONSE_TYPE = "RESPONSE_TYPE";
+    public static final String ORIGINAL_REQUEST_URI="ORIGINAL_REQUEST_URI";
 }

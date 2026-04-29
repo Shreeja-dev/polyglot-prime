@@ -192,6 +192,11 @@ public class SoapForwarderService {
         if (ackContentType != null) {
             reqBuilder.header(Constants.ACK_CONTENT_TYPE, ackContentType);
         }
+
+        String originalRequestUri = (String) request.getAttribute(Constants.ORIGINAL_REQUEST_URI);
+        if (originalRequestUri != null) {
+            reqBuilder.header(Constants.ORIGINAL_REQUEST_URI, originalRequestUri);
+        }
         String responseType = (String) request.getAttribute(Constants.RESPONSE_TYPE);
         if (responseType != null && !responseType.isBlank()) {
             reqBuilder.header(Constants.RESPONSE_TYPE, responseType);
@@ -267,28 +272,38 @@ public class SoapForwarderService {
 
             try {
                 servletResponse.setStatus(status);
-                // Use setHeader (not setContentType) to bypass Tomcat's
-                // own MediaType validation in the connector layer.
                 servletResponse.setHeader("Content-Type", respContentType);
                 servletResponse.setContentLengthLong(responseBodyBytes.length);
                 servletResponse.getOutputStream().write(responseBodyBytes);
                 servletResponse.getOutputStream().flush();
+                servletResponse.flushBuffer();
 
                 LOG.info("SoapForwarderService:: Wrote MTOM response directly to servlet output. " +
                         "bytes={} interactionId={}", responseBodyBytes.length, interactionId);
 
-                // Return empty ResponseEntity — response already committed.
-                // Spring will not attempt further writes.
-                return ResponseEntity.status(status).build();
+                // Return a ResponseEntity with a Spring-parseable Content-Type sentinel.
+                // The response is already committed — Spring cannot write any body.
+                // We set Content-Type here only so Spring's HttpEntityMethodProcessor
+                // does not fall back to reading the servlet response Content-Type
+                // (which contains unquoted 'type=application/xop+xml' and causes
+                // InvalidMediaTypeException in MediaType.parseMediaType()).
+                // "application/octet-stream" is valid, parseable, and never reaches
+                // the client because the response is already committed.
+                return ResponseEntity.status(status)
+                        .header("Content-Type", "application/octet-stream")
+                        .build();
 
             } catch (IOException e) {
                 if (isBrokenPipe(e)) {
-                    LOG.warn("SoapForwarderService:: Client disconnected during MTOM write " +
-                            "(caller timed out). interactionId={}", interactionId);
-                    return ResponseEntity.status(status).build();
+                    LOG.warn("SoapForwarderService:: Client disconnected during MTOM write. interactionId={}",
+                            interactionId);
+                    return ResponseEntity.status(status)
+                            .header("Content-Type", "application/octet-stream")
+                            .build();
                 }
                 throw e;
             }
+
         }
 
         // ── Step 5: non-MTOM — existing path unchanged ────────────────────

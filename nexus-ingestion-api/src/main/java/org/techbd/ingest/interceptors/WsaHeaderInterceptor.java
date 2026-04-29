@@ -121,9 +121,13 @@ public class WsaHeaderInterceptor implements EndpointInterceptor, SoapEndpointIn
         if (responseType == null || responseType.isBlank()) {
             responseType = httpRequest.getHeader(Constants.RESPONSE_TYPE);
         }
-        SoapResponseStrategy strategy = strategyFactory.resolve(responseType);
-
+        String originalStringRequestUri = (String) httpRequest.getHeader(Constants.ORIGINAL_REQUEST_URI);
+        if (originalStringRequestUri == null || originalStringRequestUri.isBlank()) {
+            originalStringRequestUri = httpRequest.getRequestURI();
+        }
         RequestContext context = (RequestContext) httpRequest.getAttribute(Constants.REQUEST_CONTEXT);
+        boolean isPixRequest = null != context ?context.isPixRequest() : false;
+        SoapResponseStrategy strategy = strategyFactory.resolve(responseType,interactionId,originalStringRequestUri,isPixRequest);
         String rawSoapMessage = (String) messageContext.getProperty(Constants.RAW_SOAP_ATTRIBUTE);
 
         messageContext.setProperty(Constants.INTERACTION_ID, interactionId);

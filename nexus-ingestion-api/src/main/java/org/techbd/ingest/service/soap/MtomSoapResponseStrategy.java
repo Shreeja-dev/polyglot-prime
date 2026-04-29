@@ -109,7 +109,7 @@ public class MtomSoapResponseStrategy implements SoapResponseStrategy {
                                       String soapMediaType) {
         return "--" + boundary + "\r\n"
                 + "Content-Type: application/xop+xml; charset=UTF-8; type=\"" + soapMediaType + "\"\r\n"
-                + "Content-Transfer-Encoding: 8bit\r\n"
+                + "Content-Transfer-Encoding: binary\r\n"
                 + "Content-ID: " + startCid + "\r\n"
                 + "\r\n"
                 + soapXml + "\r\n"

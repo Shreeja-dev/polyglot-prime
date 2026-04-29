@@ -222,8 +222,10 @@ class TruBridgeMtomSoapResponseStrategyTest {
 
         when(response.getOutputStream()).thenThrow(new IOException("Broken pipe"));
 
-        assertDoesNotThrow(() ->
+        // The strategy logs a warning and throws RuntimeException with "Client disconnected" message
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
                 strategy.writeResponse("INT-TB", messageContext, request, response, soapMessage));
+        assertTrue(ex.getMessage().contains("Client disconnected"));
     }
 
     @Test
@@ -239,8 +241,10 @@ class TruBridgeMtomSoapResponseStrategyTest {
         };
         when(response.getOutputStream()).thenThrow(clientAbort);
 
-        assertDoesNotThrow(() ->
+        // The strategy logs a warning and throws RuntimeException with "Client disconnected" message
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
                 strategy.writeResponse("INT-TB", messageContext, request, response, soapMessage));
+        assertTrue(ex.getMessage().contains("Client disconnected"));
     }
 
     @Test

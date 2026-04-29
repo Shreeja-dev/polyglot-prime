@@ -209,8 +209,10 @@ class MtomSoapResponseStrategyTest {
 
         when(response.getOutputStream()).thenThrow(new IOException("Broken pipe"));
 
-        assertDoesNotThrow(() ->
+        // The strategy logs a warning and throws RuntimeException with "Client disconnected" message
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
                 strategy.writeResponse("INT-1", messageContext, request, response, soapMessage));
+        assertTrue(ex.getMessage().contains("Client disconnected"));
     }
 
     @Test
