@@ -281,7 +281,9 @@ public class SoapForwarderService {
                 LOG.info("SoapForwarderService:: Wrote MTOM response directly to servlet output. " +
                         "bytes={} interactionId={}", responseBodyBytes.length, interactionId);
 
-                // Return a ResponseEntity with a Spring-parseable Content-Type sentinel.
+                // fix for org.springframework.http.InvalidMediaTypeException: Invalid mime type
+                //  \""multipart/related; boundary=MIMEBoundary_90d0920f01da467d8d4e54c4c3aedc5f;
+                // Return a ResponseEntity with a Spring-parseable Content-Type 
                 // The response is already committed — Spring cannot write any body.
                 // We set Content-Type here only so Spring's HttpEntityMethodProcessor
                 // does not fall back to reading the servlet response Content-Type
