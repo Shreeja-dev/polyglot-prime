@@ -152,7 +152,6 @@ class NettyTcpServerITCase extends BaseIntegrationTest {
      * so the HAProxy decoder is installed in the Netty pipeline.
      */
     @Test
-    @Disabled
     @DisplayName("DIAG: SPRING_PROFILES_ACTIVE must be 'test'")
     void shouldHaveTestProfileActive() {
         assertThat(System.getProperty("SPRING_PROFILES_ACTIVE"))
@@ -164,7 +163,6 @@ class NettyTcpServerITCase extends BaseIntegrationTest {
      * DIAG: Verifies that the TCP dispatcher port is reachable.
      */
     @Test
-    @Disabled
     @DisplayName("DIAG: TCP server is listening on configured dispatcher port")
     void shouldAcceptTcpConnections() {
         try (Socket socket = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
