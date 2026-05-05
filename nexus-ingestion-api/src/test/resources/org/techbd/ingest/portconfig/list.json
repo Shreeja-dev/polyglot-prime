@@ -13,6 +13,32 @@
         "metadataDir": "/outbound",
         "ackContentType": "application/soap+xml"
     },
+    {
+        "port": 6555,
+        "responseType": "tcp",
+        "protocol": "TCP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "queue": "test.fifo",
+         "keepAliveTimeout": 20
+    },
+     {
+        "port": 6556,
+        "responseType": "tcp",
+        "protocol": "TCP",
+        "route": "/hold",
+        "dataDir": "/holdtest",
+        "metadataDir": "/holdtest",
+        "queue": "test.fifo"
+    },
+     {
+        "port": 6557,
+        "responseType": "tcp",
+        "protocol": "TCP",
+        "dataDir": "/test",
+        "metadataDir": "/test"
+    },
        {
         "port": 5555,
         "responseType": "outbound",
@@ -120,7 +146,7 @@
     },
     {
         "port": 9001,
-        "responseType": "",
+        "responseType": "mtom",
         "protocol": "HTTP",
         "whitelistIps": [
             "0.0.0.0/0"
@@ -130,7 +156,7 @@
     },
     {
         "port": 9002,
-        "responseType": "",
+        "responseType": "mtom_trubridge",
         "protocol": "HTTP",
         "whitelistIps": [
             "0.0.0.0/0"

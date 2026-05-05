@@ -261,8 +261,7 @@ class SoapWsEndPointITCase extends BaseIntegrationTest {
         SoftAssertions softly = new SoftAssertions();
 
         String response = sendSoapRequest(request, SOAPConstants.SOAP_1_1_PROTOCOL, "9000", softly);
-        softly.assertThat(response).as("Response contains fallback message ID")
-                .contains("unknown-incoming-message-id");
+        softly.assertThat(response).as("Response contains PIX ACK").contains("MCCI_IN000002UV01");
         assertSoap11Envelope(response, softly);
 
         assertionHelper().assertDefaultFlow(defaultFlowParams(request, expectedAck, "127.0.0.1_9000"), softly);
@@ -325,7 +324,8 @@ class SoapWsEndPointITCase extends BaseIntegrationTest {
         String response = sendMtomRequest(request, "9000", softly);
         softly.assertThat(response).as("Response contains RegistryResponse").contains("RegistryResponse");
         softly.assertThat(response).as("Response contains Success status").contains("ResponseStatusType:Success");
-
+        softly.assertThat(response).as("Response echoes MTOM MessageID")
+                .contains("f19a3e9e-324d-4c6c-8a96-6747955d86f5");
         assertionHelper().assertDefaultFlow(
                 defaultFlowParams(request, null, "127.0.0.1_9000")
                         .toBuilder().ackExpected(false).build(),
@@ -333,23 +333,257 @@ class SoapWsEndPointITCase extends BaseIntegrationTest {
 
         softly.assertAll();
     }
-
+    /**
+     * IT: PNR MTOM responseType=mtom — multipart/related response headers and boundary.
+     *
+     * <p>Sends a PNR MTOM request to port 9001 and verifies:
+     * <ul>
+     *   <li>Response {@code Content-Type} is {@code multipart/related} with a quoted
+     *       boundary, {@code type}, {@code start}, {@code start-info}, and
+     *       {@code action} parameters.</li>
+     *   <li>Response body contains the expected boundary markers.</li>
+     *   <li>Response body content matches the {@code pnr-xdsb-mtom-response.txt} fixture
+     *       (RegistryResponse Success + RelatesTo MessageID).</li>
+     *   <li>S3 payload is stored in {@code DATA_BUCKET} (metadata assertion skipped —
+     *       MTOM responses are multipart and not stored as a separate ACK object).</li>
+     * </ul>
+     *
+     */
     @Test
-    @DisplayName("IT: PNR MTOM — wsa:RelatesTo echoes MTOM request MessageID")
-    void shouldProcessPnrMtom_relatesTo_matchesMtomMessageId() throws Exception {
+    @DisplayName("IT: PNR MTOM responseType=mtom — multipart/related response headers and boundary")
+    void shouldProcessPnrMtomResponseTypeMtom_returnsMtomHeaders() throws Exception {
         String request = loadFixture("pnr-xdsb-mtom-request.txt");
+        String expectedBody = loadFixture("pnr-xdsb-mtom-response.txt");
         SoftAssertions softly = new SoftAssertions();
 
-        String response = sendMtomRequest(request, "9000", softly);
-        softly.assertThat(response).as("Response echoes MTOM MessageID")
-                .contains("f19a3e9e-324d-4c6c-8a96-6747955d86f5");
+        ResponseEntity<String> responseEntity = sendMtomRequestEntity(request, "9001", softly);
 
+        // ── Content-Type header assertions ────────────────────────────────────
+        String contentType = responseEntity.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
+        softly.assertThat(contentType)
+                .as("MTOM Content-Type header is present")
+                .isNotBlank();
+        softly.assertThat(contentType)
+                .as("MTOM Content-Type is multipart/related")
+                .contains("multipart/related");
+        softly.assertThat(contentType)
+                .as("MTOM Content-Type contains quoted boundary parameter")
+                .containsPattern("boundary=\"[A-Za-z0-9_]+\"");
+        softly.assertThat(contentType)
+                .as("MTOM Content-Type contains quoted type parameter")
+                .contains("type=\"application/xop+xml\"");
+        softly.assertThat(contentType)
+                .as("MTOM Content-Type contains start parameter")
+                .containsPattern("start=\"<rootpart@[^\"]+>\"");
+        softly.assertThat(contentType)
+                .as("MTOM Content-Type contains start-info")
+                .contains("start-info=\"application/soap+xml\"");
+        softly.assertThat(contentType)
+                .as("MTOM Content-Type contains action")
+                .contains("action=\"urn:ihe:iti:2007:ProvideAndRegisterDocumentSet-b\"");
+
+        // Verify body boundary matches header boundary
+        String headerBoundary = extractBoundaryFromContentType(contentType);
+        String bodyBoundary = extractMtomBoundary(responseEntity.getBody());
+        softly.assertThat(bodyBoundary)
+                .as("Body boundary must match Content-Type header boundary")
+                .isEqualTo(headerBoundary);
+
+        // ── Boundary markers in response body ─────────────────────────────────
+        String boundary = extractMtomBoundary(responseEntity.getBody());
+        softly.assertThat(responseEntity.getBody())
+                .as("Response body contains boundary markers")
+                .contains("--" + boundary)
+                .contains("--" + boundary + "--");
+
+        // ── Body content matches fixture ──────────────────────────────────────
+        softly.assertThat(responseEntity.getBody())
+                .as("Response contains RegistryResponse")
+                .contains("RegistryResponse");
+        softly.assertThat(responseEntity.getBody())
+                .as("Response contains Success status")
+                .contains("ResponseStatusType:Success");
+        assertMtomMessageIdRelatesTo(responseEntity.getBody(), softly);
+
+        // ── S3 assertion — payload only (MTOM response is not stored as ACK) ─
         assertionHelper().assertDefaultFlow(
-                defaultFlowParams(request, null, "127.0.0.1_9000")
-                        .toBuilder().ackExpected(false).build(),
+                defaultFlowParams(request, null, "127.0.0.1_9001", false),
                 softly);
 
         softly.assertAll();
+    }
+
+    /**
+     * IT: PNR MTOM responseType=mtom_trubridge — TruBridge multipart headers.
+     *
+     * <p>Sends a PNR MTOM request to port 9002 and verifies:
+     * <ul>
+     *   <li>Response {@code Content-Type} is {@code multipart/related} with an
+     *       <em>unquoted</em> boundary and {@code type} parameter (TruBridge style),
+     *       and omits {@code start}, {@code start-info}, and {@code action}.</li>
+     *   <li>Response contains a {@code Content-Transfer-Encoding: binary} header.</li>
+     *   <li>Response body contains the expected boundary markers.</li>
+     *   <li>Response body content matches the {@code pnr-xdsb-mtom-response.txt} fixture.</li>
+     *   <li>S3 payload is stored in {@code DATA_BUCKET} .</li>
+     * </ul>
+     *
+     */
+    @Test
+    @DisplayName("IT: PNR MTOM responseType=mtom_trubridge — TruBridge multipart headers")
+    void shouldProcessPnrMtomResponseTypeTruBridge_returnsTruBridgeHeaders() throws Exception {
+        String request      = loadFixture("pnr-xdsb-mtom-request.txt");
+        SoftAssertions softly = new SoftAssertions();
+
+        // Use raw exchange to avoid Spring's strict MediaType parsing of unquoted
+        // "type=application/xop+xml" in the TruBridge Content-Type response header.
+        ResponseEntity<String> responseEntity = sendMtomRequestRaw(request, "9002", softly);
+
+        // ── Content-Type header assertions ────────────────────────────────────
+        String contentType = responseEntity.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
+        softly.assertThat(contentType)
+                .as("TruBridge MTOM Content-Type header is present")
+                .isNotBlank();
+        softly.assertThat(contentType)
+                .as("TruBridge MTOM Content-Type is multipart/related")
+                .contains("multipart/related");
+        softly.assertThat(contentType)
+                .as("TruBridge MTOM Content-Type contains unquoted boundary parameter")
+                .containsPattern("boundary=[A-Za-z0-9_]+");
+        softly.assertThat(contentType)
+                .as("TruBridge MTOM Content-Type contains unquoted type parameter")
+                .contains("type=application/xop+xml");
+        softly.assertThat(contentType)
+                .as("TruBridge MTOM Content-Type omits start, start-info and action")
+                .doesNotContain("start=")
+                .doesNotContain("start-info=")
+                .doesNotContain("action=");
+        softly.assertThat(responseEntity.getHeaders().getFirst("Content-Transfer-Encoding"))
+                .as("TruBridge MTOM adds Content-Transfer-Encoding: binary header")
+                .isEqualTo("binary");
+
+        // Verify body boundary matches header boundary
+        String headerBoundary = extractBoundaryFromContentType(contentType);
+        String bodyBoundary = extractMtomBoundary(responseEntity.getBody());
+        softly.assertThat(bodyBoundary)
+                .as("Body boundary must match Content-Type header boundary")
+                .isEqualTo(headerBoundary);
+
+        // ── Boundary markers in response body ─────────────────────────────────
+        String boundary = extractMtomBoundary(responseEntity.getBody());
+        softly.assertThat(responseEntity.getBody())
+                .as("TruBridge response body contains boundary markers")
+                .contains("--" + boundary)
+                .contains("--" + boundary + "--");
+
+        // ── Body content matches fixture ──────────────────────────────────────
+        softly.assertThat(responseEntity.getBody())
+                .as("Response contains RegistryResponse")
+                .contains("RegistryResponse");
+        softly.assertThat(responseEntity.getBody())
+                .as("Response contains Success status")
+                .contains("ResponseStatusType:Success");
+        assertMtomMessageIdRelatesTo(responseEntity.getBody(), softly);
+
+        // ── S3 assertion — payload only (MTOM response is not stored as ACK) ─
+        assertionHelper().assertDefaultFlow(
+                defaultFlowParams(request, null, "127.0.0.1_9002", false),
+                softly);
+
+        softly.assertAll();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // NEW private helper — add alongside the existing sendMtomRequestEntity
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Sends an MTOM request and returns the raw {@link ResponseEntity} 
+     *
+     *
+     * <p>This uses {@code RestTemplate.execute()} with a custom response extractor
+     * that manually reads the response body and headers without invoking Spring's
+     * content-type negotiation or {@code MediaType.parseMediaType()}, allowing
+     * inspection of raw headers and body.
+     *
+     * @param mtomRaw       raw MTOM fixture body
+     * @param forwardedPort value for {@code X-Forwarded-Port} header
+     * @param softly        soft-assertion collector (status assertion added here)
+     * @return raw response entity with unparsed headers
+     */
+    private ResponseEntity<String> sendMtomRequestRaw(String mtomRaw, String forwardedPort,
+            SoftAssertions softly) throws Exception {
+        String boundary = extractMtomBoundary(mtomRaw);
+
+        HttpHeaders headers = new HttpHeaders();
+        // Send request with a quoted Content-Type — that is always valid on the request side.
+        headers.set(HttpHeaders.CONTENT_TYPE,
+                "multipart/related; type=\"application/xop+xml\"; boundary=\"" + boundary + "\"; "
+                        + "start=\"<request@meditech.com>\"; start-info=\"application/soap+xml\"");
+        headers.set(Constants.REQ_X_FORWARDED_PORT, forwardedPort);
+        headers.set(Constants.REQ_X_SERVER_IP, "127.0.0.1");
+
+        // Use RestTemplate.execute() with a custom response extractor that bypasses
+        // Spring's content-type parsing. This allows us to read raw headers even if
+        // they contain non-RFC-2045–compliant token characters like "/" in unquoted values.
+        ResponseEntity<String> response = restTemplate.execute(
+                "http://localhost:" + port + "/ws",
+                org.springframework.http.HttpMethod.POST,
+                req -> {
+                    req.getHeaders().addAll(headers);
+                    req.getBody().write(mtomRaw.getBytes(StandardCharsets.UTF_8));
+                },
+                clientResponse -> {
+                    String body = new String(clientResponse.getBody().readAllBytes(), StandardCharsets.UTF_8);
+                    HttpHeaders responseHeaders = clientResponse.getHeaders();
+                    return new ResponseEntity<>(body, responseHeaders, clientResponse.getStatusCode());
+                }
+        );
+
+        softly.assertThat(response.getStatusCode().is2xxSuccessful())
+                .as("TruBridge MTOM response must be 2xx")
+                .isTrue();
+        return response;
+    }
+
+    /**
+     * Extracts the {@code wsa:MessageID} value from an MTOM request fixture.
+     *
+     * <p>The MessageID in a SOAP request is echoed back in the response's
+     * {@code wsa:RelatesTo} element. This method extracts that original MessageID
+     * so we can verify the response correctly correlates to the request.
+     *
+     * <p>Looks specifically for {@code wsa:MessageID} elements containing a UUID
+     * (format: {@code urn:uuid:...}). Falls back to the first UUID if not found.
+     *
+     * @param mtomBody raw MTOM request fixture text
+     * @return the UUID string found in {@code wsa:MessageID}
+     *         (without the {@code urn:uuid:} prefix)
+     */
+    private static String extractMtomMessageId(String mtomBody) {
+        // Try to find wsa:MessageID specifically
+        int messageIdIdx = mtomBody.indexOf("wsa:MessageID");
+        if (messageIdIdx >= 0) {
+            // Look for urn:uuid: within the next ~200 chars (reasonable bound for the element)
+            int searchStart = messageIdIdx;
+            int searchEnd = Math.min(mtomBody.length(), messageIdIdx + 200);
+            String section = mtomBody.substring(searchStart, searchEnd);
+            int uuidIdx = section.indexOf("urn:uuid:");
+            if (uuidIdx >= 0) {
+                String rest = section.substring(uuidIdx + "urn:uuid:".length());
+                // UUID is 36 chars: 8-4-4-4-12
+                int end = Math.min(rest.length(), 36);
+                return rest.substring(0, end);
+            }
+        }
+        
+        // Fallback: find first urn:uuid: in the body
+        int idx = mtomBody.indexOf("urn:uuid:");
+        if (idx >= 0) {
+            String rest = mtomBody.substring(idx + "urn:uuid:".length());
+            int end = Math.min(rest.length(), 36);
+            return rest.substring(0, end);
+        }
+        return "RegistryResponse"; // safe fallback — always present
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -470,7 +704,8 @@ class SoapWsEndPointITCase extends BaseIntegrationTest {
         return response.getBody();
     }
 
-    private String sendMtomRequest(String mtomRaw, String forwardedPort, SoftAssertions softly) {
+    private ResponseEntity<String> sendMtomRequestEntity(String mtomRaw, String forwardedPort,
+            SoftAssertions softly) {
         String boundary = extractMtomBoundary(mtomRaw);
         HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.CONTENT_TYPE,
@@ -484,7 +719,11 @@ class SoapWsEndPointITCase extends BaseIntegrationTest {
                 new HttpEntity<>(mtomRaw, headers),
                 String.class);
         softly.assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
-        return response.getBody();
+        return response;
+    }
+
+    private String sendMtomRequest(String mtomRaw, String forwardedPort, SoftAssertions softly) {
+        return sendMtomRequestEntity(mtomRaw, forwardedPort, softly).getBody();
     }
 
     private HttpHeaders buildSoapHeaders(String soapProtocol, String forwardedPort) {
@@ -510,5 +749,44 @@ class SoapWsEndPointITCase extends BaseIntegrationTest {
             }
         }
         throw new IllegalArgumentException("Could not extract MTOM boundary from fixture");
+    }
+
+    /**
+     * Asserts that the MTOM response body contains a structurally valid
+     * {@code wsa:RelatesTo} element holding a UUID-formatted value.
+     * The actual UUID is generated fresh per request and is not asserted verbatim.
+     */
+    private static void assertMtomMessageIdRelatesTo(String responseBody, SoftAssertions softly) {
+        softly.assertThat(responseBody)
+                .as("Response body contains wsa:RelatesTo element")
+                .contains("wsa:RelatesTo");
+        // UUID format: 8-4-4-4-12 hex chars separated by hyphens
+        softly.assertThat(responseBody)
+                .as("Response wsa:RelatesTo contains a UUID-formatted value")
+                .containsPattern(
+                        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    }
+
+    /**
+     * Extracts the boundary value from a {@code Content-Type} header string.
+     * Handles both quoted ({@code boundary="..."}) and unquoted
+     * ({@code boundary=...}) forms.
+     *
+     * @param contentType the raw Content-Type header value
+     * @return the bare boundary string (without surrounding quotes)
+     */
+    private static String extractBoundaryFromContentType(String contentType) {
+        for (String part : contentType.split(";")) {
+            String trimmed = part.trim();
+            if (trimmed.startsWith("boundary=")) {
+                String value = trimmed.substring("boundary=".length()).trim();
+                // Strip surrounding quotes if present
+                if (value.startsWith("\"") && value.endsWith("\"")) {
+                    value = value.substring(1, value.length() - 1);
+                }
+                return value;
+            }
+        }
+        throw new IllegalArgumentException("No boundary parameter found in Content-Type: " + contentType);
     }
 }

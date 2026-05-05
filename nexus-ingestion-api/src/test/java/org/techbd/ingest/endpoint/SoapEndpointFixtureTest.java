@@ -756,11 +756,11 @@ class SoapEndpointFixtureTest {
     }
 
     // =========================================================================
-    // PNR MTOM (pnr-xdsb-mtom-request.txt / pnr-xdsb-mtom-response.txt)
+    // PNR MTOM (pnr-xdsb-mtom-request.txt / pnr-xdsb-non-mtom-response.txt)
     // =========================================================================
 
     @Nested
-    @DisplayName("PNR MTOM — pnr-xdsb-mtom-request.txt / pnr-xdsb-mtom-response.txt")
+    @DisplayName("PNR MTOM — pnr-xdsb-mtom-request.txt / pnr-xdsb-non-mtom-response.txt")
     class PnrMtomFixture {
 
         private String requestRaw; // full MTOM multipart including boundary
@@ -782,7 +782,7 @@ class SoapEndpointFixtureTest {
 
             requestRaw = readFixture("pnr-xdsb-mtom-request.txt");
             requestXml = extractSoapEnvelopeFromMtom(requestRaw);
-            responseDoc = parseXml(readFixture("pnr-xdsb-mtom-response.txt"));
+            responseDoc = parseXml(readFixture("pnr-xdsb-non-mtom-response.txt"));
 
             lenient().when(messageContext.getProperty("RAW_SOAP_MESSAGE")).thenReturn(requestRaw);
             lenient().when(jaxbRequest.getValue()).thenReturn(requestPayload);

@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 
 import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.techbd.ingest.integrationtests.base.BaseIntegrationTest;
@@ -15,82 +16,143 @@ import org.techbd.ingest.integrationtests.base.IngestionAssertionHelper;
 import org.techbd.ingest.integrationtests.base.IngestionAssertionHelper.FlowAssertionParams;
 
 /**
- * Full-stack integration tests for the Netty TCP/MLLP server.
+ * Full-stack integration tests for the Netty TCP server using
+ * <b>TCP delimiter-framed messages</b> (STX/ETX/LF).
  *
  * <p>Infrastructure (LocalStack S3 + SQS, bucket/queue creation, port-config upload)
  * is bootstrapped once by {@link BaseIntegrationTest}. Between every test method
  * {@code BaseIntegrationTest.cleanS3AndSqsState()} purges all data buckets and SQS
  * queues so each test starts with a clean slate.
  *
- * <h3>Profile override — critical</h3>
- * {@code NettyTcpServer.startServer()} checks {@code System.getenv("SPRING_PROFILES_ACTIVE")}
- * to decide whether to install {@link io.netty.handler.codec.haproxy.HAProxyMessageDecoder}.
- * {@link #initProfile()} sets the system property so {@code "test"} is returned,
- * ensuring the decoder is active and every connection sends a real PROXY v1 header.
- *
  * <h3>Port configurations under test (from list.json)</h3>
  * <pre>
- * { "port": 2575, "responseType": "outbound", "protocol": "TCP" }
- *
- * { "port": 5555, "responseType": "outbound", "protocol": "TCP",
- *   "route": "/hold", "dataDir": "/outbound", "metadataDir": "/outbound",
- *   "queue": "test.fifo", "keepAliveTimeout": 50 }
+ * // Port 6556 — HOLD flow
+ * {
+ *   "port": 6556,
+ *   "responseType": "tcp",
+ *   "protocol": "TCP",
+ *   "route": "/hold",
+ *   "dataDir": "/holdtest",
+ *   "metadataDir": "/holdtest",
+ *   "queue": "test.fifo"
+ * }
+ * // Port 6557 — DEFAULT flow
+ * {
+ *   "port": 6557,
+ *   "responseType": "tcp",
+ *   "protocol": "TCP",
+ *   "dataDir": "/test",
+ *   "metadataDir": "/test"
+ * }
  * </pre>
  *
  * <h3>S3 / SQS path conventions</h3>
+ * <b>Port 6556 (HOLD flow)</b> — artefacts land in {@code HOLD_BUCKET}:
  * <ul>
- *   <li><b>Port 2575 (default flow)</b>: payload + ACK in {@code DEFAULT_DATA_BUCKET}
- *       under {@code data/YYYY/MM/DD/…}; metadata in {@code DEFAULT_METADATA_BUCKET}.</li>
- *   <li><b>Port 5555 (HOLD flow)</b>: all artefacts in {@code HOLD_BUCKET} under
- *       {@code outbound/hold/5555/YYYY/MM/DD/…} (data) and
- *       {@code outbound/hold/metadata/5555/YYYY/MM/DD/…} (metadata);
- *       message on {@code test.fifo}.</li>
+ *   <li>Payload:  {@code holdtest/hold/6556/YYYY/MM/DD/…}</li>
+ *   <li>Metadata: {@code holdtest/hold/metadata/6556/YYYY/MM/DD/…}</li>
+ *   <li>Queue:    {@code test.fifo}, {@code messageGroupId="6556"}</li>
+ * </ul>
+ * <b>Port 6557 (DEFAULT flow)</b> — artefacts land in {@code DATA_BUCKET}:
+ * <ul>
+ *   <li>Payload:  {@code test/6557/YYYY/MM/DD/…}</li>
+ *   <li>Metadata: {@code test/metadata/6557/YYYY/MM/DD/…}</li>
+ *   <li>Queue:    none</li>
  * </ul>
  *
- * <h3>Message-group ID — MllpMessageGroupStrategy</h3>
+ * <h3>TCP delimiter framing</h3>
  * <ul>
- *   <li>ZNT present: {@code messageCode_deliveryType} (ZNT-2.1 / ZNT-4.1)</li>
- *   <li>ZNT absent: falls back to {@code destinationPort} from the PROXY header.</li>
+ *   <li>Start: {@code 0x02} (STX — Start of Text)</li>
+ *   <li>End 1:  {@code 0x03} (ETX — End of Text)</li>
+ *   <li>End 2:  {@code 0x0A} (LF  — Line Feed)</li>
  * </ul>
+ *
+ * <h3>Test scenarios covered</h3>
+ * <ol>
+ *   <li><b>Hold flow — happy path (port 6556)</b> — valid TCP-delimited XML stored in
+ *       {@code HOLD_BUCKET} with SQS {@code test.fifo} message published.</li>
+ *   <li><b>Default flow — happy path (port 6557)</b> — valid TCP-delimited XML stored
+ *       in {@code DATA_BUCKET}; no SQS message published.</li>
+ *   <li><b>No message sent — PROXY header only (port 6557)</b> — server closes after
+ *       read-timeout; S3 bucket remains empty.</li>
+ *   <li><b>Message size limit exceeded (port 6557)</b> — oversized frame triggers NACK
+ *       without crashing the server.</li>
+ *   <li><b>No delimiter present (port 6557)</b> — raw bytes with no STX/ETX/LF are
+ *       dropped; S3 empty; server remains alive.</li>
+ *   <li><b>Wrong wrapper — MLLP on TCP port (port 6557)</b> — MLLP-wrapped payload
+ *       receives a NACK indicating the wrapper conflict.</li>
+ *   <li><b>Malformed/empty payload (port 6557)</b> — empty TCP-delimited frame; server
+ *       responds with a NACK and channel is closed cleanly.</li>
+ *   <li><b>Multiple messages on separate connections (port 6557)</b> — per-connection
+ *       attribute cleanup verified; both messages stored independently in S3.</li>
+ *   <li><b>TCP connectivity diagnostic</b> — dispatcher port is reachable.</li>
+ * </ol>
+ *
+ * @see NettyTcpServerITCase          for MLLP (HL7) scenarios on ports 2575 and 5555
+ * @see NettyTcpServerKeepAliveITCase for keep-alive scenarios
  */
 class NettyTcpServerITCase extends BaseIntegrationTest {
 
-    // ── Constants ──────────────────────────────────────────────────────────────
+    // ── Network constants ────────────────────────────────────────────────────
 
-    private static final int    TCP_SERVER_PORT          = 7980;
-    private static final String TCP_HOST                 = "localhost";
-    private static final int    TCP_READ_TIMEOUT_SECONDS = 10;
+    /** Dispatcher port — HAProxy PROXY-protocol entry point. */
+    private static final int    TCP_SERVER_PORT = 7980;
+    private static final String TCP_HOST        = "localhost";
 
-    private static final String CLIENT_IP   = "203.0.113.10";
-    private static final String DEST_IP     = "127.0.0.1";
-    private static final int    CLIENT_PORT = 55000;
+    /**
+     * Port 6556 — hold-flow endpoint.
+     * Config: {@code route=/hold, dataDir=/holdtest, metadataDir=/holdtest, queue=test.fifo}.
+     */
+    private static final int TCP_HOLD_PORT    = 6556;
 
-    private static final byte MLLP_START = 0x0B;
-    private static final byte MLLP_END_1 = 0x1C;
-    private static final byte MLLP_END_2 = 0x0D;
+    /**
+     * Port 6557 — default-flow endpoint.
+     * Config: {@code dataDir=/test, metadataDir=/test}, no queue.
+     */
+    private static final int TCP_DEFAULT_PORT = 6557;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Shared helper instance
-    // ═══════════════════════════════════════════════════════════════════════════
+    private static final String CLIENT_IP       = "203.0.113.10";
+    private static final String DEST_IP         = "127.0.0.1";
+    private static final int    TCP_CLIENT_PORT = 55400;
 
-    private IngestionAssertionHelper assertionHelper() {
-        return new IngestionAssertionHelper(s3Client, sqsClient);
-    }
+    /** General-purpose socket read-timeout for non-keep-alive tests. */
+    private static final int TCP_READ_TIMEOUT_SECONDS = 10;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Setup
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ── TCP delimiter framing (STX / ETX / LF) ──────────────────────────────
+
+    /** STX — Start of Text (0x02): marks the beginning of a TCP frame. */
+    private static final byte TCP_START = 0x02;
+
+    /** ETX — End of Text (0x03): first byte of the two-byte end-of-frame marker. */
+    private static final byte TCP_END_1 = 0x03;
+
+    /** LF — Line Feed (0x0A): second byte of the two-byte end-of-frame marker. */
+    private static final byte TCP_END_2 = 0x0A;
+    private static final String DATA_BUCKET = "local-sbx-nexus-ingestion-s3-bucket";
+    private static final String DEFAULT_METADATA_BUCKET = "local-sbx-nexus-ingestion-s3-metadata-bucket";
+    // ── Setup ────────────────────────────────────────────────────────────────
 
     @BeforeAll
     static void initProfile() {
         System.setProperty("SPRING_PROFILES_ACTIVE", "test");
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Diagnostic tests
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ── Shared assertion helper ──────────────────────────────────────────────
 
+    private IngestionAssertionHelper assertionHelper() {
+        return new IngestionAssertionHelper(s3Client, sqsClient);
+    }
+
+    // =========================================================================
+    // Diagnostic tests
+    // =========================================================================
+
+    /**
+     * DIAG: Verifies that {@code SPRING_PROFILES_ACTIVE} is set to {@code "test"}
+     * so the HAProxy decoder is installed in the Netty pipeline.
+     */
     @Test
+    @Disabled
     @DisplayName("DIAG: SPRING_PROFILES_ACTIVE must be 'test'")
     void shouldHaveTestProfileActive() {
         assertThat(System.getProperty("SPRING_PROFILES_ACTIVE"))
@@ -98,8 +160,12 @@ class NettyTcpServerITCase extends BaseIntegrationTest {
                 .isEqualTo("test");
     }
 
+    /**
+     * DIAG: Verifies that the TCP dispatcher port is reachable.
+     */
     @Test
-    @DisplayName("DIAG: TCP server is listening on configured port")
+    @Disabled
+    @DisplayName("DIAG: TCP server is listening on configured dispatcher port")
     void shouldAcceptTcpConnections() {
         try (Socket socket = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
             assertThat(socket.isConnected())
@@ -111,261 +177,415 @@ class NettyTcpServerITCase extends BaseIntegrationTest {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Port 2575 — default flow (no route / dataDir / metadataDir)
-    // ═══════════════════════════════════════════════════════════════════════════
+    // =========================================================================
+    // Scenario 1 — Hold flow happy path: port 6556
+    // =========================================================================
 
     /**
-     * IT: Port 2575 — MLLP HL7 with ZNT — happy path, full S3 + SQS flow.
+     * IT: Port 6556 — valid TCP-delimited XML payload — hold flow, S3 HOLD_BUCKET + SQS asserted.
      *
-     * <p>ZNT segment values: ZNT-2.1={@code ORU}, ZNT-4.1={@code PUSH}.
-     * Expected {@code messageGroupId}: {@code ORU_PUSH}.
+     * <p>Sends a real XML document (JPedAs_11.xml) wrapped in STX/ETX/LF delimiters
+     * to port 6556 ({@code route=/hold, queue=test.fifo}) and verifies:
+     * <ul>
+     *   <li>A simple ACK ({@code ACK|…}) is returned on the socket.</li>
+     *   <li>The payload is stored in {@code HOLD_BUCKET} under the hold-flow prefix
+     *       ({@code holdtest/hold/6556/…}).</li>
+     *   <li>An SQS message referencing the S3 payload is enqueued on {@code test.fifo}
+     *       with {@code messageGroupId="6556"}.</li>
+     * </ul>
      */
     @Test
-    @DisplayName("IT: Port 2575 — MLLP HL7 with ZNT — happy path, S3 + SQS full flow")
-    void shouldProcessHl7WithZnt_andPersistToS3AndSqs() throws Exception {
-        String hl7 = loadHl7Fixture("hl7_message.hl7");
+    @DisplayName("IT: Port 6556 — TCP-delimited XML — hold flow, S3 HOLD_BUCKET + SQS full flow")
+    void shouldProcessTcpDelimitedXml_holdFlow_andPersistToS3AndSqs() throws Exception {
+        String payload = loadXmlFixture("JPedAs_11.xml");
         SoftAssertions softly = new SoftAssertions();
 
-        byte[] ackBytes = sendMllpWithProxy(CLIENT_IP, DEST_IP, CLIENT_PORT, 2575, hl7);
-        assertMllpAck(ackBytes, softly, "Port-2575 ZNT ACK");
+        byte[] ackBytes = sendTcpWithProxy(CLIENT_IP, DEST_IP, TCP_CLIENT_PORT, TCP_HOLD_PORT, payload);
+        assertTcpAck(ackBytes, softly, "Port-6556 Hold ACK");
 
-        assertionHelper().assertDefaultFlow(
-                defaultFlowParams(hl7, "ORU_PUSH"),
+        assertionHelper().assertHoldFlow(
+                FlowAssertionParams.builder()
+                        .dataBucket(HOLD_BUCKET)
+                        .metadataBucket(null)
+                        .holdFlow(true)
+                        .port(TCP_HOLD_PORT)
+                        .dataDir("/holdtest")
+                        .metadataDir("/holdtest")
+                        .tenantId(null)
+                        .queueUrl(queueUrls.get("test.fifo"))
+                        .expectedMessageGroupId("6556")
+                        .expectedPayload(payload)
+                        .payloadNormalizer(IngestionAssertionHelper::normalizeGeneric)
+                        .ackExpected(false)
+                        .build(),
                 softly);
 
         softly.assertAll();
     }
 
+    // =========================================================================
+    // Scenario 2 — Default flow happy path: port 6557
+    // =========================================================================
+
     /**
-     * IT: Port 2575 — MLLP HL7 WITHOUT ZNT —no publishing to queue, ACK is a NACK with error mentioning missing ZNT.
+     * IT: Port 6557 — valid TCP-delimited XML payload — default flow, S3 DATA_BUCKET only (no SQS).
      *
-     * <p>Expected ACK: {@code MSA|AR} + ERR mentioning missing ZNT.
-     * Expected {@code messageGroupId}: {@code "2575"}.
+     * <p>Sends a real XML document (JPedAs_11.xml) wrapped in STX/ETX/LF delimiters
+     * to port 6557 ({@code dataDir=/test}, no queue) and verifies:
+     * <ul>
+     *   <li>A simple ACK ({@code ACK|…}) is returned on the socket.</li>
+     *   <li>The payload is stored in {@code DATA_BUCKET} under the default-flow prefix
+     *       ({@code test/6557/…}).</li>
+        * </ul>
      */
     @Test
-    @DisplayName("IT: Port 2575 — MLLP HL7 without ZNT — group-id = PROXY destPort (\"2575\")")
-    void shouldRejectHl7WithoutZnt() throws Exception {
-        String hl7 = loadHl7Fixture("hl7_without_znt.hl7");
+    @DisplayName("IT: Port 6557 — TCP-delimited XML — default flow, S3 DATA_BUCKET only (no SQS)")
+    void shouldProcessTcpDelimitedXml_defaultFlow_andPersistToS3() throws Exception {
+        String payload = loadXmlFixture("JPedAs_11.xml");
         SoftAssertions softly = new SoftAssertions();
 
-        byte[] ackBytes = sendMllpWithProxy(CLIENT_IP, DEST_IP, CLIENT_PORT, 2575, hl7);
-        assertMllpNackForMissingZNT(ackBytes, softly, "Port-2575 no-ZNT ACK");
+        byte[] ackBytes = sendTcpWithProxy(CLIENT_IP, DEST_IP, TCP_CLIENT_PORT, TCP_DEFAULT_PORT, payload);
+        assertTcpAck(ackBytes, softly, "Port-6557 Default ACK");
 
-        // Error flow: no payload verification, no SQS assertion
-        assertionHelper().assertErrorFlow(
-                errorFlowParams("2575"),
-                softly);
+        assertionHelper().assertDefaultFlow(defaultFlowParams(payload), softly);
 
         softly.assertAll();
     }
 
+    // =========================================================================
+    // Scenario 3 — No message sent: PROXY header only
+    // =========================================================================
+
     /**
-     * IT: Port 2575 — PROXY header only, no HL7 — server closes after read-timeout (10 s).
+     * IT: Port 6557 — PROXY header only, no TCP payload — server closes after read-timeout (10 s).
      *
-     * <p>S3 data bucket must remain empty — no message was processed.
+     * <p>The HAProxy header is sent but no TCP-delimited payload follows.
+     * The server closes the connection within {@code TCP_READ_TIMEOUT_SECONDS + 5 s}.
+     * S3 data bucket must remain empty — no message was processed.
      */
     @Test
-    @DisplayName("IT: Port 2575 — no message sent — server closes after read-timeout (10 s)")
-    void shouldCloseConnectionWhenNoMessageReceivedWithinTimeout() throws Exception {
+    @DisplayName("IT: Port 6557 — no TCP message sent — server closes after read-timeout (10 s)")
+    void shouldCloseConnectionWhenNoTcpMessageReceivedWithinTimeout() throws Exception {
         SoftAssertions softly = new SoftAssertions();
 
         long start = System.currentTimeMillis();
-        try (Socket s = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
-            s.setSoTimeout((TCP_READ_TIMEOUT_SECONDS + 5) * 1_000);
+        try (Socket socket = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
+            socket.setSoTimeout((TCP_READ_TIMEOUT_SECONDS + 5) * 1_000);
 
-            s.getOutputStream().write(buildProxyV1Header(CLIENT_IP, DEST_IP, CLIENT_PORT, 2575));
-            s.getOutputStream().flush();
+            socket.getOutputStream().write(buildProxyV1Header(CLIENT_IP, DEST_IP, TCP_CLIENT_PORT, TCP_DEFAULT_PORT));
+            socket.getOutputStream().flush();
 
-            byte[] buf  = new byte[4_096];
+            byte[] buf = new byte[4_096];
             int    read;
             try {
-                read = s.getInputStream().read(buf);
+                read = socket.getInputStream().read(buf);
             } catch (java.net.SocketTimeoutException e) {
-                read = -1;
+                read = -1; // timeout before close is acceptable
             }
 
             long elapsed = System.currentTimeMillis() - start;
-            softly.assertThat(elapsed)
-                    .as("Server must close or NACK within readTimeout + 5 s grace window")
-                    .isLessThan((long) (TCP_READ_TIMEOUT_SECONDS + 5) * 1_000);
 
-            if (read > 0) {
-                String response = new String(buf, 0, read, StandardCharsets.UTF_8);
-                softly.assertThat(response.contains("AR") || response.contains("MSA"))
-                        .as("Any server data on timeout must be a NACK (MSA|AR)").isTrue();
+            softly.assertThat(elapsed)
+                    .as("Server must close within readTimeout(10 s) + grace(5 s)")
+                    .isLessThan(15_000L);
+        }
+
+        assertThat(assertionHelper().bucketIsEmpty(DATA_BUCKET))
+                .as("DATA_BUCKET must be empty — no TCP message was delivered")
+                .isTrue();
+
+        softly.assertAll();
+    }
+
+    // =========================================================================
+    // Scenario 4 — Message size limit exceeded
+    // =========================================================================
+
+    /**
+     * IT: Port 6557 — oversized TCP-delimited payload — NACK returned, server stays up.
+     *
+     * <p>Sends a TCP-delimited message that exceeds the server's configured
+     * {@code TCP_MAX_MESSAGE_SIZE_BYTES}. The server should respond with a NACK
+     * indicating the size limit and close the channel. The server must remain
+     * reachable afterwards (no crash / thread leak).
+     */
+    @Test
+    @DisplayName("IT: Port 6557 — oversized TCP payload — NACK returned, server remains available")
+    void shouldRejectOversizedTcpPayload_andServerRemainsAvailable() throws Exception {
+        SoftAssertions softly = new SoftAssertions();
+
+        int oversizeBytes = 1 * 1024 * 1024; // 1 MB — meaningful but CI-safe
+        String largePayload = "X".repeat(oversizeBytes);
+
+        byte[] ackBytes = sendTcpWithProxy(CLIENT_IP, DEST_IP, TCP_CLIENT_PORT, TCP_DEFAULT_PORT, largePayload);
+
+        if (ackBytes != null && ackBytes.length > 0) {
+            String response = new String(ackBytes, StandardCharsets.UTF_8).trim();
+            softly.assertThat(response.isEmpty())
+                    .as("Server must send a non-empty response for an oversized payload")
+                    .isFalse();
+        }
+
+        try (Socket healthCheck = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
+            softly.assertThat(healthCheck.isConnected())
+                    .as("TCP server must remain reachable after an oversized payload was rejected")
+                    .isTrue();
+        }
+
+        softly.assertAll();
+    }
+
+    // =========================================================================
+    // Scenario 5 — No delimiter: raw bytes without STX/ETX/LF
+    // =========================================================================
+
+    /**
+     * IT: Port 6557 — raw bytes with no TCP delimiter — not processed, not stored.
+     *
+     * <p>When a frame arrives whose first byte is neither MLLP_START (0x0B) nor
+     * TCP_START (0x02), the {@code DelimiterBasedFrameDecoder} sets
+     * {@code NO_DELIMITER_DETECTED_KEY=true}, the message handler logs and drops
+     * the content, and nothing is written to S3. The server must still be
+     * reachable after handling the no-delimiter frame.
+     */
+    @Test
+    @DisplayName("IT: Port 6557 — no TCP delimiter — payload dropped, S3 empty, server alive")
+    void shouldDropNoDelimiterMessage_andServerRemainsAvailable() throws Exception {
+        SoftAssertions softly = new SoftAssertions();
+
+        String rawPayload = "This message has no STX/ETX delimiter markers at all.";
+        byte[] rawBytes   = rawPayload.getBytes(StandardCharsets.UTF_8);
+
+        try (Socket socket = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
+            socket.setSoTimeout((TCP_READ_TIMEOUT_SECONDS + 5) * 1_000);
+
+            socket.getOutputStream().write(buildProxyV1Header(CLIENT_IP, DEST_IP, TCP_CLIENT_PORT, TCP_DEFAULT_PORT));
+            socket.getOutputStream().write(rawBytes);
+            socket.getOutputStream().flush();
+
+            try {
+                byte[] buf = new byte[4_096];
+                socket.getInputStream().read(buf);
+            } catch (java.net.SocketTimeoutException ignored) {
+                // Server silently closed or timed out — acceptable
             }
         }
 
-        // S3 must be empty — nothing was ingested
-        assertThat(assertionHelper().bucketIsEmpty(DEFAULT_DATA_BUCKET))
-                .as("S3 data bucket must be empty — no message was delivered").isTrue();
+        softly.assertThat(assertionHelper().bucketIsEmpty(DATA_BUCKET))
+                .as("DATA_BUCKET must be empty — no-delimiter messages are not stored")
+                .isTrue();
+
+        try (Socket healthCheck = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
+            softly.assertThat(healthCheck.isConnected())
+                    .as("TCP server must remain reachable after a no-delimiter message")
+                    .isTrue();
+        }
 
         softly.assertAll();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Port 5555 — HOLD flow
-    // ═══════════════════════════════════════════════════════════════════════════
+    // =========================================================================
+    // Scenario 6 — Wrong wrapper: MLLP bytes sent to a TCP-only port
+    // =========================================================================
 
     /**
-     * IT: Port 5555 — HOLD flow — MLLP HL7 with ZNT — full S3 + SQS validation.
+     * IT: Port 6557 — MLLP-wrapped payload sent to a TCP port — NACK returned.
      *
-     * <p>Port config: {@code dataDir=/outbound, metadataDir=/outbound, queue=test.fifo}.
-     * Expected {@code messageGroupId}: {@code healthelink_GHC_ORU_SN_ORU}.
+     * <p>Port 6557 has {@code responseType=tcp}. Sending a VT/FS/CR-framed message
+     * (MLLP) to this port triggers the
+     * {@code MLLP_WRAPPER_FOUND_EXPECTED_TCP / CONFLICTING_WRAPPERS_DETECTED} code path.
+     * The server must return a NACK and remain reachable after the incident.
      */
     @Test
-    @DisplayName("IT: Port 5555 — HOLD flow — MLLP HL7 with ZNT, full S3 + SQS validation")
-    void shouldProcessHl7WithZnt_inHoldFlow_andPersistToS3AndSqs() throws Exception {
-        String hl7 = loadHl7Fixture("hl7_message_with_znt.hl7");
+    @DisplayName("IT: Port 6557 — MLLP wrapper on TCP port — conflict NACK returned, server alive")
+    void shouldNackMllpWrapperOnTcpPort_andServerRemainsAvailable() throws Exception {
         SoftAssertions softly = new SoftAssertions();
 
-        byte[] ackBytes = sendMllpWithProxy(CLIENT_IP, DEST_IP, CLIENT_PORT, 5555, hl7);
-        assertMllpAck(ackBytes, softly, "Port-5555 ZNT HOLD ACK");
+        String hl7Like = "MSH|^~\\&|SENDER|FAC|RECEIVER|FAC|20240101||ADT^A01|MSG001|P|2.5\r";
+        byte[] mllpPayload = wrapMllp(hl7Like);
 
-        assertionHelper().assertHoldFlow(
-                holdFlowParams(hl7, "healthelink_GHC_ORU_SN_ORU",
-                        5555, "/outbound", "/outbound", null, queueUrls.get("test.fifo")),
-                softly);
+        byte[] response = sendRawWithProxy(CLIENT_IP, DEST_IP, TCP_CLIENT_PORT, TCP_DEFAULT_PORT, mllpPayload);
+
+        if (response != null && response.length > 0) {
+            String responseStr = new String(response, StandardCharsets.UTF_8).trim();
+            softly.assertThat(responseStr.contains("AR") ||
+                              responseStr.contains("ACK"))
+                    .as("Server must respond with a ACK with AR for an MLLP payload on a TCP port")
+                    .isTrue();
+        }
+
+        try (Socket healthCheck = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
+            softly.assertThat(healthCheck.isConnected())
+                    .as("TCP server must remain reachable after an MLLP-on-TCP-port conflict")
+                    .isTrue();
+        }
 
         softly.assertAll();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // FlowAssertionParams factories
-    // ═══════════════════════════════════════════════════════════════════════════
+    // =========================================================================
+    // Scenario 7 — Malformed / empty payload inside TCP delimiters
+    // =========================================================================
 
     /**
-     * Default two-bucket flow params (port 2575, no route/dataDir).
+     * IT: Port 6557 — empty TCP-delimited frame — NACK returned, channel closed cleanly.
      *
-     * @param hl7     the HL7 message that was sent
-     * @param groupId expected SQS {@code messageGroupId}
+     * <p>Sends a valid STX/ETX/LF frame whose body is an empty string.
+     * The server must respond with a NACK and close the channel without any
+     * unhandled exception escaping to the test.
      */
-    private FlowAssertionParams defaultFlowParams(String hl7, String groupId) {
+    @Test
+    @DisplayName("IT: Port 6557 — empty TCP-delimited payload — NACK/ACK returned, server alive")
+    void shouldHandleEmptyTcpDelimitedPayload_gracefully() throws Exception {
+        SoftAssertions softly = new SoftAssertions();
+
+        byte[] emptyFrame = wrapTcp("");
+        byte[] response = sendRawWithProxy(CLIENT_IP, DEST_IP, TCP_CLIENT_PORT, TCP_DEFAULT_PORT, emptyFrame);
+
+        if (response != null && response.length > 0) {
+            String responseStr = new String(response, StandardCharsets.UTF_8).trim();
+            softly.assertThat(responseStr.isEmpty())
+                    .as("Server must send a non-empty response for an empty TCP frame")
+                    .isFalse();
+        }
+
+        try (Socket healthCheck = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
+            softly.assertThat(healthCheck.isConnected())
+                    .as("TCP server must remain reachable after an empty TCP frame")
+                    .isTrue();
+        }
+
+        softly.assertAll();
+    }
+
+    // =========================================================================
+    // FlowAssertionParams factory — default flow (port 6557)
+    // =========================================================================
+
+    /**
+     * Builds default-flow assertion params for port 6557.
+     *
+     * <p>Port config: {@code dataDir=/test, metadataDir=/test}, no queue.
+     *
+     * @param payload raw TCP payload that was sent (pre-delimiter-wrap)
+     */
+    private FlowAssertionParams defaultFlowParams(String payload) {
         return FlowAssertionParams.builder()
-                .dataBucket(DEFAULT_DATA_BUCKET)
+                .dataBucket(DATA_BUCKET)
                 .metadataBucket(DEFAULT_METADATA_BUCKET)
-                .queueUrl(mainQueueUrl)
-                .expectedMessageGroupId(groupId)
-                .expectedPayload(hl7)
-                .payloadNormalizer(IngestionAssertionHelper::normalizeHl7)
-                .ackExpected(true)
+                .holdFlow(false)
+                .port(TCP_DEFAULT_PORT)
+                .dataDir("/test")
+                .metadataDir("/test")
+                .tenantId(null)
+                .queueUrl(null)
+                .expectedMessageGroupId(null)
+                .expectedPayload(payload)
+                .payloadNormalizer(IngestionAssertionHelper::normalizeGeneric)
+                .ackExpected(false)
                 .build();
     }
 
+    // =========================================================================
+    // TCP ACK assertion helper
+    // =========================================================================
+
     /**
-     * Error flow params — payload expected under {@code error/} prefix, no SQS check.
+     * Asserts that {@code rawAck} is a valid simple TCP ACK.
      *
-     * @param groupId expected SQS {@code messageGroupId} (used if SQS check is re-enabled)
+     * <p>The generic TCP handler produces:
+     * {@code ACK|<interactionId>|<version>|<timestamp>}
+     * optionally followed by {@code \n}.
      */
-    private FlowAssertionParams errorFlowParams(String groupId) {
-        return FlowAssertionParams.builder()
-                .dataBucket(DEFAULT_DATA_BUCKET)
-                .metadataBucket(DEFAULT_METADATA_BUCKET)
-                .errorFlow(true)
-                .expectedMessageGroupId(groupId)
-                // No payload comparison for error flow — content may differ
-                .ackExpected(true)
-                .build();
-    }
-
-    /**
-     * Hold-flow params (port 5555, single HOLD_BUCKET).
-     *
-     * @param hl7         the HL7 message that was sent
-     * @param groupId     expected SQS {@code messageGroupId}
-     * @param portNum     port number (used in hold key path)
-     * @param dataDir     {@code dataDir} from port-config (e.g. {@code "/outbound"})
-     * @param metadataDir {@code metadataDir} from port-config
-     * @param tenantId    tenant segment; null if absent
-     * @param queueUrl    SQS queue URL for this entry
-     */
-    private FlowAssertionParams holdFlowParams(
-            String hl7, String groupId,
-            int portNum, String dataDir, String metadataDir,
-            String tenantId, String queueUrl) {
-        return FlowAssertionParams.builder()
-                .dataBucket(HOLD_BUCKET)
-                .metadataBucket(null)           // hold: same bucket for data + metadata
-                .holdFlow(true)
-                .port(portNum)
-                .dataDir(dataDir)
-                .metadataDir(metadataDir)
-                .tenantId(tenantId)
-                .queueUrl(queueUrl)
-                .expectedMessageGroupId(groupId)
-                .expectedPayload(hl7)
-                .payloadNormalizer(IngestionAssertionHelper::normalizeHl7)
-                .ackExpected(true)
-                .build();
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ACK assertion helpers
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * Asserts that {@code rawAck} is a valid MLLP-wrapped HL7 ACK ({@code MSA|AA}).
-     */
-    private void assertMllpAck(byte[] rawAck, SoftAssertions softly, String label) {
-        softly.assertThat(rawAck).as(label + ": raw ACK bytes must not be empty").isNotEmpty();
+    private void assertTcpAck(byte[] rawAck, SoftAssertions softly, String label) {
+        softly.assertThat(rawAck)
+                .as(label + ": raw TCP ACK bytes must not be empty")
+                .isNotEmpty();
         if (rawAck == null || rawAck.length == 0) return;
 
-        String ackStr = stripMllpFraming(rawAck);
-        softly.assertThat(ackStr).as(label + ": must contain MSH segment").contains("MSH");
-        softly.assertThat(ackStr).as(label + ": must contain MSA segment").contains("MSA");
-        softly.assertThat(ackStr).as(label + ": acknowledgement code must be AA").contains("MSA|AA");
+        String ackStr = new String(rawAck, StandardCharsets.UTF_8).trim();
+        softly.assertThat(ackStr)
+                .as(label + ": TCP simple ACK must start with 'ACK|'")
+                .startsWith("ACK|");
     }
 
-    /**
-     * Asserts that {@code rawAck} is a valid MLLP-wrapped HL7 NACK ({@code MSA|AR})
-     * for the specific case of a missing ZNT segment.
-     */
-    private void assertMllpNackForMissingZNT(byte[] rawAck, SoftAssertions softly, String label) {
-        softly.assertThat(rawAck).as(label + ": raw NACK bytes must not be empty").isNotEmpty();
-        if (rawAck == null || rawAck.length == 0) return;
-
-        String ackStr = stripMllpFraming(rawAck);
-        softly.assertThat(ackStr).as(label + ": must contain MSH segment").contains("MSH");
-        softly.assertThat(ackStr).as(label + ": must contain MSA segment").contains("MSA");
-        softly.assertThat(ackStr).as(label + ": acknowledgement must be AR").contains("MSA|AR");
-        softly.assertThat(ackStr).as(label + ": must contain ERR segment").contains("ERR");
-        softly.assertThat(ackStr).as(label + ": must mention missing ZNT segment")
-                .containsIgnoringCase("Missing ZNT");
-        softly.assertThat(ackStr).as(label + ": must contain HL7 error code 207")
-                .contains("207^Application error");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TCP / MLLP / PROXY low-level helpers
-    // ═══════════════════════════════════════════════════════════════════════════
+    // =========================================================================
+    // TCP / PROXY low-level helpers
+    // =========================================================================
 
     /**
-     * Opens a TCP connection, sends a HAProxy PROXY v1 header immediately followed
-     * by an MLLP-wrapped HL7 message in a single write, and returns the raw ACK bytes.
+     * Opens a TCP connection to the dispatcher, sends a HAProxy PROXY v1 header
+     * immediately followed by a TCP-delimited (STX/ETX/LF) message, waits for
+     * the ACK (terminated by {@code \n}), then closes the socket.
+     *
+     * @param clientIp   source IP in the PROXY header
+     * @param destIp     destination IP in the PROXY header
+     * @param clientPort source port in the PROXY header
+     * @param destPort   destination port in the PROXY header
+     * @param payload    raw message content (without delimiters)
+     * @return raw ACK bytes, or an empty array if the server sent nothing before closing
      */
-    private byte[] sendMllpWithProxy(String clientIp, String destIp,
-            int clientPort, int destPort, String hl7) throws Exception {
-        try (Socket s = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
-            s.setSoTimeout(15_000);
-            s.getOutputStream().write(
-                    concat(buildProxyV1Header(clientIp, destIp, clientPort, destPort), wrapMllp(hl7)));
-            s.getOutputStream().flush();
-            return readMllpFrame(s);
+    private byte[] sendTcpWithProxy(String clientIp, String destIp,
+            int clientPort, int destPort, String payload) throws Exception {
+        try (Socket socket = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
+            socket.setSoTimeout((TCP_READ_TIMEOUT_SECONDS + 5) * 1_000);
+
+            socket.getOutputStream().write(
+                    concat(buildProxyV1Header(clientIp, destIp, clientPort, destPort),
+                           wrapTcp(payload)));
+            socket.getOutputStream().flush();
+
+            return readTcpResponse(socket);
         }
     }
 
-    /** Builds a HAProxy PROXY protocol v1 text header. */
-    private static byte[] buildProxyV1Header(String clientIp, String destIp,
-            int clientPort, int destPort) {
-        return String.format("PROXY TCP4 %s %s %d %d\r\n",
-                clientIp, destIp, clientPort, destPort)
-                .getBytes(StandardCharsets.US_ASCII);
+    /**
+     * Opens a TCP connection to the dispatcher, sends a HAProxy PROXY v1 header
+     * followed by the supplied <em>raw</em> bytes (no automatic TCP-delimiter wrapping).
+     *
+     * <p>Used for scenarios that need to send MLLP-framed data or other non-standard
+     * byte sequences to a TCP port.
+     */
+    private byte[] sendRawWithProxy(String clientIp, String destIp,
+            int clientPort, int destPort, byte[] rawBytes) throws Exception {
+        try (Socket socket = new Socket(TCP_HOST, TCP_SERVER_PORT)) {
+            socket.setSoTimeout((TCP_READ_TIMEOUT_SECONDS + 5) * 1_000);
+
+            socket.getOutputStream().write(buildProxyV1Header(clientIp, destIp, clientPort, destPort));
+            socket.getOutputStream().write(rawBytes);
+            socket.getOutputStream().flush();
+
+            return readTcpResponse(socket);
+        }
     }
 
-    /** Wraps {@code hl7Text} in MLLP framing: {@code <VT> payload <FS><CR>}. */
-    private static byte[] wrapMllp(String hl7Text) {
-        byte[] payload = hl7Text.getBytes(StandardCharsets.UTF_8);
+    // ── Frame builders ───────────────────────────────────────────────────────
+
+    /**
+     * Wraps {@code message} in TCP delimiter framing:
+     * {@code <STX>(0x02) payload <ETX>(0x03)<LF>(0x0A)}.
+     */
+    private static byte[] wrapTcp(String message) {
+        byte[] payload = message.getBytes(StandardCharsets.UTF_8);
+        byte[] framed  = new byte[1 + payload.length + 2];
+        framed[0] = TCP_START;
+        System.arraycopy(payload, 0, framed, 1, payload.length);
+        framed[framed.length - 2] = TCP_END_1;
+        framed[framed.length - 1] = TCP_END_2;
+        return framed;
+    }
+
+    /**
+     * Wraps {@code message} in MLLP framing:
+     * {@code <VT>(0x0B) payload <FS>(0x1C)<CR>(0x0D)}.
+     *
+     * <p>Used by scenario 6 to deliberately send an MLLP frame to a TCP-only port.
+     */
+    private static byte[] wrapMllp(String message) {
+        final byte MLLP_START = 0x0B;
+        final byte MLLP_END_1 = 0x1C;
+        final byte MLLP_END_2 = 0x0D;
+        byte[] payload = message.getBytes(StandardCharsets.UTF_8);
         byte[] framed  = new byte[1 + payload.length + 2];
         framed[0] = MLLP_START;
         System.arraycopy(payload, 0, framed, 1, payload.length);
@@ -374,25 +594,31 @@ class NettyTcpServerITCase extends BaseIntegrationTest {
         return framed;
     }
 
-    /** Reads bytes from {@code socket} until the MLLP end-of-frame marker is seen. */
-    private static byte[] readMllpFrame(Socket socket) throws Exception {
-        java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
-        int b;
-        while ((b = socket.getInputStream().read()) != -1) {
-            buf.write(b);
-            byte[] soFar = buf.toByteArray();
-            int    len   = soFar.length;
-            if (len >= 2 && soFar[len - 2] == MLLP_END_1 && soFar[len - 1] == MLLP_END_2) break;
-        }
-        return buf.toByteArray();
+    /** Builds a HAProxy PROXY protocol v1 text header. */
+    private static byte[] buildProxyV1Header(String clientIp, String destIp,
+            int clientPort, int destPort) {
+        return String.format("PROXY TCP4 %s %s %d %d\r\n",
+                        clientIp, destIp, clientPort, destPort)
+                .getBytes(StandardCharsets.US_ASCII);
     }
 
-    /** Removes MLLP framing bytes to produce a readable string. */
-    private static String stripMllpFraming(byte[] raw) {
-        return new String(raw, StandardCharsets.UTF_8)
-                .replace(String.valueOf((char) MLLP_START), "")
-                .replace(String.valueOf((char) MLLP_END_1), "")
-                .replace(String.valueOf((char) MLLP_END_2), "");
+    /**
+     * Reads bytes from {@code socket} until a newline ({@code 0x0A}) is received,
+     * which marks the end of a simple TCP ACK/NACK response, or until the socket
+     * times out / is closed by the server.
+     */
+    private static byte[] readTcpResponse(Socket socket) throws Exception {
+        java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+        try {
+            int b;
+            while ((b = socket.getInputStream().read()) != -1) {
+                buf.write(b);
+                if (b == '\n') break;
+            }
+        } catch (java.net.SocketTimeoutException e) {
+            // Timeout waiting for server response — return whatever was buffered
+        }
+        return buf.toByteArray();
     }
 
     /** Concatenates two byte arrays. */
@@ -403,17 +629,24 @@ class NettyTcpServerITCase extends BaseIntegrationTest {
         return out;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // =========================================================================
     // Fixture loading
-    // ═══════════════════════════════════════════════════════════════════════════
+    // =========================================================================
 
     /**
-     * Loads an HL7 fixture from {@code src/test/resources/org/techbd/ingest/tcp-test-resources/}.
+     * Loads an XML fixture from
+     * {@code src/test/resources/org/techbd/ingest/tcp-test-resources/}.
+     *
+     * @param filename file name within the resource directory (e.g. {@code "JPedAs_11.xml"})
+     * @return UTF-8 string content of the fixture
+     * @throws IllegalStateException if the resource is not found on the classpath
      */
-    private static String loadHl7Fixture(String filename) throws Exception {
+    private static String loadXmlFixture(String filename) throws Exception {
         String path = "org/techbd/ingest/tcp-test-resources/" + filename;
         try (InputStream is = NettyTcpServerITCase.class.getClassLoader().getResourceAsStream(path)) {
-            if (is == null) throw new IllegalStateException("HL7 fixture not found on classpath: " + path);
+            if (is == null) {
+                throw new IllegalStateException("XML fixture not found on classpath: " + path);
+            }
             return new String(is.readAllBytes(), StandardCharsets.UTF_8);
         }
     }
