@@ -60,20 +60,26 @@ public class TabularRowsController {
     private final DSLContext primaryDslContext;
     private DSLContext readerDSlContext;
     private final List<Validator> validators;
+    // CHANGE: injected allowlist service
+    private final ColumnAllowlistService columnAllowlistService;
     @Autowired
     private FileDownloadProperties fileDownloadProperties;
     @Autowired
     private ObjectMapper objectMapper;
 
-    public TabularRowsController(List<Validator> validators,@Qualifier("primaryDslContext") DSLContext primaryDslContext) {
+    // CHANGE: added ColumnAllowlistService to constructor
+    public TabularRowsController(List<Validator> validators,
+            @Qualifier("primaryDslContext") DSLContext primaryDslContext,
+            ColumnAllowlistService columnAllowlistService) {
         this.validators = validators;
         this.primaryDslContext = primaryDslContext;
+        this.columnAllowlistService = columnAllowlistService;
     }
 
     @Autowired(required = false)
     public void setUdiReaderConfig(@Qualifier("secondaryDslContext") DSLContext readerDSlContext) {
         LOG.info("READER INSTANCE CONFIGURED SUCCESSFULLY!!");
-        this.readerDSlContext = readerDSlContext    ;
+        this.readerDSlContext = readerDSlContext;
     }
 
     // Helper method to get the DSLContext, prefer reader if available
@@ -85,6 +91,7 @@ public class TabularRowsController {
         // LOG.info("WRITER INSTANCE - Exceuting Query");
         return primaryDslContext;
     }
+
     @Operation(summary = "Fetch SQL rows from a master table or view with schema specification", description = """
             Retrieves rows from a specified master table or view, within a specific schema.
             The request body contains the filter criteria (via `TabularRowsRequest`) used to query the data.
@@ -92,12 +99,13 @@ public class TabularRowsController {
             If the schema name is omitted, the default schema will be used.
             """)
     @PostMapping(value = {
-        "/api/ux/tabular/jooq/{schemaName}/{masterTableNameOrViewName}.json"}, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+            "/api/ux/tabular/jooq/{schemaName}/{masterTableNameOrViewName}.json" }, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     public TabularRowsResponse<?> tabularRows(
             @Parameter(description = "Mandatory path variable to mention schema name.", required = true) @PathVariable(required = true) String schemaName,
             @Parameter(description = "Mandatory path variable to mention the table or view name.", required = true) final @PathVariable String masterTableNameOrViewName,
             @Parameter(description = "Payload for the API. This <b>must not</b> be <code>null</code>.", required = true) final @RequestBody @Nonnull TabularRowsRequest payload,
+            // CHANGE: these params kept in signature for backward compat but hardcoded to false below
             @Parameter(description = "Header to mention whether the generated SQL to be included in the response.", required = false) boolean includeGeneratedSqlInResp,
             @Parameter(description = "Header to mention whether the generated SQL to be included in the error response. This will be taken <code>true</code> by default.", required = false) boolean includeGeneratedSqlInErrorResp) {
 
@@ -110,8 +118,11 @@ public class TabularRowsController {
                 .withTable(Tables.class, schemaName, masterTableNameOrViewName)
                 .withDSL(getDsl())
                 .withLogger(LOG)
-                .includeGeneratedSqlInResp(includeGeneratedSqlInResp)
-                .includeGeneratedSqlInErrorResp(includeGeneratedSqlInErrorResp)
+                // CHANGE: hardcoded to false - never expose SQL to client regardless of request headers
+                .includeGeneratedSqlInResp(false)
+                .includeGeneratedSqlInErrorResp(false)
+                // CHANGE: pass allowlist service and schema/table for field validation
+                .withColumnAllowlistService(columnAllowlistService, schemaName, masterTableNameOrViewName)
                 .build()
                 .response();
     }
@@ -168,7 +179,8 @@ public class TabularRowsController {
 
         } catch (Exception e) {
             LOG.error("Error fetching data from stored procedure", e);
-            return new TabularRowsResponse<>(null, null, -1, e.getMessage());
+            // CHANGE: do not expose e.getMessage() to client
+            return new TabularRowsResponse<>(null, null, -1, null);
         }
     }
 
@@ -189,10 +201,12 @@ public class TabularRowsController {
                 || !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(columnName).matches()) {
             throw new IllegalArgumentException("Invalid schema or table or column name.");
         }
-        // Fetch the result using the dynamically determined table and column; if
-        // jOOQ-generated types were found, automatic column value mapping will occur
+        // CHANGE: validate columnName against allowlist
+        columnAllowlistService.validate(schemaName, masterTableNameOrViewName, columnName);
+
         final var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName,
                 masterTableNameOrViewName);
+        // columnValue is passed as DSL.val() bind parameter - safe
         List<Map<String, Object>> result = getDsl().selectFrom(typableTable.table())
                 .where(DSL.field(typableTable.column(columnName)).eq(DSL.val(columnValue)))
                 .fetch()
@@ -236,11 +250,14 @@ public class TabularRowsController {
                 || !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(columnName2).matches()) {
             throw new IllegalArgumentException("Invalid schema or table or column name.");
         }
-        // String columnValue2LikePattern = "%" + columnValue2 + "%";
+        // CHANGE: validate both column names against allowlist
+        columnAllowlistService.validate(schemaName, masterTableNameOrViewName, columnName);
+        columnAllowlistService.validate(schemaName, masterTableNameOrViewName, columnName2);
 
         final var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName,
                 masterTableNameOrViewName);
 
+        // columnValue and columnValue2 are passed as DSL.val() bind parameters - safe
         List<Map<String, Object>> result = getDsl().selectFrom(typableTable.table())
                 .where(DSL.field(typableTable.column(columnName)).eq(DSL.val(columnValue))
                         .and(DSL.field(typableTable.column(columnName2)).eq(DSL.val(columnValue2))))
@@ -252,14 +269,12 @@ public class TabularRowsController {
 
         result.forEach(row -> row.forEach((key, value) -> {
             if (value != null) {
-                // Log the data type of the value
                 LOG.info("Key: {}, Value: {}, Data Type: {}", key, value, value.getClass().getName());
             }
             if (value instanceof OffsetDateTime) {
                 ZonedDateTime newYorkTime = ((OffsetDateTime) value).atZoneSameInstant(newYorkZone);
                 row.put(key, newYorkTime.format(formatter));
             } else if (value instanceof java.time.LocalDate) {
-                // Convert java.sql.Date to LocalDate
                 LocalDate localDate = (LocalDate) value;
                 DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM-dd-yyyy");
                 row.put(key, localDate.format(dateFormatter));
@@ -292,15 +307,18 @@ public class TabularRowsController {
                 || !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(columnName3).matches()) {
             throw new IllegalArgumentException("Invalid schema or table or column name.");
         }
-        // Decode URL-encoded values
+        // CHANGE: validate all three column names against allowlist
+        columnAllowlistService.validate(schemaName, masterTableNameOrViewName, columnName1);
+        columnAllowlistService.validate(schemaName, masterTableNameOrViewName, columnName2);
+        columnAllowlistService.validate(schemaName, masterTableNameOrViewName, columnName3);
+
         String decodedColumnValue1 = URLDecoder.decode(columnValue1, StandardCharsets.UTF_8);
         String decodedColumnValue2 = URLDecoder.decode(columnValue2, StandardCharsets.UTF_8);
         String decodedColumnValue3 = URLDecoder.decode(columnValue3, StandardCharsets.UTF_8);
 
-        // Fetch the result using the dynamically determined table and column; if
-        // jOOQ-generated types were found, automatic column value mapping will occur
         final var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName,
                 masterTableNameOrViewName);
+        // decoded values are passed as DSL.val() bind parameters - safe
         List<Map<String, Object>> result = getDsl().selectFrom(typableTable.table())
                 .where(DSL.field(typableTable.column(columnName1)).eq(DSL.val(decodedColumnValue1))
                         .and(DSL.field(typableTable.column(columnName2)).eq(DSL.val(decodedColumnValue2)))
@@ -316,7 +334,6 @@ public class TabularRowsController {
                 ZonedDateTime newYorkTime = ((OffsetDateTime) value).atZoneSameInstant(newYorkZone);
                 row.put(key, newYorkTime.format(formatter));
             } else if (value instanceof java.sql.Date) {
-                // Convert java.sql.Date to LocalDate
                 LocalDate localDate = ((java.sql.Date) value).toLocalDate();
                 DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM-dd-yyyy");
                 row.put(key, localDate.format(dateFormatter));
@@ -327,31 +344,28 @@ public class TabularRowsController {
     }
 
     @Operation(summary = "Save or update data in a specified table", description = """
-        Saves new records or updates existing records in the specified table within a schema.
-        The request body should contain the data to be saved or updated.
-        If a primary key or unique identifier is provided, it will attempt to update the existing record.
-        Otherwise, it will insert a new record.
-        """)
-    @PostMapping(value = {"/api/ux/tabular/jooq/save/{schemaName}/{tableName}.json"},
-            consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+            Saves new records or updates existing records in the specified table within a schema.
+            The request body should contain the data to be saved or updated.
+            If a primary key or unique identifier is provided, it will attempt to update the existing record.
+            Otherwise, it will insert a new record.
+            """)
+    @PostMapping(value = { "/api/ux/tabular/jooq/save/{schemaName}/{tableName}.json" }, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     public ResponseEntity<Map<String, Object>> saveOrUpdateRow(
             @Parameter(description = "Path variable to mention the schema name.", required = true) @PathVariable(required = false) String schemaName,
             @Parameter(description = "Path variable to mention the table name.", required = true) @PathVariable String tableName,
             @Parameter(description = "Data to be saved or updated.", required = true) @RequestBody Map<String, String> rowData) {
 
-        // Validate schema and table name
         if (!VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(tableName).matches()
-                || (schemaName != null && !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(schemaName).matches())) {
+                || (schemaName != null
+                        && !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(schemaName).matches())) {
             throw new IllegalArgumentException("Invalid schema or table name.");
         }
 
         try {
-            // Define the table based on schema and table name
             var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName, tableName);
             final var jooqCfg = primaryDslContext.configuration();
 
-            // Filter validators based on the table name
             Validator tableValidator = validators.stream()
                     .filter(v -> v.getTableName().equals(tableName))
                     .findFirst()
@@ -362,31 +376,33 @@ public class TabularRowsController {
                 return validationResult;
             }
 
-            // Check if the primary key or unique identifier is provided for updating the existing record
             String primaryKeyValue = rowData.get("action_rule_id");
             LOG.info("action_rule_id: {}", primaryKeyValue);
             final var provenance = "%s.doFilterInternal".formatted(TabularRowsController.class.getName());
 
-            // Ensure empty strings are present for specific columns if not provided
             List<String> emptyStringColumns = Arrays.asList("description", "namespace");
             for (String column : emptyStringColumns) {
                 if (!rowData.containsKey(column)) {
-                    rowData.put(column, "");  // Explicitly set to empty string
+                    rowData.put(column, "");
                 }
             }
 
+            // CHANGE: filter rowData keys to only columns that exist in the schema
+            // this prevents clients from writing to arbitrary/sensitive columns
+            Map<String, String> safeRowData = rowData.entrySet().stream()
+                    .filter(e -> columnAllowlistService.isValid(schemaName, tableName, e.getKey()))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
             if (primaryKeyValue != null) {
-                // Update statement
                 var updateStep = primaryDslContext.update(typableTable.table())
-                        .set(rowData.entrySet().stream()
+                        .set(safeRowData.entrySet().stream()
                                 .collect(Collectors.toMap(
                                         e -> DSL.field(typableTable.column(e.getKey())),
-                                        Map.Entry::getValue
-                                )))
+                                        Map.Entry::getValue)))
                         .set(DSL.field(typableTable.column("updated_at")), OffsetDateTime.now())
-                        .set(DSL.field(typableTable.column("updated_by")), TabularRowsController.class.getName());
+                        .set(DSL.field(typableTable.column("updated_by")),
+                                TabularRowsController.class.getName());
 
-                // Perform the update
                 int updatedRows = updateStep
                         .where(DSL.field(typableTable.column("action_rule_id")).eq(DSL.val(primaryKeyValue)))
                         .execute();
@@ -401,20 +417,20 @@ public class TabularRowsController {
                     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(responseBody);
                 }
             } else {
-                // Prepare the data for insertion
-                Map<org.jooq.Field<?>, Object> dataToInsert = rowData.entrySet().stream()
+                Map<org.jooq.Field<?>, Object> dataToInsert = safeRowData.entrySet().stream()
                         .collect(Collectors.toMap(
                                 e -> DSL.field(typableTable.column(e.getKey())),
-                                Map.Entry::getValue
-                        ));
+                                Map.Entry::getValue));
 
                 dataToInsert.put(DSL.field(typableTable.column("action_rule_id")), UUID.randomUUID());
                 dataToInsert.put(DSL.field(typableTable.column("priority")), 0);
                 dataToInsert.put(DSL.field(typableTable.column("updated_at")), OffsetDateTime.now());
-                dataToInsert.put(DSL.field(typableTable.column("updated_by")), TabularRowsController.class.getName());
+                dataToInsert.put(DSL.field(typableTable.column("updated_by")),
+                        TabularRowsController.class.getName());
                 dataToInsert.put(DSL.field(typableTable.column("last_applied_at")), OffsetDateTime.now());
                 dataToInsert.put(DSL.field(typableTable.column("created_at")), OffsetDateTime.now());
-                dataToInsert.put(DSL.field(typableTable.column("created_by")), TabularRowsController.class.getName());
+                dataToInsert.put(DSL.field(typableTable.column("created_by")),
+                        TabularRowsController.class.getName());
                 dataToInsert.put(DSL.field(typableTable.column("provenance")), provenance);
 
                 primaryDslContext.insertInto(typableTable.table())
@@ -438,7 +454,8 @@ public class TabularRowsController {
             Delete existing records in the specified table within a schema.
             The request body should contain the primary key.
             """)
-    @DeleteMapping(value = {"/api/ux/tabular/jooq/delete/{schemaName}/{tableName}/{columnName}/{primaryKey}"}, produces = MediaType.APPLICATION_JSON_VALUE)
+    @DeleteMapping(value = {
+            "/api/ux/tabular/jooq/delete/{schemaName}/{tableName}/{columnName}/{primaryKey}" }, produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     public ResponseEntity<Map<String, Object>> deleteRow(
             @Parameter(description = "Mandatory path variable to mention schema name.", required = true) final @PathVariable(required = false) String schemaName,
@@ -446,14 +463,17 @@ public class TabularRowsController {
             @Parameter(description = "Mandatory path variable to mention the column name.", required = true) final @PathVariable String columnName,
             @Parameter(description = "Mandatory path variable to mention the column value.", required = true) final @PathVariable String primaryKey) {
 
-        // Validate schema and table name
         if (!VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(tableName).matches()
-                || (schemaName != null && !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(schemaName).matches())) {
+                || (schemaName != null
+                        && !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(schemaName).matches())) {
             throw new IllegalArgumentException("Invalid schema or table name.");
         }
+        // CHANGE: validate column name against allowlist
+        columnAllowlistService.validate(schemaName, tableName, columnName);
 
         try {
             var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName, tableName);
+            // primaryKey is passed as bind parameter via eq() - safe
             int deletedRows = primaryDslContext.deleteFrom(typableTable.table())
                     .where(DSL.field(typableTable.column(columnName)).eq(primaryKey))
                     .execute();
@@ -484,23 +504,27 @@ public class TabularRowsController {
             @PathVariable String fileContentColName,
             @PathVariable String idColumn,
             @PathVariable String id,
-            @RequestParam(value = "fileName", required = true) String fileName
-    ) {
+            @RequestParam(value = "fileName", required = true) String fileName) {
         if (!VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(schemaName).matches()
                 || !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(tableName).matches()
                 || !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(idColumn).matches()
                 || !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(fileContentColName).matches()) {
             throw new IllegalArgumentException("Invalid schema, table, or column name.");
         }
+        // CHANGE: validate both column names against allowlist
+        columnAllowlistService.validate(schemaName, tableName, idColumn);
+        columnAllowlistService.validate(schemaName, tableName, fileContentColName);
 
         JooqRowsSupplier jooqRowsSupplier = new JooqRowsSupplier.Builder()
-            .withTable(Tables.class, schemaName, tableName)
-            .withDSL(getDsl())
-            .withLogger(LOG)
-            .build();
+                .withTable(Tables.class, schemaName, tableName)
+                .withDSL(getDsl())
+                .withLogger(LOG)
+                .build();
 
         byte[] content = jooqRowsSupplier.downloadFileContentById(id, idColumn, fileContentColName);
-        int maxContentSize = fileDownloadProperties != null ? fileDownloadProperties.getMaxDownloadJsonPrettyPrintSizeBytes() : 1 * 1024 * 1024;
+        int maxContentSize = fileDownloadProperties != null
+                ? fileDownloadProperties.getMaxDownloadJsonPrettyPrintSizeBytes()
+                : 1 * 1024 * 1024;
         String resolvedFileName = (fileName != null && !fileName.isBlank()) ? fileName : "downloaded_file.dat";
         boolean prettifyContent = false;
         if (fileName != null && !fileName.isBlank()) {
@@ -517,7 +541,6 @@ public class TabularRowsController {
         }
         if (prettifyContent) {
             try {
-                // Try to parse and pretty-print the content
                 Object json = objectMapper.readValue(content, Object.class);
                 ObjectWriter writer = objectMapper.writerWithDefaultPrettyPrinter();
                 String prettyJson = writer.writeValueAsString(json);
@@ -531,7 +554,6 @@ public class TabularRowsController {
                 .body(content);
     }
 
-    
     @Operation(summary = "Download file from a table by ID and nature", description = "Downloads a file and its name from the specified table and column when the row matches a given nature value.")
     @GetMapping(value = "/api/ux/tabular/jooq/download/{schemaName}/{tableName}/{fileContentColName}/{idColumn}/{id}/nature/{natureValue}", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     @ResponseBody
@@ -542,25 +564,30 @@ public class TabularRowsController {
             @PathVariable String idColumn,
             @PathVariable String id,
             @PathVariable String natureValue,
-            @RequestParam(value = "fileName", required = true) String fileName
-    ) {
+            @RequestParam(value = "fileName", required = true) String fileName) {
         if (!VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(schemaName).matches()
                 || !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(tableName).matches()
                 || !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(idColumn).matches()
                 || !VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN.matcher(fileContentColName).matches()) {
             throw new IllegalArgumentException("Invalid schema, table, or column name.");
         }
+        // CHANGE: validate both column names against allowlist
+        columnAllowlistService.validate(schemaName, tableName, idColumn);
+        columnAllowlistService.validate(schemaName, tableName, fileContentColName);
 
         JooqRowsSupplier jooqRowsSupplier = new JooqRowsSupplier.Builder()
-            .withTable(Tables.class, schemaName, tableName)
-            .withDSL(getDsl())
-            .withLogger(LOG)
-            .build();
+                .withTable(Tables.class, schemaName, tableName)
+                .withDSL(getDsl())
+                .withLogger(LOG)
+                .build();
 
-        // Decode nature value from path and use the column name "nature" by convention
         String decodedNature = URLDecoder.decode(natureValue, StandardCharsets.UTF_8);
-        byte[] content = jooqRowsSupplier.downloadFileByIdAndNature(id, idColumn, fileContentColName, "nature", decodedNature);
-        int maxContentSize = fileDownloadProperties != null ? fileDownloadProperties.getMaxDownloadJsonPrettyPrintSizeBytes() : 1 * 1024 * 1024;
+        // decodedNature is passed as bind parameter inside downloadFileByIdAndNature - safe
+        byte[] content = jooqRowsSupplier.downloadFileByIdAndNature(id, idColumn, fileContentColName, "nature",
+                decodedNature);
+        int maxContentSize = fileDownloadProperties != null
+                ? fileDownloadProperties.getMaxDownloadJsonPrettyPrintSizeBytes()
+                : 1 * 1024 * 1024;
         String resolvedFileName = (fileName != null && !fileName.isBlank()) ? fileName : "downloaded_file.dat";
         boolean prettifyContent = false;
         if (fileName != null && !fileName.isBlank()) {
@@ -577,7 +604,6 @@ public class TabularRowsController {
         }
         if (prettifyContent) {
             try {
-                // Try to parse and pretty-print the content
                 Object json = objectMapper.readValue(content, Object.class);
                 ObjectWriter writer = objectMapper.writerWithDefaultPrettyPrinter();
                 String prettyJson = writer.writeValueAsString(json);
@@ -589,5 +615,5 @@ public class TabularRowsController {
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=" + resolvedFileName)
                 .body(content);
-    }    
+    }
 }
