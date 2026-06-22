@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Version : 0.1.3 -->
+<!-- Version : 0.1.4 -->
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"
     xmlns:hl7="urn:hl7-org:v3"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -48,7 +48,7 @@
             <xsl:variable name="consent" select="
                 hl7:component/hl7:structuredBody/hl7:component
                 /hl7:section[hl7:code[@code='47519-4']]
-                /hl7:entry[1]/hl7:observation/hl7:entryRelationship
+                /hl7:entry/hl7:observation/hl7:entryRelationship
                 /hl7:observation[hl7:code/@code = '105511-0']
             "/>   
             <xsl:if test="$consent">
@@ -75,7 +75,7 @@
                         <code code="105511-0" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC">
                             <xsl:attribute name="displayName"><xsl:value-of select="$consentDisplay"/></xsl:attribute>
                         </code>
-                        <xsl:copy-of select="$consent/hl7:statusCode"/>
+                        <xsl:copy-of select="$consent[1]/hl7:statusCode"/>
                     </consent>
                 </authorization>
             </xsl:if>

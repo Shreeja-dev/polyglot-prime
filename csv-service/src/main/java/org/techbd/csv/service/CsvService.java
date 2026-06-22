@@ -45,6 +45,7 @@ import org.techbd.udi.auto.jooq.ingress.routines.RegisterInteractionCsvRequest;
 import org.techbd.udi.auto.jooq.ingress.routines.SatInteractionCsvRequestUpserted;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 @Service
 public class CsvService {
@@ -290,6 +291,13 @@ public class CsvService {
             initRIHR.setPCsvZipFileName(file.getOriginalFilename());
             initRIHR.setPCreatedAt(forwardedAt);
             initRIHR.setPCsvStatus(state.name());
+            ObjectNode pElaboration = Configuration.objectMapper.createObjectNode();
+                pElaboration.set(
+                "headers",
+                Configuration.objectMapper.valueToTree(requestParameters).path("headers")
+                );
+
+            initRIHR.setPElaboration(pElaboration);
             final InetAddress localHost = InetAddress.getLocalHost();
             final String ipAddress = localHost.getHostAddress();
             initRIHR.setPClientIpAddress(ipAddress);
