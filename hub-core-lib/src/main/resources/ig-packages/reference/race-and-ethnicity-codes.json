@@ -1,0 +1,56 @@
+{
+  "resourceType": "CodeSystem",
+  "id": "cdcrec",
+  "url": "urn:oid:2.16.840.1.113883.6.238",
+  "status": "active",
+  "content": "complete",
+  "ombRaceCategories": {
+    "1002-5": "American Indian or Alaska Native",
+    "2028-9": "Asian",
+    "2054-5": "Black or African American",
+    "2076-8": "Native Hawaiian or Other Pacific Islander",
+    "2106-3": "White"
+  },
+  "ombEthnicityCategories": {
+    "2135-2": "Hispanic or Latino",
+    "2186-5": "Not Hispanic or Latino"
+  },
+  "nullFlavors": {
+    "UNK": "Unknown",
+    "ASKU": "Asked but no answer"
+  },
+  "concept": [
+    {
+      "code": "1002-5",
+      "display": "American Indian or Alaska Native"
+    },
+    {
+      "code": "1010-8",
+      "display": "Apache"
+    },
+    {
+      "code": "2028-9",
+      "display": "Asian"
+    },
+    {
+      "code": "2054-5",
+      "display": "Black or African American"
+    },
+    {
+      "code": "2076-8",
+      "display": "Native Hawaiian or Other Pacific Islander"
+    },
+    {
+      "code": "2106-3",
+      "display": "White"
+    },
+    {
+      "code": "2135-2",
+      "display": "Hispanic or Latino"
+    },
+    {
+      "code": "2186-5",
+      "display": "Not Hispanic or Latino"
+    }
+  ]
+}

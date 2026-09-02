@@ -28,7 +28,6 @@ import org.hl7.fhir.common.hapi.validation.support.CachingValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.CommonCodeSystemsTerminologyService;
 import org.hl7.fhir.common.hapi.validation.support.InMemoryTerminologyServerValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.NpmPackageValidationSupport;
-import org.hl7.fhir.common.hapi.validation.support.RemoteTerminologyServiceValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.SnapshotGeneratingValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
 import org.hl7.fhir.common.hapi.validation.validator.FhirInstanceValidator;
@@ -46,6 +45,7 @@ import org.techbd.exceptions.JsonValidationException;
 import org.techbd.service.fhir.validation.FhirBundleValidator;
 import org.techbd.service.fhir.validation.PostPopulateSupport;
 import org.techbd.service.fhir.validation.PrePopulateSupport;
+import org.techbd.service.fhir.validation.RaceEthnicityValidationSupport;
 import org.techbd.util.AppLogger;
 import org.techbd.util.JsonText.JsonTextSerializer;
 import org.techbd.util.TemplateLogger;
@@ -409,16 +409,22 @@ public class OrchestrationEngine {
                 } else {
                     LOG.warn("No Base packages defined for interactionId : {}", interactionId);
                 }
-
+                final var prePopulateSupport = new PrePopulateSupport(tracer, appLogger);
+                var prePopulatedValidationSupport = prePopulateSupport.build(fhirContext);
+                prePopulateSupport.addCodeSystems(supportChain, prePopulatedValidationSupport);
+                RaceEthnicityValidationSupport raceEthnicitySupport = new RaceEthnicityValidationSupport(
+                fhirContext, 
+                "ig-packages/reference/race-and-ethnicity-codes.json"
+                );
+                supportChain.addValidationSupport(raceEthnicitySupport);
+                supportChain.addValidationSupport(prePopulatedValidationSupport);
                 supportChain.addValidationSupport(npmPackageValidationSupport);
                 supportChain.addValidationSupport(defaultSupport);
                 supportChain.addValidationSupport(new CommonCodeSystemsTerminologyService(fhirContext));
                 supportChain.addValidationSupport(new SnapshotGeneratingValidationSupport(fhirContext));
                 supportChain.addValidationSupport(new InMemoryTerminologyServerValidationSupport(fhirContext));
-                final var prePopulateSupport = new PrePopulateSupport(tracer, appLogger);
-                var prePopulatedValidationSupport = prePopulateSupport.build(fhirContext);
-                prePopulateSupport.addCodeSystems(supportChain, prePopulatedValidationSupport);
-                supportChain.addValidationSupport(prePopulatedValidationSupport);
+                
+                
                 
                 boolean isTestProfile = profileBaseUrl != null
                         && profileBaseUrl.toLowerCase().contains("test");
@@ -438,12 +444,12 @@ public class OrchestrationEngine {
                         && "ig-packages/fhir-v4/us-core/stu-7.0.0-updated"
                                 .equals(basePackages.get("us-core"));
 
-                if (isTestProfile && (isIg2OrLater || isNewTestUsCorePackage)) {
-                    RemoteTerminologyServiceValidationSupport remoteTermSvc = new RemoteTerminologyServiceValidationSupport(
-                            fhirContext);
-                    remoteTermSvc.setBaseUrl("http://tx.fhir.org/r4");
-                    supportChain.addValidationSupport(remoteTermSvc);
-                }
+                // if (isTestProfile && (isIg2OrLater || isNewTestUsCorePackage)) {
+                //     RemoteTerminologyServiceValidationSupport remoteTermSvc = new RemoteTerminologyServiceValidationSupport(
+                //             fhirContext);
+                //     remoteTermSvc.setBaseUrl("http://tx.fhir.org/r4");
+                //     supportChain.addValidationSupport(remoteTermSvc);
+                // }
 
                 prePopulatedValidationSupport = null;
                 final var postPopulateSupport = new PostPopulateSupport(tracer, appLogger);

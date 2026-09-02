@@ -76,23 +76,67 @@ public class PrePopulateSupport {
 
     private void addHCPCSCodes(ValidationSupportChain validationSupportChain,
             PrePopulatedValidationSupport prePopulatedValidationSupport) {
-        LOG.info("PrePopulateSupport:addHCPCSCodes  -BEGIN");
-        CodeSystem existHCPCS = (CodeSystem) validationSupportChain.fetchCodeSystem("urn:oid:2.16.840.1.113883.6.285");
-        // CodeSystem existHCPCS = (CodeSystem)
-        // validationSupportChain.fetchCodeSystem("https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets");
-        if (existHCPCS == null) {
-            CodeSystem newHCPCS = new CodeSystem();
-            // newHCPCS.setUrl("https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets");
-            newHCPCS.setUrl("urn:oid:2.16.840.1.113883.6.285");
-            newHCPCS.setConcept(ConceptReaderUtils.getCodeSystemConcepts_wCode(referenceCodesPath.concat("hcpcs.psv")));
-            newHCPCS.setContent(CodeSystem.CodeSystemContentMode.COMPLETE);
-            prePopulatedValidationSupport.addCodeSystem(newHCPCS);
-        } else {
-            existHCPCS.setContent(CodeSystem.CodeSystemContentMode.COMPLETE);
-            existHCPCS.getConcept()
-                    .addAll(ConceptReaderUtils.getCodeSystemConcepts_wCode(referenceCodesPath.concat("hcpcs.psv")));
+        LOG.info("PrePopulateSupport:addHCPCSCodes - BEGIN");
+
+        final String hcpcsCanonicalUrl = "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets";
+        final String hcpcsOidUrl = "urn:oid:2.16.840.1.113883.6.285";
+
+        // 1. Load concepts from hcpcs.psv
+        List<CodeSystem.ConceptDefinitionComponent> concepts = new ArrayList<>();
+        try {
+            List<CodeSystem.ConceptDefinitionComponent> loaded = ConceptReaderUtils
+                    .getCodeSystemConcepts_wCode(referenceCodesPath.concat("hcpcs.psv"));
+            if (loaded != null) {
+                concepts.addAll(loaded);
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to load HCPCS codes from hcpcs.psv", e);
         }
-        LOG.info("PrePopulateSupport:addHCPCSCodes  -END");
+
+        // 2. Ensure G0136 (SDOH assessment) is present
+        boolean hasG0136 = concepts.stream().anyMatch(c -> "G0136".equalsIgnoreCase(c.getCode()));
+        if (!hasG0136) {
+            CodeSystem.ConceptDefinitionComponent g0136 = new CodeSystem.ConceptDefinitionComponent();
+            g0136.setCode("G0136");
+            g0136.setDisplay(
+                    "Administration of a standardized, evidence-based social determinants of health risk assessment tool, 5-15 minutes");
+            concepts.add(g0136);
+        }
+
+        // 3. Register under the canonical CMS URL
+        CodeSystem hcpcsCanonical = new CodeSystem();
+        hcpcsCanonical.setId("hcpcs-release-code-sets");
+        hcpcsCanonical.setUrl(hcpcsCanonicalUrl);
+        hcpcsCanonical.setName("HCPCSReleaseCodeSets");
+        hcpcsCanonical.setStatus(Enumerations.PublicationStatus.ACTIVE);
+        hcpcsCanonical.setContent(CodeSystem.CodeSystemContentMode.COMPLETE);
+        hcpcsCanonical.setConcept(concepts);
+        prePopulatedValidationSupport.addCodeSystem(hcpcsCanonical);
+
+        // 4. Register under the OID URL as an alias
+        CodeSystem hcpcsOid = new CodeSystem();
+        hcpcsOid.setId("hcpcs-oid");
+        hcpcsOid.setUrl(hcpcsOidUrl);
+        hcpcsOid.setName("HCPCSReleaseCodeSetsOID");
+        hcpcsOid.setStatus(Enumerations.PublicationStatus.ACTIVE);
+        hcpcsOid.setContent(CodeSystem.CodeSystemContentMode.COMPLETE);
+        hcpcsOid.setConcept(concepts);
+        prePopulatedValidationSupport.addCodeSystem(hcpcsOid);
+
+        // Also update any existing reference in the chain if already present
+        CodeSystem existingByUrl = (CodeSystem) validationSupportChain.fetchCodeSystem(hcpcsCanonicalUrl);
+        if (existingByUrl != null) {
+            existingByUrl.setContent(CodeSystem.CodeSystemContentMode.COMPLETE);
+            existingByUrl.setConcept(concepts);
+        }
+
+        CodeSystem existingByOid = (CodeSystem) validationSupportChain.fetchCodeSystem(hcpcsOidUrl);
+        if (existingByOid != null) {
+            existingByOid.setContent(CodeSystem.CodeSystemContentMode.COMPLETE);
+            existingByOid.setConcept(concepts);
+        }
+
+        LOG.info("PrePopulateSupport:addHCPCSCodes - END (Loaded {} concepts)", concepts.size());
     }
 
     private void addICD10Codes(ValidationSupportChain validationSupportChain,
